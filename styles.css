@@ -14,6 +14,7 @@
     --accent-blue: #00bcd4;
     --accent-red: #ff6b6b;
     --precip-blue: #4fc3f7;
+    --precip-green: #66bb6a;
     --temp-red: #ef9a9a;
     --snow-color: #e91e63;
     --rain-color: #2196f3;
@@ -445,8 +446,12 @@ body {
     background-color: var(--temp-red);
 }
 
-.legend-color.precip {
+.legend-color.precip-prob {
     background-color: var(--precip-blue);
+}
+
+.legend-color.precip-amount {
+    background-color: #66bb6a;
 }
 
 /* Responsive */

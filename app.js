@@ -299,18 +299,24 @@ function renderChart(data) {
     const labels = [];
     const temps = [];
     const precipProbs = [];
+    const precipAmounts = [];
 
     for (let i = startIndex; i < endIndex; i++) {
         const date = new Date(hourly.time[i]);
         labels.push(date);
         temps.push((hourly.temperature_2m[i] * 9/5) + 32); // Convert to F
         precipProbs.push(hourly.precipitation_probability[i]);
+        // Convert mm to inches for precipitation amount
+        precipAmounts.push(hourly.precipitation[i] / 25.4);
     }
 
     // Calculate temperature range for scaling
     const minTemp = Math.min(...temps);
     const maxTemp = Math.max(...temps);
     const tempRange = maxTemp - minTemp;
+
+    // Calculate max precipitation for scaling (ensure minimum scale for visibility)
+    const maxPrecipAmount = Math.max(0.1, ...precipAmounts);
 
     // Destroy existing chart if it exists
     if (forecastChart) {
@@ -344,7 +350,19 @@ function renderChart(data) {
                     pointRadius: 0,
                     pointHoverRadius: 4,
                     fill: true,
-                    yAxisID: 'y-precip'
+                    yAxisID: 'y-precip-prob'
+                },
+                {
+                    label: 'Precipitation Amount',
+                    data: precipAmounts,
+                    borderColor: '#66bb6a',
+                    backgroundColor: 'rgba(102, 187, 106, 0.3)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    fill: true,
+                    yAxisID: 'y-precip-amount'
                 }
             ]
         },
@@ -378,8 +396,12 @@ function renderChart(data) {
                         label: function(context) {
                             if (context.datasetIndex === 0) {
                                 return `Temperature: ${Math.round(context.raw)}°F`;
-                            } else {
+                            } else if (context.datasetIndex === 1) {
                                 return `Precip Chance: ${context.raw}%`;
+                            } else {
+                                const inches = context.raw;
+                                if (inches < 0.01) return 'Precip Amount: 0.00"';
+                                return `Precip Amount: ${inches.toFixed(2)}"`;
                             }
                         }
                     }
@@ -396,11 +418,17 @@ function renderChart(data) {
                     min: minTemp - tempRange * 0.2,
                     max: maxTemp + tempRange * 0.2
                 },
-                'y-precip': {
+                'y-precip-prob': {
                     display: false,
                     position: 'right',
                     min: 0,
                     max: 100
+                },
+                'y-precip-amount': {
+                    display: false,
+                    position: 'right',
+                    min: 0,
+                    max: maxPrecipAmount * 1.2
                 }
             }
         }
@@ -409,21 +437,26 @@ function renderChart(data) {
     // Add legend below chart
     const container = document.querySelector('.chart-container');
     let legend = container.querySelector('.chart-legend');
-    if (!legend) {
-        legend = document.createElement('div');
-        legend.className = 'chart-legend';
-        legend.innerHTML = `
-            <div class="legend-item">
-                <span class="legend-color temp"></span>
-                <span>Temperature</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-color precip"></span>
-                <span>Precip Probability</span>
-            </div>
-        `;
-        container.appendChild(legend);
+    if (legend) {
+        legend.remove();
     }
+    legend = document.createElement('div');
+    legend.className = 'chart-legend';
+    legend.innerHTML = `
+        <div class="legend-item">
+            <span class="legend-color temp"></span>
+            <span>Temp</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color precip-prob"></span>
+            <span>Precip %</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-color precip-amount"></span>
+            <span>Precip Amt</span>
+        </div>
+    `;
+    container.appendChild(legend);
 }
 
 // Update location display
