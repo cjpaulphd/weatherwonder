@@ -1,0 +1,458 @@
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2a2a2a;
+    --bg-card: #333333;
+    --text-primary: #ffffff;
+    --text-secondary: #888888;
+    --accent-blue: #00bcd4;
+    --accent-red: #ff6b6b;
+    --precip-blue: #4fc3f7;
+    --temp-red: #ef9a9a;
+    --snow-color: #e91e63;
+    --rain-color: #2196f3;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.4;
+}
+
+.app-container {
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100vh;
+}
+
+/* Header */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background-color: var(--bg-primary);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.menu-btn, .settings-btn {
+    background: none;
+    border: none;
+    color: var(--accent-blue);
+    cursor: pointer;
+    padding: 8px;
+}
+
+.location {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.location-icon {
+    font-size: 14px;
+}
+
+/* Alert Banner */
+.alert-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background-color: #ff9800;
+    color: #000;
+    cursor: pointer;
+}
+
+.alert-banner.hidden {
+    display: none;
+}
+
+.alert-icon {
+    font-size: 20px;
+}
+
+.alert-arrow {
+    margin-left: auto;
+    font-size: 24px;
+}
+
+/* Forecast Sections */
+.forecast-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--bg-secondary);
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.section-header h2 {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+}
+
+.share-btn {
+    background: none;
+    border: none;
+    color: var(--accent-blue);
+    cursor: pointer;
+    padding: 4px;
+}
+
+/* Daily Forecast */
+.daily-forecast-container {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 8px;
+    scrollbar-width: none;
+}
+
+.daily-forecast-container::-webkit-scrollbar {
+    display: none;
+}
+
+.daily-card {
+    flex: 0 0 auto;
+    min-width: 80px;
+    text-align: center;
+    padding: 8px 4px;
+}
+
+.daily-card .day-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.daily-card .weather-icons {
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+    margin-bottom: 8px;
+    font-size: 24px;
+}
+
+.daily-card .temp-range {
+    font-size: 14px;
+    margin-bottom: 6px;
+}
+
+.daily-card .precip-info {
+    font-size: 12px;
+    color: var(--precip-blue);
+}
+
+.daily-card .precip-info.snow {
+    color: var(--snow-color);
+}
+
+.daily-card .precip-amount {
+    font-size: 11px;
+    color: var(--snow-color);
+}
+
+/* Chart Container */
+.chart-container {
+    position: relative;
+    height: 150px;
+    margin: 16px 0;
+    background: linear-gradient(to right,
+        rgba(50, 50, 50, 0.5) 0%,
+        rgba(50, 50, 50, 0.5) 14.28%,
+        rgba(60, 60, 60, 0.5) 14.28%,
+        rgba(60, 60, 60, 0.5) 28.56%,
+        rgba(50, 50, 50, 0.5) 28.56%,
+        rgba(50, 50, 50, 0.5) 42.84%,
+        rgba(60, 60, 60, 0.5) 42.84%,
+        rgba(60, 60, 60, 0.5) 57.12%,
+        rgba(50, 50, 50, 0.5) 57.12%,
+        rgba(50, 50, 50, 0.5) 71.4%,
+        rgba(60, 60, 60, 0.5) 71.4%,
+        rgba(60, 60, 60, 0.5) 85.68%,
+        rgba(50, 50, 50, 0.5) 85.68%,
+        rgba(50, 50, 50, 0.5) 100%
+    );
+}
+
+.chart-day-markers {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+}
+
+.chart-day-marker {
+    flex: 1;
+    height: 4px;
+    opacity: 0.5;
+}
+
+.chart-day-marker:nth-child(odd) {
+    background-color: #444;
+}
+
+.chart-day-marker:nth-child(even) {
+    background-color: #555;
+}
+
+/* Hourly Forecast */
+.hourly-forecast-container {
+    display: flex;
+    overflow-x: auto;
+    gap: 0;
+    scrollbar-width: none;
+}
+
+.hourly-forecast-container::-webkit-scrollbar {
+    display: none;
+}
+
+.hourly-card {
+    flex: 0 0 auto;
+    min-width: 55px;
+    text-align: center;
+    padding: 12px 6px;
+    border-right: 1px solid var(--bg-secondary);
+}
+
+.hourly-card:last-child {
+    border-right: none;
+}
+
+.hourly-card .day-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    background-color: var(--bg-secondary);
+    padding: 4px;
+    margin: -12px -6px 8px -6px;
+}
+
+.hourly-card .hour {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.hourly-card .weather-icon {
+    font-size: 22px;
+    margin-bottom: 6px;
+}
+
+.hourly-card .temp {
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+
+.hourly-card .wind {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.hourly-card .wind-icon {
+    display: inline-block;
+    transform-origin: center;
+}
+
+.hourly-card .precip-chance {
+    font-size: 12px;
+    color: var(--precip-blue);
+    margin-bottom: 2px;
+}
+
+.hourly-card .precip-chance.snow {
+    color: var(--snow-color);
+}
+
+.hourly-card .precip-amount {
+    font-size: 11px;
+    color: var(--snow-color);
+}
+
+/* More Button */
+.more-btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background: none;
+    border: none;
+    color: var(--accent-blue);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 8px;
+}
+
+.more-btn:hover {
+    background-color: var(--bg-secondary);
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background-color: var(--bg-secondary);
+    padding: 24px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 400px;
+    position: relative;
+}
+
+.modal-content h3 {
+    margin-bottom: 16px;
+}
+
+.modal-content input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--bg-card);
+    border-radius: 8px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 16px;
+    margin-bottom: 16px;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+.btn-primary, .btn-secondary {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background-color: var(--accent-blue);
+    color: var(--bg-primary);
+}
+
+.btn-secondary {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.close-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 24px;
+    cursor: pointer;
+}
+
+/* Loading State */
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+
+.loading::after {
+    content: '';
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--accent-blue);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-left: 12px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Error State */
+.error {
+    padding: 20px;
+    text-align: center;
+    color: var(--accent-red);
+}
+
+/* Legend */
+.chart-legend {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-color {
+    width: 16px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+.legend-color.temp {
+    background-color: var(--temp-red);
+}
+
+.legend-color.precip {
+    background-color: var(--precip-blue);
+}
+
+/* Responsive */
+@media (min-width: 481px) {
+    .app-container {
+        border-left: 1px solid var(--bg-secondary);
+        border-right: 1px solid var(--bg-secondary);
+    }
+}

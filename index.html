@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Precipitation Forecast</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <button class="menu-btn" aria-label="Menu">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="location">
+                <span class="location-icon">📍</span>
+                <span id="location-name">Loading...</span>
+            </div>
+            <button class="settings-btn" aria-label="Settings">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+                </svg>
+            </button>
+        </header>
+
+        <!-- Weather Alert Banner -->
+        <div id="alert-banner" class="alert-banner hidden">
+            <span class="alert-icon">❄️</span>
+            <span id="alert-text"></span>
+            <span class="alert-arrow">›</span>
+        </div>
+
+        <!-- Daily Forecast Section -->
+        <section class="forecast-section">
+            <div class="section-header">
+                <h2>DAILY FORECAST</h2>
+                <button class="share-btn" aria-label="Share">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                        <polyline points="16 6 12 2 8 6"></polyline>
+                        <line x1="12" y1="2" x2="12" y2="15"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div id="daily-forecast" class="daily-forecast-container">
+                <!-- Daily forecast cards will be inserted here -->
+            </div>
+
+            <!-- Temperature/Precipitation Chart -->
+            <div class="chart-container">
+                <canvas id="forecast-chart"></canvas>
+                <div id="chart-day-markers" class="chart-day-markers"></div>
+            </div>
+
+            <button class="more-btn">MORE</button>
+        </section>
+
+        <!-- Hourly Forecast Section -->
+        <section class="forecast-section">
+            <div class="section-header">
+                <h2>HOURLY FORECAST</h2>
+                <button class="share-btn" aria-label="Share">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                        <polyline points="16 6 12 2 8 6"></polyline>
+                        <line x1="12" y1="2" x2="12" y2="15"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div id="hourly-forecast" class="hourly-forecast-container">
+                <!-- Hourly forecast cards will be inserted here -->
+            </div>
+
+            <button class="more-btn">MORE</button>
+        </section>
+
+        <!-- Location Search Modal -->
+        <div id="location-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>Enter Location</h3>
+                <input type="text" id="location-input" placeholder="City name or coordinates">
+                <div class="modal-buttons">
+                    <button id="use-current-location" class="btn-secondary">Use Current Location</button>
+                    <button id="search-location" class="btn-primary">Search</button>
+                </div>
+                <button id="close-modal" class="close-btn">&times;</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
