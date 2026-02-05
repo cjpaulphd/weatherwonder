@@ -101,7 +101,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
 .section-header h2 {
@@ -119,47 +119,51 @@ body {
     padding: 4px;
 }
 
-/* Daily Forecast */
+/* Daily Forecast - Grid aligned with chart */
 .daily-forecast-container {
-    display: flex;
-    overflow-x: auto;
-    gap: 8px;
-    padding-bottom: 8px;
-    scrollbar-width: none;
-}
-
-.daily-forecast-container::-webkit-scrollbar {
-    display: none;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0;
 }
 
 .daily-card {
-    flex: 0 0 auto;
-    min-width: 80px;
     text-align: center;
-    padding: 8px 4px;
+    padding: 4px 2px;
+    border-right: 1px solid var(--bg-secondary);
+}
+
+.daily-card:last-child {
+    border-right: none;
+}
+
+.daily-card:nth-child(odd) {
+    background-color: rgba(50, 50, 50, 0.3);
+}
+
+.daily-card:nth-child(even) {
+    background-color: rgba(60, 60, 60, 0.3);
 }
 
 .daily-card .day-name {
-    font-size: 13px;
+    font-size: 10px;
     font-weight: 600;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
+    white-space: nowrap;
 }
 
-.daily-card .weather-icons {
-    display: flex;
-    justify-content: center;
-    gap: 2px;
-    margin-bottom: 8px;
-    font-size: 24px;
+.daily-card .weather-icon {
+    font-size: 16px;
+    margin-bottom: 4px;
 }
 
 .daily-card .temp-range {
-    font-size: 14px;
-    margin-bottom: 6px;
+    font-size: 11px;
+    margin-bottom: 3px;
+    white-space: nowrap;
 }
 
 .daily-card .precip-info {
-    font-size: 12px;
+    font-size: 10px;
     color: var(--precip-blue);
 }
 
@@ -168,53 +172,15 @@ body {
 }
 
 .daily-card .precip-amount {
-    font-size: 11px;
-    color: var(--snow-color);
+    font-size: 9px;
+    color: var(--precip-green);
 }
 
 /* Chart Container */
 .chart-container {
     position: relative;
     height: 150px;
-    margin: 16px 0;
-    background: linear-gradient(to right,
-        rgba(50, 50, 50, 0.5) 0%,
-        rgba(50, 50, 50, 0.5) 14.28%,
-        rgba(60, 60, 60, 0.5) 14.28%,
-        rgba(60, 60, 60, 0.5) 28.56%,
-        rgba(50, 50, 50, 0.5) 28.56%,
-        rgba(50, 50, 50, 0.5) 42.84%,
-        rgba(60, 60, 60, 0.5) 42.84%,
-        rgba(60, 60, 60, 0.5) 57.12%,
-        rgba(50, 50, 50, 0.5) 57.12%,
-        rgba(50, 50, 50, 0.5) 71.4%,
-        rgba(60, 60, 60, 0.5) 71.4%,
-        rgba(60, 60, 60, 0.5) 85.68%,
-        rgba(50, 50, 50, 0.5) 85.68%,
-        rgba(50, 50, 50, 0.5) 100%
-    );
-}
-
-.chart-day-markers {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    display: flex;
-}
-
-.chart-day-marker {
-    flex: 1;
-    height: 4px;
-    opacity: 0.5;
-}
-
-.chart-day-marker:nth-child(odd) {
-    background-color: #444;
-}
-
-.chart-day-marker:nth-child(even) {
-    background-color: #555;
+    margin: 0;
 }
 
 /* Hourly Forecast */
@@ -291,25 +257,7 @@ body {
 
 .hourly-card .precip-amount {
     font-size: 11px;
-    color: var(--snow-color);
-}
-
-/* More Button */
-.more-btn {
-    display: block;
-    width: 100%;
-    padding: 12px;
-    background: none;
-    border: none;
-    color: var(--accent-blue);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    margin-top: 8px;
-}
-
-.more-btn:hover {
-    background-color: var(--bg-secondary);
+    color: var(--precip-green);
 }
 
 /* Modal */
@@ -389,6 +337,50 @@ body {
     cursor: pointer;
 }
 
+/* Share Modal */
+.share-modal-content {
+    text-align: center;
+}
+
+.share-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.share-option-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 14px 20px;
+    background-color: var(--bg-card);
+    border: none;
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 15px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.share-option-btn:hover {
+    background-color: var(--bg-primary);
+}
+
+.share-option-btn:active {
+    background-color: var(--accent-blue);
+}
+
+.share-icon {
+    font-size: 20px;
+}
+
+.share-option-btn.success {
+    background-color: var(--precip-green);
+    color: #000;
+}
+
 /* Loading State */
 .loading {
     display: flex;
@@ -424,20 +416,20 @@ body {
 .chart-legend {
     display: flex;
     justify-content: center;
-    gap: 20px;
-    margin-top: 8px;
-    font-size: 11px;
+    gap: 16px;
+    padding: 8px 0;
+    font-size: 10px;
     color: var(--text-secondary);
 }
 
 .legend-item {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
 }
 
 .legend-color {
-    width: 16px;
+    width: 14px;
     height: 3px;
     border-radius: 2px;
 }
@@ -451,7 +443,7 @@ body {
 }
 
 .legend-color.precip-amount {
-    background-color: #66bb6a;
+    background-color: var(--precip-green);
 }
 
 /* Responsive */
@@ -459,5 +451,35 @@ body {
     .app-container {
         border-left: 1px solid var(--bg-secondary);
         border-right: 1px solid var(--bg-secondary);
+    }
+}
+
+/* Toast notification */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+    padding: 12px 24px;
+    border-radius: 8px;
+    z-index: 300;
+    animation: toast-in 0.3s ease;
+}
+
+.toast.success {
+    background-color: var(--precip-green);
+    color: #000;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
     }
 }

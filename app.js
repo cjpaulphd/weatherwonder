@@ -13,6 +13,7 @@ let currentLocation = {
 
 let forecastChart = null;
 let weatherData = null;
+let currentShareSection = null;
 
 // Weather code mappings to icons and descriptions
 const weatherCodes = {
@@ -49,7 +50,6 @@ const weatherCodes = {
 // Get weather icon from code
 function getWeatherIcon(code, isNight = false) {
     const weather = weatherCodes[code] || { icon: '❓', desc: 'Unknown' };
-    // Adjust for night time
     if (isNight && code <= 2) {
         return code === 0 ? '🌙' : '🌙';
     }
@@ -61,15 +61,13 @@ function isSnow(code) {
     return [71, 73, 75, 77, 85, 86].includes(code);
 }
 
-// Format temperature
-function formatTemp(temp, unit = 'F') {
-    const value = unit === 'F' ? (temp * 9/5) + 32 : temp;
-    return `${Math.round(value)}°${unit}`;
+// Format temperature (returns just the number)
+function formatTempValue(temp) {
+    return Math.round((temp * 9/5) + 32);
 }
 
 // Format precipitation amount
 function formatPrecip(mm) {
-    // Convert mm to inches
     const inches = mm / 25.4;
     if (inches < 0.01) return '';
     return `${inches.toFixed(2)}"`;
@@ -85,7 +83,7 @@ function getDayName(date, short = false) {
         return 'TODAY';
     }
     if (date.toDateString() === tomorrow.toDateString()) {
-        return 'TOMORROW';
+        return short ? 'TOM' : 'TOMORROW';
     }
 
     const days = short
@@ -93,7 +91,7 @@ function getDayName(date, short = false) {
         : ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
     const dayName = days[date.getDay()];
-    return `${dayName} ${date.getDate()}`;
+    return short ? `${dayName} ${date.getDate()}` : `${dayName} ${date.getDate()}`;
 }
 
 // Fetch weather data from Open-Meteo API
@@ -172,26 +170,18 @@ function renderDailyForecast(data) {
         const hasPrecip = daily.precipitation_sum[i] > 0;
         const precipProb = daily.precipitation_probability_max[i];
 
-        // Determine precipitation type icon
-        let precipIcon = '💧';
-        if (hasSnow) {
-            precipIcon = '❄️';
-        }
+        const highTemp = formatTempValue(daily.temperature_2m_max[i]);
+        const lowTemp = formatTempValue(daily.temperature_2m_min[i]);
 
-        let precipClass = hasPrecip || precipProb > 30 ? (hasSnow ? 'snow' : '') : '';
+        let precipClass = hasSnow ? 'snow' : '';
 
         card.innerHTML = `
             <div class="day-name">${getDayName(date, true)}</div>
-            <div class="weather-icons">
-                ${getWeatherIcon(weatherCode)}
-                ${hasPrecip ? getWeatherIcon(hasSnow ? 75 : 61) : ''}
-            </div>
-            <div class="temp-range">
-                ${formatTemp(daily.temperature_2m_max[i])} | ${formatTemp(daily.temperature_2m_min[i])}
-            </div>
+            <div class="weather-icon">${getWeatherIcon(weatherCode)}</div>
+            <div class="temp-range">${highTemp}/${lowTemp} °F</div>
             ${precipProb > 0 ? `
                 <div class="precip-info ${precipClass}">
-                    ${hasSnow ? '❄️' : '💧'} ${precipProb}%
+                    ${hasSnow ? '❄' : '💧'} ${precipProb}%
                 </div>
             ` : ''}
             ${hasPrecip ? `
@@ -210,9 +200,7 @@ function renderHourlyForecast(data) {
 
     const hourly = data.hourly;
     const now = new Date();
-    const currentHour = now.getHours();
 
-    // Find the starting index (current hour)
     let startIndex = 0;
     for (let i = 0; i < hourly.time.length; i++) {
         const hourDate = new Date(hourly.time[i]);
@@ -224,7 +212,6 @@ function renderHourlyForecast(data) {
 
     let currentDay = null;
 
-    // Show next 48 hours
     for (let i = startIndex; i < Math.min(startIndex + 48, hourly.time.length); i++) {
         const date = new Date(hourly.time[i]);
         const hour = date.getHours();
@@ -233,7 +220,6 @@ function renderHourlyForecast(data) {
         const card = document.createElement('div');
         card.className = 'hourly-card';
 
-        // Check if we need a day label
         const dayStr = date.toDateString();
         let dayLabel = '';
         if (dayStr !== currentDay) {
@@ -248,24 +234,23 @@ function renderHourlyForecast(data) {
         const hasSnow = snowfall > 0;
         const windSpeed = hourly.wind_speed_10m[i];
         const windDir = hourly.wind_direction_10m[i];
+        const temp = formatTempValue(hourly.temperature_2m[i]);
 
-        // Wind direction arrow
         const windArrow = '↑';
-
         let precipClass = hasSnow ? 'snow' : '';
 
         card.innerHTML = `
             ${dayLabel}
             <div class="hour">${hour}</div>
             <div class="weather-icon">${getWeatherIcon(weatherCode, isNight)}</div>
-            <div class="temp">${formatTemp(hourly.temperature_2m[i])}</div>
+            <div class="temp">${temp}°F</div>
             <div class="wind">
                 <span class="wind-icon" style="transform: rotate(${windDir}deg)">${windArrow}</span>
                 ${Math.round(windSpeed)} mph
             </div>
             ${precipProb > 0 ? `
                 <div class="precip-chance ${precipClass}">
-                    ${hasSnow ? '❄️' : '💧'} ${precipProb}%
+                    ${hasSnow ? '❄' : '💧'} ${precipProb}%
                 </div>
             ` : ''}
             ${precip > 0 ? `
@@ -277,12 +262,98 @@ function renderHourlyForecast(data) {
     }
 }
 
+// Custom plugin to draw grid lines
+const gridLinesPlugin = {
+    id: 'customGridLines',
+    beforeDraw: (chart) => {
+        const ctx = chart.ctx;
+        const chartArea = chart.chartArea;
+        const yTempScale = chart.scales['y-temp'];
+        const yPrecipScale = chart.scales['y-precip-amount'];
+
+        if (!chartArea || !yTempScale || !yPrecipScale) return;
+
+        ctx.save();
+
+        // Draw temperature grid lines (every 10°F) - pink/red color
+        const tempMin = Math.floor(yTempScale.min / 10) * 10;
+        const tempMax = Math.ceil(yTempScale.max / 10) * 10;
+
+        ctx.strokeStyle = 'rgba(239, 154, 154, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+
+        for (let temp = tempMin; temp <= tempMax; temp += 10) {
+            const y = yTempScale.getPixelForValue(temp);
+            if (y >= chartArea.top && y <= chartArea.bottom) {
+                ctx.beginPath();
+                ctx.moveTo(chartArea.left, y);
+                ctx.lineTo(chartArea.right, y);
+                ctx.stroke();
+
+                // Draw temperature label on left
+                ctx.fillStyle = 'rgba(239, 154, 154, 0.7)';
+                ctx.font = '9px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(`${temp}°`, chartArea.left + 2, y - 2);
+            }
+        }
+
+        // Draw precipitation amount grid lines (every 0.10") - green color
+        const precipMin = 0;
+        const precipMax = Math.ceil(yPrecipScale.max * 10) / 10;
+
+        ctx.strokeStyle = 'rgba(102, 187, 106, 0.3)';
+        ctx.setLineDash([3, 3]);
+
+        for (let precip = 0.1; precip <= precipMax; precip += 0.1) {
+            const y = yPrecipScale.getPixelForValue(precip);
+            if (y >= chartArea.top && y <= chartArea.bottom) {
+                ctx.beginPath();
+                ctx.moveTo(chartArea.left, y);
+                ctx.lineTo(chartArea.right, y);
+                ctx.stroke();
+
+                // Draw precip label on right
+                ctx.fillStyle = 'rgba(102, 187, 106, 0.7)';
+                ctx.font = '9px sans-serif';
+                ctx.textAlign = 'right';
+                ctx.fillText(`${precip.toFixed(1)}"`, chartArea.right - 2, y - 2);
+            }
+        }
+
+        // Draw day separators
+        const labels = chart.data.labels;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+
+        let lastDay = null;
+        labels.forEach((label, index) => {
+            const date = new Date(label);
+            const day = date.getDate();
+            if (lastDay !== null && day !== lastDay) {
+                const x = chart.scales.x.getPixelForValue(index);
+                ctx.beginPath();
+                ctx.moveTo(x, chartArea.top);
+                ctx.lineTo(x, chartArea.bottom);
+                ctx.stroke();
+            }
+            lastDay = day;
+        });
+
+        ctx.restore();
+    }
+};
+
+// Register the plugin
+Chart.register(gridLinesPlugin);
+
 // Render the temperature/precipitation chart
 function renderChart(data) {
     const ctx = document.getElementById('forecast-chart').getContext('2d');
     const hourly = data.hourly;
 
-    // Get data for next 7 days (168 hours)
     const now = new Date();
     let startIndex = 0;
     for (let i = 0; i < hourly.time.length; i++) {
@@ -304,26 +375,27 @@ function renderChart(data) {
     for (let i = startIndex; i < endIndex; i++) {
         const date = new Date(hourly.time[i]);
         labels.push(date);
-        temps.push((hourly.temperature_2m[i] * 9/5) + 32); // Convert to F
+        temps.push((hourly.temperature_2m[i] * 9/5) + 32);
         precipProbs.push(hourly.precipitation_probability[i]);
-        // Convert mm to inches for precipitation amount
         precipAmounts.push(hourly.precipitation[i] / 25.4);
     }
 
-    // Calculate temperature range for scaling
     const minTemp = Math.min(...temps);
     const maxTemp = Math.max(...temps);
     const tempRange = maxTemp - minTemp;
 
-    // Calculate max precipitation for scaling (ensure minimum scale for visibility)
-    const maxPrecipAmount = Math.max(0.1, ...precipAmounts);
+    // Round to nearest 10 for cleaner grid
+    const tempScaleMin = Math.floor((minTemp - tempRange * 0.1) / 10) * 10;
+    const tempScaleMax = Math.ceil((maxTemp + tempRange * 0.1) / 10) * 10;
 
-    // Destroy existing chart if it exists
+    const maxPrecipAmount = Math.max(0.1, ...precipAmounts);
+    // Round up to nearest 0.1 for cleaner grid
+    const precipScaleMax = Math.ceil(maxPrecipAmount * 1.2 * 10) / 10;
+
     if (forecastChart) {
         forecastChart.destroy();
     }
 
-    // Create chart
     forecastChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -415,8 +487,8 @@ function renderChart(data) {
                 'y-temp': {
                     display: false,
                     position: 'left',
-                    min: minTemp - tempRange * 0.2,
-                    max: maxTemp + tempRange * 0.2
+                    min: tempScaleMin,
+                    max: tempScaleMax
                 },
                 'y-precip-prob': {
                     display: false,
@@ -428,7 +500,7 @@ function renderChart(data) {
                     display: false,
                     position: 'right',
                     min: 0,
-                    max: maxPrecipAmount * 1.2
+                    max: precipScaleMax
                 }
             }
         }
@@ -467,19 +539,14 @@ function updateLocationDisplay() {
 // Load weather for current location
 async function loadWeather() {
     try {
-        // Show loading state
         document.getElementById('daily-forecast').innerHTML = '<div class="loading">Loading forecast</div>';
         document.getElementById('hourly-forecast').innerHTML = '';
 
-        // Fetch weather data
         weatherData = await fetchWeatherData(currentLocation.latitude, currentLocation.longitude);
 
-        // Render all components
         renderDailyForecast(weatherData);
         renderHourlyForecast(weatherData);
         renderChart(weatherData);
-
-        // Check for weather alerts (simplified - based on weather codes)
         checkWeatherAlerts(weatherData);
 
     } catch (error) {
@@ -489,14 +556,12 @@ async function loadWeather() {
     }
 }
 
-// Check for weather alerts (simplified version based on conditions)
+// Check for weather alerts
 function checkWeatherAlerts(data) {
     const alertBanner = document.getElementById('alert-banner');
     const alertText = document.getElementById('alert-text');
 
-    // Check next 24 hours for significant weather
     const hourly = data.hourly;
-    const now = new Date();
 
     let hasWinterWeather = false;
     let hasThunderstorm = false;
@@ -547,7 +612,131 @@ function getCurrentLocation() {
     });
 }
 
-// Initialize modal handlers
+// Show toast notification
+function showToast(message, isSuccess = false) {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${isSuccess ? 'success' : ''}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// Take screenshot of a section
+async function takeScreenshot(sectionId) {
+    const section = document.getElementById(sectionId);
+    if (!section) return;
+
+    try {
+        const canvas = await html2canvas(section, {
+            backgroundColor: '#1a1a1a',
+            scale: 2
+        });
+
+        // Convert to blob and download
+        canvas.toBlob((blob) => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `weather-forecast-${currentLocation.name.replace(/[^a-z0-9]/gi, '-')}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Screenshot saved!', true);
+        }, 'image/png');
+    } catch (error) {
+        console.error('Screenshot error:', error);
+        showToast('Failed to capture screenshot');
+    }
+}
+
+// Copy link to clipboard
+function copyLink() {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+        showToast('Link copied!', true);
+    }).catch(() => {
+        showToast('Failed to copy link');
+    });
+}
+
+// Native share
+async function nativeShare() {
+    if (!navigator.share) {
+        showToast('Sharing not supported on this device');
+        return;
+    }
+
+    try {
+        await navigator.share({
+            title: `Weather Forecast - ${currentLocation.name}`,
+            text: `Check out the weather forecast for ${currentLocation.name}`,
+            url: window.location.href
+        });
+    } catch (error) {
+        if (error.name !== 'AbortError') {
+            showToast('Failed to share');
+        }
+    }
+}
+
+// Initialize share modal
+function initializeShareModal() {
+    const shareModal = document.getElementById('share-modal');
+    const closeShareBtn = document.getElementById('close-share-modal');
+    const shareDailyBtn = document.getElementById('share-daily-btn');
+    const shareHourlyBtn = document.getElementById('share-hourly-btn');
+    const shareScreenshotBtn = document.getElementById('share-screenshot');
+    const shareLinkBtn = document.getElementById('share-link');
+    const shareNativeBtn = document.getElementById('share-native');
+
+    // Open share modal for daily section
+    shareDailyBtn.addEventListener('click', () => {
+        currentShareSection = 'daily-section';
+        shareModal.classList.remove('hidden');
+    });
+
+    // Open share modal for hourly section
+    shareHourlyBtn.addEventListener('click', () => {
+        currentShareSection = 'hourly-section';
+        shareModal.classList.remove('hidden');
+    });
+
+    // Close share modal
+    closeShareBtn.addEventListener('click', () => {
+        shareModal.classList.add('hidden');
+    });
+
+    shareModal.addEventListener('click', (e) => {
+        if (e.target === shareModal) {
+            shareModal.classList.add('hidden');
+        }
+    });
+
+    // Screenshot button
+    shareScreenshotBtn.addEventListener('click', async () => {
+        shareModal.classList.add('hidden');
+        await takeScreenshot(currentShareSection);
+    });
+
+    // Copy link button
+    shareLinkBtn.addEventListener('click', () => {
+        copyLink();
+        shareModal.classList.add('hidden');
+    });
+
+    // Native share button
+    shareNativeBtn.addEventListener('click', async () => {
+        shareModal.classList.add('hidden');
+        await nativeShare();
+    });
+}
+
+// Initialize location modal handlers
 function initializeModal() {
     const modal = document.getElementById('location-modal');
     const locationInput = document.getElementById('location-input');
@@ -556,25 +745,21 @@ function initializeModal() {
     const closeBtn = document.getElementById('close-modal');
     const locationDisplay = document.querySelector('.location');
 
-    // Open modal when clicking location
     locationDisplay.addEventListener('click', () => {
         modal.classList.remove('hidden');
         locationInput.focus();
     });
 
-    // Close modal
     closeBtn.addEventListener('click', () => {
         modal.classList.add('hidden');
     });
 
-    // Close on outside click
     modal.addEventListener('click', (e) => {
         if (e.target === modal) {
             modal.classList.add('hidden');
         }
     });
 
-    // Search location
     searchBtn.addEventListener('click', async () => {
         const query = locationInput.value.trim();
         if (!query) return;
@@ -602,14 +787,12 @@ function initializeModal() {
         }
     });
 
-    // Enter key in input
     locationInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             searchBtn.click();
         }
     });
 
-    // Use current location
     useCurrentBtn.addEventListener('click', async () => {
         try {
             useCurrentBtn.disabled = true;
@@ -617,7 +800,6 @@ function initializeModal() {
 
             const coords = await getCurrentLocation();
 
-            // Reverse geocode to get location name
             const response = await fetch(
                 `https://nominatim.openstreetmap.org/reverse?lat=${coords.latitude}&lon=${coords.longitude}&format=json`
             );
@@ -649,5 +831,6 @@ function initializeModal() {
 document.addEventListener('DOMContentLoaded', () => {
     updateLocationDisplay();
     initializeModal();
+    initializeShareModal();
     loadWeather();
 });

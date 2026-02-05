@@ -6,9 +6,10 @@
     <title>Weather Precipitation Forecast</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 </head>
 <body>
-    <div class="app-container">
+    <div class="app-container" id="app-container">
         <!-- Header -->
         <header class="header">
             <button class="menu-btn" aria-label="Menu">
@@ -38,10 +39,10 @@
         </div>
 
         <!-- Daily Forecast Section -->
-        <section class="forecast-section">
+        <section class="forecast-section" id="daily-section">
             <div class="section-header">
                 <h2>DAILY FORECAST</h2>
-                <button class="share-btn" aria-label="Share">
+                <button class="share-btn" id="share-daily-btn" aria-label="Share">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
                         <polyline points="16 6 12 2 8 6"></polyline>
@@ -57,17 +58,14 @@
             <!-- Temperature/Precipitation Chart -->
             <div class="chart-container">
                 <canvas id="forecast-chart"></canvas>
-                <div id="chart-day-markers" class="chart-day-markers"></div>
             </div>
-
-            <button class="more-btn">MORE</button>
         </section>
 
         <!-- Hourly Forecast Section -->
-        <section class="forecast-section">
+        <section class="forecast-section" id="hourly-section">
             <div class="section-header">
                 <h2>HOURLY FORECAST</h2>
-                <button class="share-btn" aria-label="Share">
+                <button class="share-btn" id="share-hourly-btn" aria-label="Share">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
                         <polyline points="16 6 12 2 8 6"></polyline>
@@ -79,8 +77,6 @@
             <div id="hourly-forecast" class="hourly-forecast-container">
                 <!-- Hourly forecast cards will be inserted here -->
             </div>
-
-            <button class="more-btn">MORE</button>
         </section>
 
         <!-- Location Search Modal -->
@@ -93,6 +89,28 @@
                     <button id="search-location" class="btn-primary">Search</button>
                 </div>
                 <button id="close-modal" class="close-btn">&times;</button>
+            </div>
+        </div>
+
+        <!-- Share Modal -->
+        <div id="share-modal" class="modal hidden">
+            <div class="modal-content share-modal-content">
+                <h3>Share Forecast</h3>
+                <div class="share-options">
+                    <button id="share-screenshot" class="share-option-btn">
+                        <span class="share-icon">📷</span>
+                        <span>Save Screenshot</span>
+                    </button>
+                    <button id="share-link" class="share-option-btn">
+                        <span class="share-icon">🔗</span>
+                        <span>Copy Link</span>
+                    </button>
+                    <button id="share-native" class="share-option-btn">
+                        <span class="share-icon">📤</span>
+                        <span>Share...</span>
+                    </button>
+                </div>
+                <button id="close-share-modal" class="close-btn">&times;</button>
             </div>
         </div>
     </div>
