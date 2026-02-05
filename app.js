@@ -89,9 +89,6 @@ function getDayName(date, short = false) {
     if (dateOnly.getTime() === today.getTime()) {
         return 'TODAY';
     }
-    if (dateOnly.getTime() === tomorrow.getTime()) {
-        return short ? 'TOM' : 'TOMORROW';
-    }
 
     const days = short
         ? ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
@@ -99,6 +96,7 @@ function getDayName(date, short = false) {
 
     const dayName = days[date.getDay()];
     return short ? `${dayName} ${date.getDate()}` : `${dayName} ${date.getDate()}`;
+
 }
 
 // Get midnight of current day
@@ -136,7 +134,7 @@ async function fetchWeatherData(lat, lon) {
         wind_speed_unit: 'mph',
         precipitation_unit: 'mm',
         timezone: 'auto',
-        forecast_days: 7
+        forecast_days: 8
     });
 
     const response = await fetch(`${API_BASE}?${params}`);
@@ -490,6 +488,9 @@ function renderChart(data) {
                     bodyColor: '#fff',
                     padding: 12,
                     displayColors: true,
+                    position: 'nearest',
+                    yAlign: 'bottom',
+                    caretPadding: 20,
                     callbacks: {
                         title: function(context) {
                             const date = context[0].label;
@@ -578,7 +579,7 @@ async function initializeRadar() {
         if (!radarMap) {
             radarMap = L.map('radar-map', {
                 center: [currentLocation.latitude, currentLocation.longitude],
-                zoom: 7, // Approximately 100 mile radius view
+                zoom: 8, // Approximately 50 mile radius view
                 zoomControl: false,
                 attributionControl: true
             });
@@ -600,9 +601,9 @@ async function initializeRadar() {
                 fillOpacity: 0.8
             }).addTo(radarMap);
 
-            // Add 100 mile radius circle (approximately 161 km)
+            // Add 50 mile radius circle (approximately 80 km)
             L.circle([currentLocation.latitude, currentLocation.longitude], {
-                radius: 160934, // 100 miles in meters
+                radius: 80467, // 50 miles in meters
                 color: '#00bcd4',
                 fillColor: 'transparent',
                 weight: 1,
@@ -611,7 +612,7 @@ async function initializeRadar() {
             }).addTo(radarMap);
         } else {
             // Update map center for new location
-            radarMap.setView([currentLocation.latitude, currentLocation.longitude], 7);
+            radarMap.setView([currentLocation.latitude, currentLocation.longitude], 8);
         }
 
         // Fetch radar data from RainViewer
@@ -650,9 +651,14 @@ async function initializeRadar() {
     }
 }
 
-// Update location display
-function updateLocationDisplay() {
-    document.getElementById('location-name').textContent = currentLocation.name;
+// Update location display with optional current temperature
+function updateLocationDisplay(currentTemp = null) {
+    const locationName = document.getElementById('location-name');
+    if (currentTemp !== null) {
+        locationName.textContent = `${currentLocation.name}: ${currentTemp}°F`;
+    } else {
+        locationName.textContent = currentLocation.name;
+    }
 }
 
 // Load weather for current location
@@ -662,6 +668,18 @@ async function loadWeather() {
         document.getElementById('hourly-forecast').innerHTML = '';
 
         weatherData = await fetchWeatherData(currentLocation.latitude, currentLocation.longitude);
+
+        // Get current temperature from hourly data
+        const now = new Date();
+        let currentTemp = null;
+        for (let i = 0; i < weatherData.hourly.time.length; i++) {
+            const hourDate = new Date(weatherData.hourly.time[i]);
+            if (hourDate >= now) {
+                currentTemp = formatTempValue(weatherData.hourly.temperature_2m[i > 0 ? i - 1 : 0]);
+                break;
+            }
+        }
+        updateLocationDisplay(currentTemp);
 
         renderDailyForecast(weatherData);
         renderHourlyForecast(weatherData);
@@ -812,7 +830,7 @@ function initializeShareModal() {
     const shareRadarBtn = document.getElementById('share-radar-btn');
     const shareScreenshotBtn = document.getElementById('share-screenshot');
     const shareLinkBtn = document.getElementById('share-link');
-    const shareNativeBtn = document.getElementById('share-native');
+    const shareBothBtn = document.getElementById('share-both');
 
     // Open share modal for daily section
     shareDailyBtn.addEventListener('click', () => {
@@ -857,10 +875,15 @@ function initializeShareModal() {
         shareModal.classList.add('hidden');
     });
 
-    // Native share button
-    shareNativeBtn.addEventListener('click', async () => {
+    // Share both screenshot and link
+    shareBothBtn.addEventListener('click', async () => {
         shareModal.classList.add('hidden');
-        await nativeShare();
+        // Take screenshot
+        await takeScreenshot(currentShareSection);
+        // Copy link after a small delay
+        setTimeout(() => {
+            copyLink();
+        }, 500);
     });
 }
 
@@ -971,10 +994,75 @@ function initializeModal() {
     });
 }
 
+// Initialize hourly scroll handler to update day indicator
+function initializeHourlyScrollHandler() {
+    const hourlyContainer = document.getElementById('hourly-forecast');
+    const dayIndicator = document.getElementById('hourly-day-indicator');
+
+    if (!hourlyContainer || !dayIndicator) return;
+
+    hourlyContainer.addEventListener('scroll', () => {
+        const cards = hourlyContainer.querySelectorAll('.hourly-card');
+        if (cards.length === 0) return;
+
+        const containerRect = hourlyContainer.getBoundingClientRect();
+        const containerCenter = containerRect.left + containerRect.width / 3;
+
+        let visibleDay = null;
+
+        for (const card of cards) {
+            const cardRect = card.getBoundingClientRect();
+            if (cardRect.left <= containerCenter && cardRect.right >= containerCenter) {
+                // Find the day label for this card or the most recent one before it
+                const dayLabel = card.querySelector('.day-label');
+                if (dayLabel) {
+                    visibleDay = dayLabel.textContent;
+                }
+                break;
+            }
+        }
+
+        // If no day label on current card, find the most recent one
+        if (!visibleDay) {
+            for (const card of cards) {
+                const cardRect = card.getBoundingClientRect();
+                if (cardRect.right < containerCenter) {
+                    const dayLabel = card.querySelector('.day-label');
+                    if (dayLabel) {
+                        visibleDay = dayLabel.textContent;
+                    }
+                } else if (cardRect.left <= containerCenter) {
+                    // Current visible card - check if it has a label or use the previous one
+                    const dayLabel = card.querySelector('.day-label');
+                    if (dayLabel) {
+                        visibleDay = dayLabel.textContent;
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (visibleDay) {
+            dayIndicator.textContent = visibleDay;
+        }
+    });
+
+    // Set initial value
+    setTimeout(() => {
+        const firstDayLabel = hourlyContainer.querySelector('.day-label');
+        if (firstDayLabel) {
+            dayIndicator.textContent = firstDayLabel.textContent;
+        }
+    }, 100);
+}
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
     updateLocationDisplay();
     initializeModal();
     initializeShareModal();
     loadWeather();
+
+    // Initialize scroll handler after weather loads
+    setTimeout(initializeHourlyScrollHandler, 500);
 });

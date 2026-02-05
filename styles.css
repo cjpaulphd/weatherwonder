@@ -29,7 +29,7 @@ body {
 }
 
 .app-container {
-    max-width: 480px;
+    max-width: 960px;
     margin: 0 auto;
     min-height: 100vh;
 }
@@ -102,6 +102,7 @@ body {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 12px;
+    gap: 8px;
 }
 
 .section-header h2 {
@@ -109,6 +110,17 @@ body {
     font-weight: 500;
     color: var(--text-secondary);
     letter-spacing: 1px;
+}
+
+.hourly-day-indicator {
+    flex: 1;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    background-color: var(--bg-secondary);
+    padding: 4px 12px;
+    border-radius: 12px;
 }
 
 .share-btn {
@@ -387,6 +399,16 @@ body {
     color: #000;
 }
 
+.share-option-btn.share-primary {
+    background-color: var(--accent-blue);
+    color: #000;
+    font-weight: 600;
+}
+
+.share-option-btn.share-primary:hover {
+    background-color: #26c6da;
+}
+
 /* Loading State */
 .loading {
     display: flex;
@@ -457,6 +479,52 @@ body {
     .app-container {
         border-left: 1px solid var(--bg-secondary);
         border-right: 1px solid var(--bg-secondary);
+    }
+
+    .daily-card .day-name {
+        font-size: 12px;
+    }
+
+    .daily-card .weather-icon {
+        font-size: 20px;
+    }
+
+    .daily-card .temp-range {
+        font-size: 13px;
+    }
+
+    .hourly-card {
+        min-width: 70px;
+    }
+
+    .chart-container {
+        height: 280px;
+    }
+}
+
+@media (min-width: 768px) {
+    .daily-card .day-name {
+        font-size: 13px;
+    }
+
+    .daily-card .weather-icon {
+        font-size: 24px;
+    }
+
+    .daily-card .temp-range {
+        font-size: 14px;
+    }
+
+    .hourly-card {
+        min-width: 85px;
+    }
+
+    .chart-container {
+        height: 320px;
+    }
+
+    .radar-map {
+        height: 400px;
     }
 }
 

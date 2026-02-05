@@ -67,6 +67,7 @@
         <section class="forecast-section" id="hourly-section">
             <div class="section-header">
                 <h2>HOURLY FORECAST</h2>
+                <div id="hourly-day-indicator" class="hourly-day-indicator"></div>
                 <button class="share-btn" id="share-hourly-btn" aria-label="Share">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
@@ -84,7 +85,7 @@
         <!-- Radar Section -->
         <section class="forecast-section" id="radar-section">
             <div class="section-header">
-                <h2>DOPPLER RADAR (100 mi)</h2>
+                <h2>DOPPLER RADAR (50 mi)</h2>
                 <button class="share-btn" id="share-radar-btn" aria-label="Share">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
@@ -124,17 +125,17 @@
             <div class="modal-content share-modal-content">
                 <h3>Share Forecast</h3>
                 <div class="share-options">
+                    <button id="share-both" class="share-option-btn share-primary">
+                        <span class="share-icon">📤</span>
+                        <span>Share Screenshot + Link</span>
+                    </button>
                     <button id="share-screenshot" class="share-option-btn">
                         <span class="share-icon">📷</span>
-                        <span>Save Screenshot</span>
+                        <span>Save Screenshot Only</span>
                     </button>
                     <button id="share-link" class="share-option-btn">
                         <span class="share-icon">🔗</span>
-                        <span>Copy Link</span>
-                    </button>
-                    <button id="share-native" class="share-option-btn">
-                        <span class="share-icon">📤</span>
-                        <span>Share...</span>
+                        <span>Copy Link Only</span>
                     </button>
                 </div>
                 <button id="close-share-modal" class="close-btn">&times;</button>
