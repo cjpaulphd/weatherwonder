@@ -111,7 +111,10 @@
         <div id="location-modal" class="modal hidden">
             <div class="modal-content">
                 <h3>Enter Location</h3>
-                <input type="text" id="location-input" placeholder="City name or coordinates">
+                <div class="input-wrapper">
+                    <input type="text" id="location-input" placeholder="City name or coordinates">
+                    <button id="clear-location-input" class="clear-input-btn" type="button">&times;</button>
+                </div>
                 <div class="modal-buttons">
                     <button id="use-current-location" class="btn-secondary">Use Current Location</button>
                     <button id="search-location" class="btn-primary">Search</button>
@@ -125,9 +128,13 @@
             <div class="modal-content share-modal-content">
                 <h3>Share Forecast</h3>
                 <div class="share-options">
-                    <button id="share-both" class="share-option-btn share-primary">
+                    <button id="share-native" class="share-option-btn share-primary">
                         <span class="share-icon">📤</span>
-                        <span>Share Screenshot + Link</span>
+                        <span>Share</span>
+                    </button>
+                    <button id="share-both" class="share-option-btn">
+                        <span class="share-icon">📷🔗</span>
+                        <span>Screenshot + Copy Link</span>
                     </button>
                     <button id="share-screenshot" class="share-option-btn">
                         <span class="share-icon">📷</span>

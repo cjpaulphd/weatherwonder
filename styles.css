@@ -309,15 +309,39 @@ body {
     margin-bottom: 16px;
 }
 
+.input-wrapper {
+    position: relative;
+    margin-bottom: 16px;
+}
+
 .modal-content input {
     width: 100%;
     padding: 12px;
+    padding-right: 36px;
     border: 1px solid var(--bg-card);
     border-radius: 8px;
     background-color: var(--bg-primary);
     color: var(--text-primary);
     font-size: 16px;
-    margin-bottom: 16px;
+    margin-bottom: 0;
+}
+
+.clear-input-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+}
+
+.clear-input-btn:hover {
+    color: var(--text-primary);
 }
 
 .modal-buttons {

@@ -205,7 +205,7 @@ function renderDailyForecast(data) {
         card.innerHTML = `
             <div class="day-name">${getDayName(date, true)}</div>
             <div class="weather-icon">${getWeatherIcon(weatherCode)}</div>
-            <div class="temp-range">${lowTemp}/${highTemp} °F</div>
+            <div class="temp-range">${lowTemp} | ${highTemp} °F</div>
             ${precipProb > 0 ? `
                 <div class="precip-info ${precipClass}">
                     ${hasSnow ? '❄' : '💧'} ${precipProb}%
@@ -579,7 +579,7 @@ async function initializeRadar() {
         if (!radarMap) {
             radarMap = L.map('radar-map', {
                 center: [currentLocation.latitude, currentLocation.longitude],
-                zoom: 8, // Approximately 50 mile radius view
+                zoom: 7, // Zoomed to show 50 mile radius with radar coverage
                 zoomControl: false,
                 attributionControl: true
             });
@@ -612,7 +612,7 @@ async function initializeRadar() {
             }).addTo(radarMap);
         } else {
             // Update map center for new location
-            radarMap.setView([currentLocation.latitude, currentLocation.longitude], 8);
+            radarMap.setView([currentLocation.latitude, currentLocation.longitude], 7);
         }
 
         // Fetch radar data from RainViewer
@@ -831,6 +831,7 @@ function initializeShareModal() {
     const shareScreenshotBtn = document.getElementById('share-screenshot');
     const shareLinkBtn = document.getElementById('share-link');
     const shareBothBtn = document.getElementById('share-both');
+    const shareNativeBtn = document.getElementById('share-native');
 
     // Open share modal for daily section
     shareDailyBtn.addEventListener('click', () => {
@@ -885,6 +886,12 @@ function initializeShareModal() {
             copyLink();
         }, 500);
     });
+
+    // Native share button (iOS/Android share sheet)
+    shareNativeBtn.addEventListener('click', async () => {
+        shareModal.classList.add('hidden');
+        await nativeShare();
+    });
 }
 
 // Initialize location modal handlers
@@ -894,7 +901,14 @@ function initializeModal() {
     const searchBtn = document.getElementById('search-location');
     const useCurrentBtn = document.getElementById('use-current-location');
     const closeBtn = document.getElementById('close-modal');
+    const clearInputBtn = document.getElementById('clear-location-input');
     const locationDisplay = document.querySelector('.location');
+
+    // Clear input button
+    clearInputBtn.addEventListener('click', () => {
+        locationInput.value = '';
+        locationInput.focus();
+    });
 
     locationDisplay.addEventListener('click', () => {
         modal.classList.remove('hidden');
