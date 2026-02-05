@@ -1,30 +1,38 @@
-# Weather Precipitation Forecast
+# WeatherWonder
 
-A web application that displays weather forecasts with a focus on precipitation probability and amounts, inspired by the Weather Underground mobile app.
+A web application that displays weather forecasts with a focus on precipitation probability and amounts.
 
 ## Features
 
-- **Daily Forecast**: 7-day forecast with high/low temperatures, weather icons, and precipitation probability
-- **Hourly Forecast**: Detailed hourly breakdown showing temperature, wind, and precipitation
-- **Interactive Chart**: Dual-axis line chart showing temperature and precipitation probability trends
+- **Daily Forecast**: 7-day forecast with AM/PM weather icons, high/low temperatures, and precipitation probability
+- **Hourly Forecast**: Detailed 48-hour breakdown showing temperature, wind, windchill, and precipitation
+- **Interactive Chart**: Multi-axis line chart showing temperature, precipitation probability, and precipitation amount trends with colored grid lines
+- **Doppler Radar**: Live radar imagery with 50-mile radius overlay using RainViewer API
 - **Location Search**: Search for any location or use your current GPS position
+- **Favorite Locations**: Save and quickly switch between favorite locations (stored locally)
 - **Weather Alerts**: Automatic detection and display of winter weather and thunderstorm conditions
-- **Dark Theme**: Mobile-friendly dark UI similar to Weather Underground
+- **Sharing**: Share screenshots, copy links, or use native device sharing
+- **Dark Theme**: Mobile-friendly dark UI
+- **Responsive Design**: Scales from mobile to desktop (up to 960px)
 
-## Data Source
+## Data Sources
 
-This app uses the [Open-Meteo API](https://open-meteo.com/), which is:
-- Free for non-commercial use
-- No API key required
-- Provides accurate weather data worldwide
+This app uses free APIs with no API keys required:
+
+- **Weather Data**: [Open-Meteo API](https://open-meteo.com/) - accurate worldwide forecasts
+- **Radar Imagery**: [RainViewer API](https://www.rainviewer.com/api.html) - real-time precipitation radar
+- **Maps**: [OpenStreetMap](https://www.openstreetmap.org/) via Leaflet with CartoDB dark tiles
 
 ## Usage
 
 1. Open `index.html` in a web browser
 2. The app will load weather data for Durham, NC by default
 3. Click on the location name to search for a different location
-4. Scroll horizontally through daily and hourly forecasts
-5. Hover over the chart to see detailed temperature and precipitation data
+4. Tap the star icon to save a location to favorites
+5. Use the hamburger menu to access favorite locations
+6. Scroll horizontally through hourly forecasts
+7. Touch/hover the chart to see detailed data at any point
+8. Use share buttons to save screenshots or share links
 
 ## Running Locally
 
@@ -47,14 +55,25 @@ php -S localhost:8000
 
 - `index.html` - Main HTML structure
 - `styles.css` - Dark theme styling
-- `app.js` - Weather data fetching and UI rendering
+- `app.js` - Weather data fetching, favorites management, and UI rendering
+
+## External Libraries
+
+- [Chart.js](https://www.chartjs.org/) - Interactive charts
+- [Leaflet](https://leafletjs.com/) - Radar map display
+- [html2canvas](https://html2canvas.hertzen.com/) - Screenshot functionality
 
 ## API Endpoints Used
 
 - **Weather**: `https://api.open-meteo.com/v1/forecast`
 - **Geocoding**: `https://geocoding-api.open-meteo.com/v1/search`
 - **Reverse Geocoding**: `https://nominatim.openstreetmap.org/reverse`
+- **Radar**: `https://api.rainviewer.com/public/weather-maps.json`
 
 ## Browser Support
 
-Works in all modern browsers (Chrome, Firefox, Safari, Edge).
+Works in all modern browsers (Chrome, Firefox, Safari, Edge). Optimized for mobile devices.
+
+## Privacy
+
+All favorite locations are stored locally in your browser using localStorage. No data is sent to any server except for weather API requests.

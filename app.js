@@ -18,6 +18,136 @@ let currentShareSection = null;
 let radarMap = null;
 let radarLayer = null;
 
+// Favorites management with localStorage
+const FAVORITES_KEY = 'weatherwonder_favorites';
+
+function getFavorites() {
+    try {
+        const stored = localStorage.getItem(FAVORITES_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveFavorites(favorites) {
+    try {
+        localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+    } catch (e) {
+        console.error('Could not save favorites:', e);
+    }
+}
+
+function addFavorite(location) {
+    const favorites = getFavorites();
+    // Check if already exists
+    const exists = favorites.some(f =>
+        f.latitude === location.latitude && f.longitude === location.longitude
+    );
+    if (!exists) {
+        favorites.push({
+            name: location.name,
+            latitude: location.latitude,
+            longitude: location.longitude
+        });
+        saveFavorites(favorites);
+    }
+    updateFavoriteButton();
+    renderFavoritesList();
+}
+
+function removeFavorite(latitude, longitude) {
+    let favorites = getFavorites();
+    favorites = favorites.filter(f =>
+        !(f.latitude === latitude && f.longitude === longitude)
+    );
+    saveFavorites(favorites);
+    updateFavoriteButton();
+    renderFavoritesList();
+}
+
+function isFavorite(location) {
+    const favorites = getFavorites();
+    return favorites.some(f =>
+        f.latitude === location.latitude && f.longitude === location.longitude
+    );
+}
+
+function updateFavoriteButton() {
+    const btn = document.getElementById('favorite-btn');
+    if (btn) {
+        if (isFavorite(currentLocation)) {
+            btn.textContent = '★';
+            btn.classList.add('active');
+        } else {
+            btn.textContent = '☆';
+            btn.classList.remove('active');
+        }
+    }
+}
+
+function renderFavoritesList() {
+    const list = document.getElementById('favorites-list');
+    if (!list) return;
+
+    const favorites = getFavorites();
+
+    if (favorites.length === 0) {
+        list.innerHTML = '<p class="no-favorites">No favorites yet. Tap the star next to a location to add it.</p>';
+        return;
+    }
+
+    list.innerHTML = favorites.map(fav => `
+        <div class="favorite-item" data-lat="${fav.latitude}" data-lon="${fav.longitude}" data-name="${fav.name}">
+            <span class="favorite-item-name">${fav.name}</span>
+            <button class="favorite-item-remove" data-lat="${fav.latitude}" data-lon="${fav.longitude}">&times;</button>
+        </div>
+    `).join('');
+
+    // Add click handlers
+    list.querySelectorAll('.favorite-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            if (e.target.classList.contains('favorite-item-remove')) return;
+
+            const lat = parseFloat(item.dataset.lat);
+            const lon = parseFloat(item.dataset.lon);
+            const name = item.dataset.name;
+
+            currentLocation = { name, latitude: lat, longitude: lon };
+            updateLocationDisplay();
+            closeMenu();
+
+            // Reset radar for new location
+            if (radarMap) {
+                radarMap.remove();
+                radarMap = null;
+                radarLayer = null;
+            }
+
+            loadWeather();
+        });
+    });
+
+    list.querySelectorAll('.favorite-item-remove').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const lat = parseFloat(btn.dataset.lat);
+            const lon = parseFloat(btn.dataset.lon);
+            removeFavorite(lat, lon);
+        });
+    });
+}
+
+function openMenu() {
+    document.getElementById('menu-panel').classList.remove('hidden');
+    document.getElementById('menu-overlay').classList.remove('hidden');
+}
+
+function closeMenu() {
+    document.getElementById('menu-panel').classList.add('hidden');
+    document.getElementById('menu-overlay').classList.add('hidden');
+}
+
 // Weather code mappings to icons and descriptions
 const weatherCodes = {
     0: { icon: '☀️', desc: 'Clear sky' },
@@ -166,6 +296,36 @@ async function geocodeLocation(query) {
     return data.results[0];
 }
 
+// Get AM/PM weather codes from hourly data for a specific date
+function getAmPmWeatherCodes(data, targetDate) {
+    const hourly = data.hourly;
+    const targetDay = new Date(targetDate);
+    targetDay.setHours(0, 0, 0, 0);
+
+    let amCode = null;
+    let pmCode = null;
+
+    for (let i = 0; i < hourly.time.length; i++) {
+        const hourDate = new Date(hourly.time[i]);
+        const hourDay = new Date(hourDate);
+        hourDay.setHours(0, 0, 0, 0);
+
+        if (hourDay.getTime() === targetDay.getTime()) {
+            const hour = hourDate.getHours();
+            // AM: around 9-10 AM
+            if (hour === 9 || hour === 10) {
+                amCode = hourly.weather_code[i];
+            }
+            // PM: around 5-6 PM
+            if (hour === 17 || hour === 18) {
+                pmCode = hourly.weather_code[i];
+            }
+        }
+    }
+
+    return { amCode, pmCode };
+}
+
 // Render daily forecast cards - starting from today (current day)
 function renderDailyForecast(data) {
     const container = document.getElementById('daily-forecast');
@@ -191,10 +351,13 @@ function renderDailyForecast(data) {
         const card = document.createElement('div');
         card.className = 'daily-card';
 
-        const weatherCode = daily.weather_code[i];
+        const dailyWeatherCode = daily.weather_code[i];
         const hasSnow = daily.snowfall_sum[i] > 0;
         const hasPrecip = daily.precipitation_sum[i] > 0;
         const precipProb = daily.precipitation_probability_max[i];
+
+        // Get AM/PM weather codes from hourly data
+        const { amCode, pmCode } = getAmPmWeatherCodes(data, date);
 
         // Changed to min/max order
         const lowTemp = formatTempValue(daily.temperature_2m_min[i]);
@@ -202,9 +365,16 @@ function renderDailyForecast(data) {
 
         let precipClass = hasSnow ? 'snow' : '';
 
+        // Use AM/PM icons if available, otherwise fall back to daily icon
+        const amIcon = amCode !== null ? getWeatherIcon(amCode) : getWeatherIcon(dailyWeatherCode);
+        const pmIcon = pmCode !== null ? getWeatherIcon(pmCode, true) : getWeatherIcon(dailyWeatherCode, true);
+
         card.innerHTML = `
             <div class="day-name">${getDayName(date, true)}</div>
-            <div class="weather-icon">${getWeatherIcon(weatherCode)}</div>
+            <div class="weather-icons">
+                <div class="am-icon" title="Morning">${amIcon}</div>
+                <div class="pm-icon" title="Evening">${pmIcon}</div>
+            </div>
             <div class="temp-range">${lowTemp} | ${highTemp} °F</div>
             ${precipProb > 0 ? `
                 <div class="precip-info ${precipClass}">
@@ -659,6 +829,8 @@ function updateLocationDisplay(currentTemp = null) {
     } else {
         locationName.textContent = currentLocation.name;
     }
+    // Update favorite button state
+    updateFavoriteButton();
 }
 
 // Load weather for current location
@@ -1070,11 +1242,53 @@ function initializeHourlyScrollHandler() {
     }, 100);
 }
 
+// Initialize menu handlers
+function initializeMenu() {
+    const menuBtn = document.querySelector('.menu-btn');
+    const closeMenuBtn = document.getElementById('close-menu');
+    const menuOverlay = document.getElementById('menu-overlay');
+    const menuChangeLocation = document.getElementById('menu-change-location');
+    const favoriteBtn = document.getElementById('favorite-btn');
+
+    // Open menu
+    menuBtn.addEventListener('click', () => {
+        renderFavoritesList();
+        openMenu();
+    });
+
+    // Close menu
+    closeMenuBtn.addEventListener('click', closeMenu);
+    menuOverlay.addEventListener('click', closeMenu);
+
+    // Change location from menu
+    menuChangeLocation.addEventListener('click', () => {
+        closeMenu();
+        document.getElementById('location-modal').classList.remove('hidden');
+        document.getElementById('location-input').focus();
+    });
+
+    // Toggle favorite
+    favoriteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isFavorite(currentLocation)) {
+            removeFavorite(currentLocation.latitude, currentLocation.longitude);
+            showToast('Removed from favorites');
+        } else {
+            addFavorite(currentLocation);
+            showToast('Added to favorites', true);
+        }
+    });
+
+    // Initialize favorite button state
+    updateFavoriteButton();
+}
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
     updateLocationDisplay();
     initializeModal();
     initializeShareModal();
+    initializeMenu();
     loadWeather();
 
     // Initialize scroll handler after weather loads

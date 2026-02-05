@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Precipitation Forecast</title>
+    <title>WeatherWonder - Precipitation Forecast</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -24,6 +24,7 @@
             <div class="location">
                 <span class="location-icon">📍</span>
                 <span id="location-name">Loading...</span>
+                <button id="favorite-btn" class="favorite-btn" aria-label="Add to favorites">☆</button>
             </div>
             <button class="settings-btn" aria-label="Settings">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -32,6 +33,27 @@
                 </svg>
             </button>
         </header>
+
+        <!-- Menu Panel -->
+        <div id="menu-overlay" class="menu-overlay hidden"></div>
+        <nav id="menu-panel" class="menu-panel hidden">
+            <div class="menu-header">
+                <h3>WeatherWonder</h3>
+                <button id="close-menu" class="close-btn">&times;</button>
+            </div>
+            <div class="menu-section">
+                <h4>Favorite Locations</h4>
+                <div id="favorites-list" class="favorites-list">
+                    <p class="no-favorites">No favorites yet. Tap the star next to a location to add it.</p>
+                </div>
+            </div>
+            <div class="menu-section">
+                <button id="menu-change-location" class="menu-item">
+                    <span>📍</span>
+                    <span>Change Location</span>
+                </button>
+            </div>
+        </nav>
 
         <!-- Weather Alert Banner -->
         <div id="alert-banner" class="alert-banner hidden">
