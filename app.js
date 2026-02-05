@@ -3,6 +3,7 @@
 
 const API_BASE = 'https://api.open-meteo.com/v1/forecast';
 const GEOCODING_API = 'https://geocoding-api.open-meteo.com/v1/search';
+const RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
 
 // Default location (Durham, NC)
 let currentLocation = {
@@ -14,6 +15,8 @@ let currentLocation = {
 let forecastChart = null;
 let weatherData = null;
 let currentShareSection = null;
+let radarMap = null;
+let radarLayer = null;
 
 // Weather code mappings to icons and descriptions
 const weatherCodes = {
@@ -76,13 +79,17 @@ function formatPrecip(mm) {
 // Get day name
 function getDayName(date, short = false) {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    if (date.toDateString() === today.toDateString()) {
+    const dateOnly = new Date(date);
+    dateOnly.setHours(0, 0, 0, 0);
+
+    if (dateOnly.getTime() === today.getTime()) {
         return 'TODAY';
     }
-    if (date.toDateString() === tomorrow.toDateString()) {
+    if (dateOnly.getTime() === tomorrow.getTime()) {
         return short ? 'TOM' : 'TOMORROW';
     }
 
@@ -94,6 +101,13 @@ function getDayName(date, short = false) {
     return short ? `${dayName} ${date.getDate()}` : `${dayName} ${date.getDate()}`;
 }
 
+// Get midnight of current day
+function getMidnightToday() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+}
+
 // Fetch weather data from Open-Meteo API
 async function fetchWeatherData(lat, lon) {
     const params = new URLSearchParams({
@@ -101,6 +115,7 @@ async function fetchWeatherData(lat, lon) {
         longitude: lon,
         hourly: [
             'temperature_2m',
+            'apparent_temperature',
             'precipitation_probability',
             'precipitation',
             'snowfall',
@@ -153,14 +168,27 @@ async function geocodeLocation(query) {
     return data.results[0];
 }
 
-// Render daily forecast cards
+// Render daily forecast cards - starting from today (current day)
 function renderDailyForecast(data) {
     const container = document.getElementById('daily-forecast');
     container.innerHTML = '';
 
     const daily = data.daily;
+    const today = getMidnightToday();
 
-    for (let i = 0; i < daily.time.length && i < 7; i++) {
+    // Find the index for today
+    let startIdx = 0;
+    for (let i = 0; i < daily.time.length; i++) {
+        const dayDate = new Date(daily.time[i]);
+        dayDate.setHours(0, 0, 0, 0);
+        if (dayDate.getTime() >= today.getTime()) {
+            startIdx = i;
+            break;
+        }
+    }
+
+    // Render 7 days starting from today
+    for (let i = startIdx; i < daily.time.length && i < startIdx + 7; i++) {
         const date = new Date(daily.time[i]);
         const card = document.createElement('div');
         card.className = 'daily-card';
@@ -170,15 +198,16 @@ function renderDailyForecast(data) {
         const hasPrecip = daily.precipitation_sum[i] > 0;
         const precipProb = daily.precipitation_probability_max[i];
 
-        const highTemp = formatTempValue(daily.temperature_2m_max[i]);
+        // Changed to min/max order
         const lowTemp = formatTempValue(daily.temperature_2m_min[i]);
+        const highTemp = formatTempValue(daily.temperature_2m_max[i]);
 
         let precipClass = hasSnow ? 'snow' : '';
 
         card.innerHTML = `
             <div class="day-name">${getDayName(date, true)}</div>
             <div class="weather-icon">${getWeatherIcon(weatherCode)}</div>
-            <div class="temp-range">${highTemp}/${lowTemp} °F</div>
+            <div class="temp-range">${lowTemp}/${highTemp} °F</div>
             ${precipProb > 0 ? `
                 <div class="precip-info ${precipClass}">
                     ${hasSnow ? '❄' : '💧'} ${precipProb}%
@@ -235,15 +264,20 @@ function renderHourlyForecast(data) {
         const windSpeed = hourly.wind_speed_10m[i];
         const windDir = hourly.wind_direction_10m[i];
         const temp = formatTempValue(hourly.temperature_2m[i]);
+        const apparentTemp = formatTempValue(hourly.apparent_temperature[i]);
 
         const windArrow = '↑';
         let precipClass = hasSnow ? 'snow' : '';
+
+        // Show windchill if it differs from actual temp by more than 2 degrees
+        const showWindchill = Math.abs(temp - apparentTemp) > 2;
 
         card.innerHTML = `
             ${dayLabel}
             <div class="hour">${hour}</div>
             <div class="weather-icon">${getWeatherIcon(weatherCode, isNight)}</div>
             <div class="temp">${temp}°F</div>
+            ${showWindchill ? `<div class="windchill">Feels ${apparentTemp}°</div>` : ''}
             <div class="wind">
                 <span class="wind-icon" style="transform: rotate(${windDir}deg)">${windArrow}</span>
                 ${Math.round(windSpeed)} mph
@@ -300,7 +334,6 @@ const gridLinesPlugin = {
         }
 
         // Draw precipitation amount grid lines (every 0.10") - green color
-        const precipMin = 0;
         const precipMax = Math.ceil(yPrecipScale.max * 10) / 10;
 
         ctx.strokeStyle = 'rgba(102, 187, 106, 0.3)';
@@ -324,7 +357,7 @@ const gridLinesPlugin = {
 
         // Draw day separators
         const labels = chart.data.labels;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
         ctx.setLineDash([]);
         ctx.lineWidth = 1;
 
@@ -349,16 +382,18 @@ const gridLinesPlugin = {
 // Register the plugin
 Chart.register(gridLinesPlugin);
 
-// Render the temperature/precipitation chart
+// Render the temperature/precipitation chart - starting from midnight today
 function renderChart(data) {
     const ctx = document.getElementById('forecast-chart').getContext('2d');
     const hourly = data.hourly;
 
-    const now = new Date();
+    const midnight = getMidnightToday();
+
+    // Find index for midnight of current day
     let startIndex = 0;
     for (let i = 0; i < hourly.time.length; i++) {
         const hourDate = new Date(hourly.time[i]);
-        if (hourDate >= now) {
+        if (hourDate >= midnight) {
             startIndex = i;
             break;
         }
@@ -531,6 +566,90 @@ function renderChart(data) {
     container.appendChild(legend);
 }
 
+// Initialize and render radar map
+async function initializeRadar() {
+    const mapContainer = document.getElementById('radar-map');
+    const timeDisplay = document.getElementById('radar-time');
+
+    if (!mapContainer) return;
+
+    try {
+        // Initialize Leaflet map centered on current location
+        if (!radarMap) {
+            radarMap = L.map('radar-map', {
+                center: [currentLocation.latitude, currentLocation.longitude],
+                zoom: 7, // Approximately 100 mile radius view
+                zoomControl: false,
+                attributionControl: true
+            });
+
+            // Add dark tile layer
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(radarMap);
+
+            // Add location marker
+            L.circleMarker([currentLocation.latitude, currentLocation.longitude], {
+                radius: 6,
+                fillColor: '#00bcd4',
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            }).addTo(radarMap);
+
+            // Add 100 mile radius circle (approximately 161 km)
+            L.circle([currentLocation.latitude, currentLocation.longitude], {
+                radius: 160934, // 100 miles in meters
+                color: '#00bcd4',
+                fillColor: 'transparent',
+                weight: 1,
+                opacity: 0.5,
+                dashArray: '5, 5'
+            }).addTo(radarMap);
+        } else {
+            // Update map center for new location
+            radarMap.setView([currentLocation.latitude, currentLocation.longitude], 7);
+        }
+
+        // Fetch radar data from RainViewer
+        const response = await fetch(RAINVIEWER_API);
+        const radarData = await response.json();
+
+        if (radarData.radar && radarData.radar.past && radarData.radar.past.length > 0) {
+            // Get the most recent radar frame
+            const latestFrame = radarData.radar.past[radarData.radar.past.length - 1];
+            const radarHost = radarData.host;
+
+            // Remove existing radar layer
+            if (radarLayer) {
+                radarMap.removeLayer(radarLayer);
+            }
+
+            // Add new radar layer
+            radarLayer = L.tileLayer(`${radarHost}${latestFrame.path}/256/{z}/{x}/{y}/2/1_1.png`, {
+                opacity: 0.7,
+                zIndex: 100
+            }).addTo(radarMap);
+
+            // Update time display
+            const radarTime = new Date(latestFrame.time * 1000);
+            timeDisplay.textContent = `Radar: ${radarTime.toLocaleString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                month: 'short',
+                day: 'numeric'
+            })}`;
+        }
+
+    } catch (error) {
+        console.error('Error loading radar:', error);
+        mapContainer.innerHTML = '<div class="radar-loading">Radar unavailable</div>';
+    }
+}
+
 // Update location display
 function updateLocationDisplay() {
     document.getElementById('location-name').textContent = currentLocation.name;
@@ -548,6 +667,7 @@ async function loadWeather() {
         renderHourlyForecast(weatherData);
         renderChart(weatherData);
         checkWeatherAlerts(weatherData);
+        initializeRadar();
 
     } catch (error) {
         console.error('Error loading weather:', error);
@@ -636,7 +756,6 @@ async function takeScreenshot(sectionId) {
             scale: 2
         });
 
-        // Convert to blob and download
         canvas.toBlob((blob) => {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -690,6 +809,7 @@ function initializeShareModal() {
     const closeShareBtn = document.getElementById('close-share-modal');
     const shareDailyBtn = document.getElementById('share-daily-btn');
     const shareHourlyBtn = document.getElementById('share-hourly-btn');
+    const shareRadarBtn = document.getElementById('share-radar-btn');
     const shareScreenshotBtn = document.getElementById('share-screenshot');
     const shareLinkBtn = document.getElementById('share-link');
     const shareNativeBtn = document.getElementById('share-native');
@@ -705,6 +825,14 @@ function initializeShareModal() {
         currentShareSection = 'hourly-section';
         shareModal.classList.remove('hidden');
     });
+
+    // Open share modal for radar section
+    if (shareRadarBtn) {
+        shareRadarBtn.addEventListener('click', () => {
+            currentShareSection = 'radar-section';
+            shareModal.classList.remove('hidden');
+        });
+    }
 
     // Close share modal
     closeShareBtn.addEventListener('click', () => {
@@ -777,6 +905,14 @@ function initializeModal() {
 
             updateLocationDisplay();
             modal.classList.add('hidden');
+
+            // Reset radar map for new location
+            if (radarMap) {
+                radarMap.remove();
+                radarMap = null;
+                radarLayer = null;
+            }
+
             loadWeather();
 
         } catch (error) {
@@ -816,6 +952,14 @@ function initializeModal() {
 
             updateLocationDisplay();
             modal.classList.add('hidden');
+
+            // Reset radar map for new location
+            if (radarMap) {
+                radarMap.remove();
+                radarMap = null;
+                radarLayer = null;
+            }
+
             loadWeather();
 
         } catch (error) {

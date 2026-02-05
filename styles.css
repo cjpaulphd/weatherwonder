@@ -179,7 +179,7 @@ body {
 /* Chart Container */
 .chart-container {
     position: relative;
-    height: 150px;
+    height: 225px;
     margin: 0;
 }
 
@@ -258,6 +258,12 @@ body {
 .hourly-card .precip-amount {
     font-size: 11px;
     color: var(--precip-green);
+}
+
+.hourly-card .windchill {
+    font-size: 10px;
+    color: var(--accent-blue);
+    margin-top: 2px;
 }
 
 /* Modal */
@@ -482,4 +488,69 @@ body {
         opacity: 1;
         transform: translateX(-50%) translateY(0);
     }
+}
+
+/* Radar Section */
+.radar-container {
+    position: relative;
+    background-color: var(--bg-secondary);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.radar-map {
+    width: 100%;
+    height: 300px;
+    background-color: #1a1a2e;
+}
+
+.radar-legend {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px;
+    background-color: rgba(0, 0, 0, 0.5);
+    position: absolute;
+    bottom: 30px;
+    left: 0;
+    right: 0;
+}
+
+.radar-legend-item {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: #000;
+    font-weight: 600;
+}
+
+.radar-time {
+    text-align: center;
+    padding: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background-color: var(--bg-primary);
+}
+
+.radar-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    color: var(--text-secondary);
+}
+
+/* Leaflet overrides for dark theme */
+.leaflet-container {
+    background-color: #1a1a2e;
+}
+
+.leaflet-control-attribution {
+    background-color: rgba(26, 26, 26, 0.8) !important;
+    color: var(--text-secondary) !important;
+    font-size: 9px !important;
+}
+
+.leaflet-control-attribution a {
+    color: var(--accent-blue) !important;
 }

@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weather Precipitation Forecast</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
     <div class="app-container" id="app-container">
@@ -76,6 +78,31 @@
 
             <div id="hourly-forecast" class="hourly-forecast-container">
                 <!-- Hourly forecast cards will be inserted here -->
+            </div>
+        </section>
+
+        <!-- Radar Section -->
+        <section class="forecast-section" id="radar-section">
+            <div class="section-header">
+                <h2>DOPPLER RADAR (100 mi)</h2>
+                <button class="share-btn" id="share-radar-btn" aria-label="Share">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                        <polyline points="16 6 12 2 8 6"></polyline>
+                        <line x1="12" y1="2" x2="12" y2="15"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div id="radar-container" class="radar-container">
+                <div id="radar-map" class="radar-map"></div>
+                <div class="radar-legend">
+                    <span class="radar-legend-item" style="background: #00ff00;">Light</span>
+                    <span class="radar-legend-item" style="background: #ffff00;">Moderate</span>
+                    <span class="radar-legend-item" style="background: #ff8800;">Heavy</span>
+                    <span class="radar-legend-item" style="background: #ff0000;">Intense</span>
+                </div>
+                <div id="radar-time" class="radar-time"></div>
             </div>
         </section>
 
