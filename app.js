@@ -1053,7 +1053,12 @@ async function checkWeatherAlerts(data) {
                 const severity = props.severity || 'Unknown';
                 const event = props.event || 'Weather Alert';
                 const headline = props.headline || event;
-                const alertUrl = props.web || alert.id || nwsUrl;
+
+                // Build URL to the specific alert text on alerts.weather.gov
+                // props.id is a URN like "urn:oid:2.49.0.1.840.0.xxxxx"
+                const alertId = props.id || '';
+                const specificUrl = alertId ? `https://alerts.weather.gov/search?id=${encodeURIComponent(alertId)}` : nwsUrl;
+                const alertUrl = specificUrl;
 
                 let icon = '⚠️';
                 let bgColor = '#ff9800';
