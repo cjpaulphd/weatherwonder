@@ -335,9 +335,12 @@ function renderDailyForecast(data) {
     const today = getMidnightToday();
 
     // Find the index for today
+    // Note: daily.time values are "YYYY-MM-DD" strings. new Date("YYYY-MM-DD") parses
+    // as UTC midnight, which shifts to the previous day in US timezones. Appending
+    // "T00:00:00" forces local time parsing and fixes the off-by-one offset.
     let startIdx = 0;
     for (let i = 0; i < daily.time.length; i++) {
-        const dayDate = new Date(daily.time[i]);
+        const dayDate = new Date(daily.time[i] + 'T00:00:00');
         dayDate.setHours(0, 0, 0, 0);
         if (dayDate.getTime() >= today.getTime()) {
             startIdx = i;
@@ -347,7 +350,7 @@ function renderDailyForecast(data) {
 
     // Render 7 days starting from today
     for (let i = startIdx; i < daily.time.length && i < startIdx + 7; i++) {
-        const date = new Date(daily.time[i]);
+        const date = new Date(daily.time[i] + 'T00:00:00');
         const card = document.createElement('div');
         card.className = 'daily-card';
 
@@ -821,11 +824,156 @@ async function initializeRadar() {
     }
 }
 
-// Update location display with optional current temperature
-function updateLocationDisplay(currentTemp = null) {
+// Format time for astronomical display
+function formatAstroTime(date) {
+    if (!date || isNaN(date.getTime())) return '—';
+    return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+}
+
+// Get moon phase name and emoji
+function getMoonPhaseInfo(phase) {
+    // phase is 0-1: 0=new, 0.25=first quarter, 0.5=full, 0.75=last quarter
+    if (phase < 0.0625) return { name: 'New Moon', emoji: '🌑' };
+    if (phase < 0.1875) return { name: 'Waxing Crescent', emoji: '🌒' };
+    if (phase < 0.3125) return { name: 'First Quarter', emoji: '🌓' };
+    if (phase < 0.4375) return { name: 'Waxing Gibbous', emoji: '🌔' };
+    if (phase < 0.5625) return { name: 'Full Moon', emoji: '🌕' };
+    if (phase < 0.6875) return { name: 'Waning Gibbous', emoji: '🌖' };
+    if (phase < 0.8125) return { name: 'Last Quarter', emoji: '🌗' };
+    if (phase < 0.9375) return { name: 'Waning Crescent', emoji: '🌘' };
+    return { name: 'New Moon', emoji: '🌑' };
+}
+
+// Render astronomical data (sun, moon, twilight)
+function renderAstroData() {
+    const container = document.getElementById('astro-data');
+    if (!container) return;
+
+    const now = new Date();
+    const lat = currentLocation.latitude;
+    const lng = currentLocation.longitude;
+
+    // Get sun times
+    const sunTimes = SunCalc.getTimes(now, lat, lng);
+
+    // Get moon times
+    const moonTimes = SunCalc.getMoonTimes(now, lat, lng);
+
+    // Get moon illumination
+    const moonIllum = SunCalc.getMoonIllumination(now);
+    const moonPhase = getMoonPhaseInfo(moonIllum.phase);
+    const illuminationPct = Math.round(moonIllum.fraction * 100);
+
+    // Calculate day length
+    let dayLengthStr = '—';
+    let dayChangeStr = '';
+    if (sunTimes.sunrise && sunTimes.sunset && !isNaN(sunTimes.sunrise.getTime()) && !isNaN(sunTimes.sunset.getTime())) {
+        const dayLengthMs = sunTimes.sunset - sunTimes.sunrise;
+        const dayHours = Math.floor(dayLengthMs / 3600000);
+        const dayMins = Math.round((dayLengthMs % 3600000) / 60000);
+        dayLengthStr = `${dayHours}h ${dayMins}m`;
+
+        // Compare with yesterday
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdaySun = SunCalc.getTimes(yesterday, lat, lng);
+        if (yesterdaySun.sunrise && yesterdaySun.sunset && !isNaN(yesterdaySun.sunrise.getTime()) && !isNaN(yesterdaySun.sunset.getTime())) {
+            const yesterdayLengthMs = yesterdaySun.sunset - yesterdaySun.sunrise;
+            const diffMs = dayLengthMs - yesterdayLengthMs;
+            const diffMins = Math.round(Math.abs(diffMs) / 60000);
+            if (diffMins > 0) {
+                const diffSecs = Math.round(Math.abs(diffMs) / 1000) % 60;
+                dayChangeStr = `${diffMs >= 0 ? '+' : '-'}${diffMins}m ${diffSecs}s vs yesterday`;
+            }
+        }
+    }
+
+    container.innerHTML = `
+        <div class="astro-group">
+            <h4 class="astro-group-title">Twilight &amp; Sun</h4>
+            <div class="astro-grid">
+                <div class="astro-row">
+                    <span class="astro-label">Astronomical Dawn</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.nightEnd)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Nautical Dawn</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.nauticalDawn)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Civil Dawn</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.dawn)}</span>
+                </div>
+                <div class="astro-row highlight">
+                    <span class="astro-label">☀️ Sunrise</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.sunrise)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Solar Noon</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.solarNoon)}</span>
+                </div>
+                <div class="astro-row highlight">
+                    <span class="astro-label">🌅 Sunset</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.sunset)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Civil Dusk</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.dusk)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Nautical Dusk</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.nauticalDusk)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Astronomical Dusk</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.night)}</span>
+                </div>
+                <div class="astro-row highlight">
+                    <span class="astro-label">Day Length</span>
+                    <span class="astro-value">${dayLengthStr}</span>
+                </div>
+                ${dayChangeStr ? `<div class="astro-row">
+                    <span class="astro-label"></span>
+                    <span class="astro-value astro-change">${dayChangeStr}</span>
+                </div>` : ''}
+            </div>
+        </div>
+        <div class="astro-group">
+            <h4 class="astro-group-title">Moon</h4>
+            <div class="astro-grid">
+                <div class="astro-row">
+                    <span class="astro-label">Moonrise</span>
+                    <span class="astro-value">${moonTimes.rise ? formatAstroTime(moonTimes.rise) : 'No rise today'}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Moonset</span>
+                    <span class="astro-value">${moonTimes.set ? formatAstroTime(moonTimes.set) : 'No set today'}</span>
+                </div>
+                <div class="astro-row highlight">
+                    <span class="astro-label">${moonPhase.emoji} Phase</span>
+                    <span class="astro-value">${moonPhase.name}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Illumination</span>
+                    <span class="astro-value">${illuminationPct}%</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Update location display with optional current temperature and feels-like
+function updateLocationDisplay(currentTemp = null, feelsLike = null) {
     const locationName = document.getElementById('location-name');
     if (currentTemp !== null) {
-        locationName.textContent = `${currentLocation.name}: ${currentTemp}°F`;
+        let display = `${currentLocation.name}: ${currentTemp}°F`;
+        if (feelsLike !== null && Math.abs(currentTemp - feelsLike) > 2) {
+            display += ` (feels ${feelsLike}°)`;
+        }
+        locationName.textContent = display;
     } else {
         locationName.textContent = currentLocation.name;
     }
@@ -841,23 +989,33 @@ async function loadWeather() {
 
         weatherData = await fetchWeatherData(currentLocation.latitude, currentLocation.longitude);
 
-        // Get current temperature from hourly data
+        // Get current temperature and feels-like from hourly data
         const now = new Date();
         let currentTemp = null;
+        let feelsLike = null;
         for (let i = 0; i < weatherData.hourly.time.length; i++) {
             const hourDate = new Date(weatherData.hourly.time[i]);
             if (hourDate >= now) {
-                currentTemp = formatTempValue(weatherData.hourly.temperature_2m[i > 0 ? i - 1 : 0]);
+                const idx = i > 0 ? i - 1 : 0;
+                currentTemp = formatTempValue(weatherData.hourly.temperature_2m[idx]);
+                feelsLike = formatTempValue(weatherData.hourly.apparent_temperature[idx]);
                 break;
             }
         }
-        updateLocationDisplay(currentTemp);
+        updateLocationDisplay(currentTemp, feelsLike);
 
         renderDailyForecast(weatherData);
         renderHourlyForecast(weatherData);
         renderChart(weatherData);
         checkWeatherAlerts(weatherData);
         initializeRadar();
+        renderAstroData();
+
+        // Update last-updated timestamp
+        const lastUpdated = document.getElementById('last-updated');
+        if (lastUpdated) {
+            lastUpdated.textContent = `Updated ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+        }
 
     } catch (error) {
         console.error('Error loading weather:', error);
@@ -866,36 +1024,107 @@ async function loadWeather() {
     }
 }
 
-// Check for weather alerts
-function checkWeatherAlerts(data) {
+// Check for weather alerts via NWS API, with local fallback
+async function checkWeatherAlerts(data) {
     const alertBanner = document.getElementById('alert-banner');
     const alertText = document.getElementById('alert-text');
+    const alertContainer = document.getElementById('alert-container');
 
-    const hourly = data.hourly;
+    // NWS forecast link for this location
+    const nwsUrl = `https://forecast.weather.gov/MapClick.php?lat=${currentLocation.latitude}&lon=${currentLocation.longitude}`;
 
-    let hasWinterWeather = false;
-    let hasThunderstorm = false;
+    try {
+        // Fetch real NWS active alerts for this point
+        const response = await fetch(
+            `https://api.weather.gov/alerts/active?point=${currentLocation.latitude},${currentLocation.longitude}`,
+            { headers: { 'User-Agent': 'WeatherWonder (cjpaulphd)' } }
+        );
 
-    for (let i = 0; i < Math.min(24, hourly.weather_code.length); i++) {
-        const code = hourly.weather_code[i];
-        if ([71, 73, 75, 77, 85, 86, 66, 67].includes(code)) {
-            hasWinterWeather = true;
+        if (!response.ok) throw new Error('NWS API error');
+
+        const alertData = await response.json();
+        const alerts = alertData.features || [];
+
+        if (alerts.length > 0) {
+            // Build alert display - show all active alerts
+            alertContainer.innerHTML = '';
+            alerts.forEach(alert => {
+                const props = alert.properties;
+                const severity = props.severity || 'Unknown';
+                const event = props.event || 'Weather Alert';
+                const headline = props.headline || event;
+                const alertUrl = props.web || nwsUrl;
+
+                let icon = '⚠️';
+                let bgColor = '#ff9800';
+                if (severity === 'Extreme') { icon = '🚨'; bgColor = '#d32f2f'; }
+                else if (severity === 'Severe') { icon = '⛈️'; bgColor = '#f44336'; }
+                else if (event.toLowerCase().includes('winter') || event.toLowerCase().includes('snow') || event.toLowerCase().includes('ice') || event.toLowerCase().includes('freeze') || event.toLowerCase().includes('cold') || event.toLowerCase().includes('blizzard')) {
+                    icon = '❄️';
+                }
+                else if (event.toLowerCase().includes('thunder') || event.toLowerCase().includes('tornado')) {
+                    icon = '⛈️';
+                }
+                else if (event.toLowerCase().includes('flood')) { icon = '🌊'; }
+                else if (event.toLowerCase().includes('wind')) { icon = '💨'; }
+                else if (event.toLowerCase().includes('heat')) { icon = '🌡️'; bgColor = '#ff5722'; }
+                else if (event.toLowerCase().includes('fog')) { icon = '🌫️'; }
+                else if (event.toLowerCase().includes('fire')) { icon = '🔥'; bgColor = '#ff5722'; }
+
+                const alertEl = document.createElement('a');
+                alertEl.className = 'alert-banner';
+                alertEl.href = alertUrl;
+                alertEl.target = '_blank';
+                alertEl.rel = 'noopener noreferrer';
+                alertEl.style.backgroundColor = bgColor;
+                alertEl.innerHTML = `
+                    <span class="alert-icon">${icon}</span>
+                    <span class="alert-text-content">${headline}</span>
+                    <span class="alert-arrow">›</span>
+                `;
+                alertContainer.appendChild(alertEl);
+            });
+
+            alertContainer.classList.remove('hidden');
+            alertBanner.classList.add('hidden');
+        } else {
+            alertContainer.innerHTML = '';
+            alertContainer.classList.add('hidden');
+            alertBanner.classList.add('hidden');
         }
-        if ([95, 96, 99].includes(code)) {
-            hasThunderstorm = true;
-        }
-    }
+    } catch (error) {
+        // Fallback to local weather-code detection if NWS API fails
+        console.warn('NWS Alerts API unavailable, using local detection:', error.message);
+        alertContainer.innerHTML = '';
+        alertContainer.classList.add('hidden');
 
-    if (hasWinterWeather) {
-        alertBanner.classList.remove('hidden');
-        alertText.textContent = 'Winter Weather Advisory';
-        document.querySelector('.alert-icon').textContent = '❄️';
-    } else if (hasThunderstorm) {
-        alertBanner.classList.remove('hidden');
-        alertText.textContent = 'Thunderstorm Warning';
-        document.querySelector('.alert-icon').textContent = '⛈️';
-    } else {
-        alertBanner.classList.add('hidden');
+        const hourly = data.hourly;
+        let hasWinterWeather = false;
+        let hasThunderstorm = false;
+
+        for (let i = 0; i < Math.min(24, hourly.weather_code.length); i++) {
+            const code = hourly.weather_code[i];
+            if ([71, 73, 75, 77, 85, 86, 66, 67].includes(code)) {
+                hasWinterWeather = true;
+            }
+            if ([95, 96, 99].includes(code)) {
+                hasThunderstorm = true;
+            }
+        }
+
+        alertBanner.href = nwsUrl;
+
+        if (hasWinterWeather) {
+            alertBanner.classList.remove('hidden');
+            alertText.textContent = 'Winter Weather Advisory';
+            document.querySelector('.alert-icon').textContent = '❄️';
+        } else if (hasThunderstorm) {
+            alertBanner.classList.remove('hidden');
+            alertText.textContent = 'Thunderstorm Warning';
+            document.querySelector('.alert-icon').textContent = '⛈️';
+        } else {
+            alertBanner.classList.add('hidden');
+        }
     }
 }
 
@@ -1281,6 +1510,18 @@ function initializeMenu() {
 
     // Initialize favorite button state
     updateFavoriteButton();
+
+    // Refresh button
+    const refreshBtn = document.getElementById('refresh-btn');
+    refreshBtn.addEventListener('click', () => {
+        // Reset radar map so it fully re-initializes
+        if (radarMap) {
+            radarMap.remove();
+            radarMap = null;
+            radarLayer = null;
+        }
+        loadWeather();
+    });
 }
 
 // Initialize app

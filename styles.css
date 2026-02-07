@@ -46,7 +46,7 @@ body {
     z-index: 100;
 }
 
-.menu-btn, .settings-btn {
+.menu-btn, .refresh-btn {
     background: none;
     border: none;
     color: var(--accent-blue);
@@ -207,7 +207,30 @@ body {
     background-color: var(--bg-primary);
 }
 
-/* Alert Banner */
+/* Last Updated */
+.last-updated {
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-secondary);
+    padding: 2px 16px 4px;
+}
+
+/* Alert Container & Banner */
+.alert-container {
+    display: flex;
+    flex-direction: column;
+}
+
+.alert-container.hidden {
+    display: none;
+}
+
+.alert-text-content {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+}
+
 .alert-banner {
     display: flex;
     align-items: center;
@@ -216,6 +239,15 @@ body {
     background-color: #ff9800;
     color: #000;
     cursor: pointer;
+    text-decoration: none;
+}
+
+.alert-container .alert-banner {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.alert-container .alert-banner:last-child {
+    border-bottom: none;
 }
 
 .alert-banner.hidden {
@@ -803,4 +835,135 @@ body {
 
 .leaflet-control-attribution a {
     color: var(--accent-blue) !important;
+}
+
+/* RadarScope Link */
+.radarscope-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    margin-top: 8px;
+    background-color: var(--bg-card);
+    border-radius: 8px;
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.radarscope-link:hover {
+    background-color: var(--bg-secondary);
+}
+
+.radarscope-icon {
+    font-size: 16px;
+}
+
+/* Astronomical Section */
+.astro-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.astro-group {
+    background-color: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.astro-group-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.astro-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.astro-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.astro-row:last-child {
+    border-bottom: none;
+}
+
+.astro-row.highlight {
+    background-color: rgba(0, 188, 212, 0.08);
+    border-radius: 4px;
+}
+
+.astro-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.astro-row.highlight .astro-label {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.astro-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.astro-value.astro-change {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 400;
+    font-style: italic;
+}
+
+/* Footer */
+.app-footer {
+    text-align: center;
+    padding: 20px 16px;
+    border-top: 1px solid var(--bg-secondary);
+}
+
+.footer-tagline {
+    font-size: 12px;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.footer-attribution {
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.footer-attribution a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.footer-attribution a:hover {
+    text-decoration: underline;
+}
+
+@media (min-width: 481px) {
+    .astro-container {
+        flex-direction: row;
+    }
+
+    .astro-group {
+        flex: 1;
+    }
 }
