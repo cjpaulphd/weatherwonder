@@ -1075,17 +1075,20 @@ async function checkWeatherAlerts(data) {
                 else if (event.toLowerCase().includes('fog')) { icon = '🌫️'; }
                 else if (event.toLowerCase().includes('fire')) { icon = '🔥'; bgColor = '#ff5722'; }
 
-                const alertEl = document.createElement('a');
+                const alertEl = document.createElement('div');
                 alertEl.className = 'alert-banner';
-                alertEl.href = alertUrl;
-                alertEl.target = '_blank';
-                alertEl.rel = 'noopener noreferrer';
                 alertEl.style.backgroundColor = bgColor;
                 alertEl.innerHTML = `
                     <span class="alert-icon">${icon}</span>
                     <span class="alert-text-content">${headline}</span>
                     <span class="alert-arrow">›</span>
                 `;
+
+                // Open alert detail modal on click
+                alertEl.addEventListener('click', () => {
+                    showAlertDetail(props, nwsUrl);
+                });
+
                 alertContainer.appendChild(alertEl);
             });
 
@@ -1116,7 +1119,7 @@ async function checkWeatherAlerts(data) {
             }
         }
 
-        alertBanner.href = nwsUrl;
+        alertBanner.onclick = () => window.open(nwsUrl, '_blank');
 
         if (hasWinterWeather) {
             alertBanner.classList.remove('hidden');
@@ -1130,6 +1133,59 @@ async function checkWeatherAlerts(data) {
             alertBanner.classList.add('hidden');
         }
     }
+}
+
+// Show alert detail modal with formatted NWS alert text
+function showAlertDetail(props, nwsUrl) {
+    const modal = document.getElementById('alert-detail-modal');
+    const header = document.getElementById('alert-detail-header');
+    const body = document.getElementById('alert-detail-body');
+    const nwsLink = document.getElementById('alert-detail-nws-link');
+
+    const event = props.event || 'Weather Alert';
+    const severity = props.severity || '';
+    const headline = props.headline || event;
+    const description = (props.description || '').replace(/\n/g, '<br>');
+    const instruction = (props.instruction || '').replace(/\n/g, '<br>');
+    const areaDesc = props.areaDesc || '';
+    const onset = props.onset ? new Date(props.onset).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    const ends = props.ends ? new Date(props.ends).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    const expires = props.expires ? new Date(props.expires).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    const sender = props.senderName || '';
+
+    header.innerHTML = `<h3>${event}</h3>`;
+    if (severity) {
+        header.innerHTML += `<span class="alert-detail-severity alert-severity-${severity.toLowerCase()}">${severity}</span>`;
+    }
+
+    let bodyHtml = '';
+    if (headline) bodyHtml += `<p class="alert-detail-headline">${headline}</p>`;
+    if (onset || ends) {
+        bodyHtml += `<div class="alert-detail-timing">`;
+        if (onset) bodyHtml += `<div><strong>From:</strong> ${onset}</div>`;
+        if (ends) bodyHtml += `<div><strong>Until:</strong> ${ends}</div>`;
+        else if (expires) bodyHtml += `<div><strong>Expires:</strong> ${expires}</div>`;
+        bodyHtml += `</div>`;
+    }
+    if (areaDesc) bodyHtml += `<div class="alert-detail-area"><strong>Areas:</strong> ${areaDesc}</div>`;
+    if (description) bodyHtml += `<div class="alert-detail-desc">${description}</div>`;
+    if (instruction) bodyHtml += `<div class="alert-detail-instruction"><strong>Instructions:</strong><br>${instruction}</div>`;
+    if (sender) bodyHtml += `<div class="alert-detail-sender">Issued by ${sender}</div>`;
+
+    body.innerHTML = bodyHtml;
+    nwsLink.href = nwsUrl;
+    modal.classList.remove('hidden');
+}
+
+// Initialize alert detail modal close handler
+function initializeAlertDetailModal() {
+    const modal = document.getElementById('alert-detail-modal');
+    const closeBtn = document.getElementById('close-alert-detail');
+
+    closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.add('hidden');
+    });
 }
 
 // Get user's current location
@@ -1596,6 +1652,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeModal();
     initializeShareModal();
     initializeMenu();
+    initializeAlertDetailModal();
     initializeInstallButton();
     loadWeather();
 
