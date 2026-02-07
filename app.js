@@ -1053,7 +1053,11 @@ async function checkWeatherAlerts(data) {
                 const severity = props.severity || 'Unknown';
                 const event = props.event || 'Weather Alert';
                 const headline = props.headline || event;
-                const alertUrl = props.web || alert.id || nwsUrl;
+
+                // Build URL to the specific alert
+                // props['@id'] is the direct API URL for this alert (e.g. https://api.weather.gov/alerts/urn:oid:...)
+                // alert.id at the GeoJSON feature level is the same URL
+                const alertUrl = props['@id'] || alert.id || nwsUrl;
 
                 let icon = '⚠️';
                 let bgColor = '#ff9800';
