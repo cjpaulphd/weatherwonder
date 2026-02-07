@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.min.js"></script>
 </head>
 <body>
     <div class="app-container" id="app-container">
@@ -26,10 +27,11 @@
                 <span id="location-name">Loading...</span>
                 <button id="favorite-btn" class="favorite-btn" aria-label="Add to favorites">☆</button>
             </div>
-            <button class="settings-btn" aria-label="Settings">
+            <button class="refresh-btn" id="refresh-btn" aria-label="Refresh weather data">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                 </svg>
             </button>
         </header>
@@ -56,11 +58,11 @@
         </nav>
 
         <!-- Weather Alert Banner -->
-        <div id="alert-banner" class="alert-banner hidden">
+        <a id="alert-banner" class="alert-banner hidden" href="#" target="_blank" rel="noopener noreferrer">
             <span class="alert-icon">❄️</span>
             <span id="alert-text"></span>
             <span class="alert-arrow">›</span>
-        </div>
+        </a>
 
         <!-- Daily Forecast Section -->
         <section class="forecast-section" id="daily-section">
@@ -127,7 +129,26 @@
                 </div>
                 <div id="radar-time" class="radar-time"></div>
             </div>
+            <a href="radarscope://" class="radarscope-link" id="radarscope-link">
+                <span class="radarscope-icon">📡</span>
+                <span>Open in RadarScope</span>
+            </a>
         </section>
+
+        <!-- Astronomical Section -->
+        <section class="forecast-section" id="astro-section">
+            <div class="section-header">
+                <h2>SUN &amp; MOON</h2>
+            </div>
+            <div id="astro-data" class="astro-container">
+                <div class="loading">Loading astronomical data</div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <span class="footer-tagline">WeatherWonder by cjpaulphd</span>
+        </footer>
 
         <!-- Location Search Modal -->
         <div id="location-modal" class="modal hidden">

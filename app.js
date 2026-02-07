@@ -335,9 +335,12 @@ function renderDailyForecast(data) {
     const today = getMidnightToday();
 
     // Find the index for today
+    // Note: daily.time values are "YYYY-MM-DD" strings. new Date("YYYY-MM-DD") parses
+    // as UTC midnight, which shifts to the previous day in US timezones. Appending
+    // "T00:00:00" forces local time parsing and fixes the off-by-one offset.
     let startIdx = 0;
     for (let i = 0; i < daily.time.length; i++) {
-        const dayDate = new Date(daily.time[i]);
+        const dayDate = new Date(daily.time[i] + 'T00:00:00');
         dayDate.setHours(0, 0, 0, 0);
         if (dayDate.getTime() >= today.getTime()) {
             startIdx = i;
@@ -347,7 +350,7 @@ function renderDailyForecast(data) {
 
     // Render 7 days starting from today
     for (let i = startIdx; i < daily.time.length && i < startIdx + 7; i++) {
-        const date = new Date(daily.time[i]);
+        const date = new Date(daily.time[i] + 'T00:00:00');
         const card = document.createElement('div');
         card.className = 'daily-card';
 
@@ -821,6 +824,115 @@ async function initializeRadar() {
     }
 }
 
+// Format time for astronomical display
+function formatAstroTime(date) {
+    if (!date || isNaN(date.getTime())) return '—';
+    return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+}
+
+// Get moon phase name and emoji
+function getMoonPhaseInfo(phase) {
+    // phase is 0-1: 0=new, 0.25=first quarter, 0.5=full, 0.75=last quarter
+    if (phase < 0.0625) return { name: 'New Moon', emoji: '🌑' };
+    if (phase < 0.1875) return { name: 'Waxing Crescent', emoji: '🌒' };
+    if (phase < 0.3125) return { name: 'First Quarter', emoji: '🌓' };
+    if (phase < 0.4375) return { name: 'Waxing Gibbous', emoji: '🌔' };
+    if (phase < 0.5625) return { name: 'Full Moon', emoji: '🌕' };
+    if (phase < 0.6875) return { name: 'Waning Gibbous', emoji: '🌖' };
+    if (phase < 0.8125) return { name: 'Last Quarter', emoji: '🌗' };
+    if (phase < 0.9375) return { name: 'Waning Crescent', emoji: '🌘' };
+    return { name: 'New Moon', emoji: '🌑' };
+}
+
+// Render astronomical data (sun, moon, twilight)
+function renderAstroData() {
+    const container = document.getElementById('astro-data');
+    if (!container) return;
+
+    const now = new Date();
+    const lat = currentLocation.latitude;
+    const lng = currentLocation.longitude;
+
+    // Get sun times
+    const sunTimes = SunCalc.getTimes(now, lat, lng);
+
+    // Get moon times
+    const moonTimes = SunCalc.getMoonTimes(now, lat, lng);
+
+    // Get moon illumination
+    const moonIllum = SunCalc.getMoonIllumination(now);
+    const moonPhase = getMoonPhaseInfo(moonIllum.phase);
+    const illuminationPct = Math.round(moonIllum.fraction * 100);
+
+    container.innerHTML = `
+        <div class="astro-group">
+            <h4 class="astro-group-title">Twilight &amp; Sun</h4>
+            <div class="astro-grid">
+                <div class="astro-row">
+                    <span class="astro-label">Astronomical Dawn</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.nightEnd)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Nautical Dawn</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.nauticalDawn)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Civil Dawn</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.dawn)}</span>
+                </div>
+                <div class="astro-row highlight">
+                    <span class="astro-label">☀️ Sunrise</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.sunrise)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Solar Noon</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.solarNoon)}</span>
+                </div>
+                <div class="astro-row highlight">
+                    <span class="astro-label">🌅 Sunset</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.sunset)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Civil Dusk</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.dusk)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Nautical Dusk</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.nauticalDusk)}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Astronomical Dusk</span>
+                    <span class="astro-value">${formatAstroTime(sunTimes.night)}</span>
+                </div>
+            </div>
+        </div>
+        <div class="astro-group">
+            <h4 class="astro-group-title">Moon</h4>
+            <div class="astro-grid">
+                <div class="astro-row">
+                    <span class="astro-label">Moonrise</span>
+                    <span class="astro-value">${moonTimes.rise ? formatAstroTime(moonTimes.rise) : 'No rise today'}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Moonset</span>
+                    <span class="astro-value">${moonTimes.set ? formatAstroTime(moonTimes.set) : 'No set today'}</span>
+                </div>
+                <div class="astro-row highlight">
+                    <span class="astro-label">${moonPhase.emoji} Phase</span>
+                    <span class="astro-value">${moonPhase.name}</span>
+                </div>
+                <div class="astro-row">
+                    <span class="astro-label">Illumination</span>
+                    <span class="astro-value">${illuminationPct}%</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 // Update location display with optional current temperature
 function updateLocationDisplay(currentTemp = null) {
     const locationName = document.getElementById('location-name');
@@ -858,6 +970,7 @@ async function loadWeather() {
         renderChart(weatherData);
         checkWeatherAlerts(weatherData);
         initializeRadar();
+        renderAstroData();
 
     } catch (error) {
         console.error('Error loading weather:', error);
@@ -885,6 +998,10 @@ function checkWeatherAlerts(data) {
             hasThunderstorm = true;
         }
     }
+
+    // Link to NWS alerts for the current location
+    const nwsUrl = `https://forecast.weather.gov/MapClick.php?lat=${currentLocation.latitude}&lon=${currentLocation.longitude}`;
+    alertBanner.href = nwsUrl;
 
     if (hasWinterWeather) {
         alertBanner.classList.remove('hidden');
@@ -1281,6 +1398,18 @@ function initializeMenu() {
 
     // Initialize favorite button state
     updateFavoriteButton();
+
+    // Refresh button
+    const refreshBtn = document.getElementById('refresh-btn');
+    refreshBtn.addEventListener('click', () => {
+        // Reset radar map so it fully re-initializes
+        if (radarMap) {
+            radarMap.remove();
+            radarMap = null;
+            radarLayer = null;
+        }
+        loadWeather();
+    });
 }
 
 // Initialize app
