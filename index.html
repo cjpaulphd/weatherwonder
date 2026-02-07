@@ -69,11 +69,21 @@
         <!-- Weather Alert Banners (NWS API) -->
         <div id="alert-container" class="alert-container hidden"></div>
         <!-- Fallback Alert Banner (local detection) -->
-        <a id="alert-banner" class="alert-banner hidden" href="#" target="_blank" rel="noopener noreferrer">
+        <div id="alert-banner" class="alert-banner hidden">
             <span class="alert-icon">❄️</span>
             <span id="alert-text"></span>
             <span class="alert-arrow">›</span>
-        </a>
+        </div>
+
+        <!-- Alert Detail Modal -->
+        <div id="alert-detail-modal" class="modal hidden">
+            <div class="modal-content alert-detail-content">
+                <div id="alert-detail-header" class="alert-detail-header"></div>
+                <div id="alert-detail-body" class="alert-detail-body"></div>
+                <a id="alert-detail-nws-link" class="alert-detail-nws-link" href="#" target="_blank" rel="noopener noreferrer">View on NWS</a>
+                <button id="close-alert-detail" class="close-btn">&times;</button>
+            </div>
+        </div>
 
         <!-- Daily Forecast Section -->
         <section class="forecast-section" id="daily-section">
