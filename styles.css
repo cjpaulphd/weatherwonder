@@ -937,6 +937,31 @@ body {
     border-top: 1px solid var(--bg-secondary);
 }
 
+.install-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 20px;
+    margin-bottom: 14px;
+    background-color: var(--accent-blue);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.install-btn:hover {
+    background-color: #26c6da;
+}
+
+.install-btn.hidden {
+    display: none;
+}
+
 .footer-tagline {
     font-size: 12px;
     color: var(--text-secondary);

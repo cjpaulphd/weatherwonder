@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WeatherWonder - Precipitation Forecast</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1a1a1a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="WeatherWonder">
+    <link rel="apple-touch-icon" href="icon.svg">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -152,6 +158,12 @@
 
         <!-- Footer -->
         <footer class="app-footer">
+            <button id="install-btn" class="install-btn hidden">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12l7 7 7-7"></path>
+                </svg>
+                <span id="install-btn-text">Add to Home Screen</span>
+            </button>
             <div class="footer-tagline">WeatherWonder by cjpaulphd</div>
             <div class="footer-attribution">
                 Data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>

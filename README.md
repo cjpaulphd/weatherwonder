@@ -28,6 +28,7 @@ A mobile-first weather dashboard that provides comprehensive forecasts, live rad
 - **Feels-Like Temperature** — Displayed in the header when it differs significantly from actual temp
 - **Last Updated Timestamp** — Shows when data was last fetched
 - **Sharing** — Screenshot, link copy, and native device sharing
+- **Add to Home Screen** — Installable as a PWA on iOS, Android, and desktop browsers
 - **Dark Theme** — Mobile-optimized dark UI
 - **Responsive Design** — Scales from mobile to desktop (max 960px)
 
@@ -78,6 +79,9 @@ weatherwonder/
 ├── index.html      # HTML structure and CDN script tags
 ├── app.js          # All application logic, API calls, and rendering
 ├── styles.css      # Dark theme styling and responsive layout
+├── manifest.json   # PWA web app manifest
+├── sw.js           # Service worker for offline shell caching
+├── icon.svg        # App icon (manifest + Apple touch icon)
 ├── CLAUDE.md       # AI assistant project context
 └── README.md       # This file
 ```

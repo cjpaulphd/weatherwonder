@@ -1524,12 +1524,75 @@ function initializeMenu() {
     });
 }
 
+// PWA Install prompt handling
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    showInstallButton();
+});
+
+function showInstallButton() {
+    const btn = document.getElementById('install-btn');
+    if (btn) btn.classList.remove('hidden');
+}
+
+function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+}
+
+function isInStandaloneMode() {
+    return window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+}
+
+function initializeInstallButton() {
+    const btn = document.getElementById('install-btn');
+    const btnText = document.getElementById('install-btn-text');
+    if (!btn) return;
+
+    // Don't show if already installed as PWA
+    if (isInStandaloneMode()) return;
+
+    // On iOS, show the button with manual instructions
+    if (isIOS()) {
+        btn.classList.remove('hidden');
+        btn.addEventListener('click', () => {
+            showToast('Tap the Share button (box with arrow) then "Add to Home Screen"');
+        });
+        return;
+    }
+
+    // On Chrome/Edge/Android, use the deferred prompt if available
+    btn.addEventListener('click', async () => {
+        if (deferredInstallPrompt) {
+            deferredInstallPrompt.prompt();
+            const result = await deferredInstallPrompt.userChoice;
+            if (result.outcome === 'accepted') {
+                btn.classList.add('hidden');
+                showToast('WeatherWonder added to home screen!', true);
+            }
+            deferredInstallPrompt = null;
+        } else {
+            // Fallback instructions for browsers without install prompt
+            showToast('Use your browser menu to "Add to Home Screen" or "Install App"');
+        }
+    });
+}
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
     updateLocationDisplay();
     initializeModal();
     initializeShareModal();
     initializeMenu();
+    initializeInstallButton();
     loadWeather();
 
     // Initialize scroll handler after weather loads
