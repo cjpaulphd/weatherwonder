@@ -57,10 +57,14 @@ body {
 .location {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     font-size: 18px;
     font-weight: 500;
     cursor: pointer;
+    flex: 1;
+    min-width: 0;
+    text-align: center;
 }
 
 .location-icon {
