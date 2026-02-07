@@ -379,7 +379,7 @@ function renderDailyForecast(data) {
                 <div class="pm-icon" title="Evening">${pmIcon}</div>
             </div>
             <div class="temp-range">${lowTemp} | ${highTemp} °F</div>
-            ${precipProb > 0 ? `
+            ${precipProb >= 10 ? `
                 <div class="precip-info ${precipClass}">
                     ${hasSnow ? '❄' : '💧'} ${precipProb}%
                 </div>
@@ -453,7 +453,7 @@ function renderHourlyForecast(data) {
                 <span class="wind-icon" style="transform: rotate(${windDir}deg)">${windArrow}</span>
                 ${Math.round(windSpeed)} mph
             </div>
-            ${precipProb > 0 ? `
+            ${precipProb >= 10 ? `
                 <div class="precip-chance ${precipClass}">
                     ${hasSnow ? '❄' : '💧'} ${precipProb}%
                 </div>
@@ -1053,7 +1053,7 @@ async function checkWeatherAlerts(data) {
                 const severity = props.severity || 'Unknown';
                 const event = props.event || 'Weather Alert';
                 const headline = props.headline || event;
-                const alertUrl = props.web || nwsUrl;
+                const alertUrl = props.web || alert.id || nwsUrl;
 
                 let icon = '⚠️';
                 let bgColor = '#ff9800';
