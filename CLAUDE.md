@@ -16,8 +16,11 @@ WeatherWonder is a client-side weather dashboard deployed on GitHub Pages. It's 
 | File | Purpose |
 |------|---------|
 | `index.html` | HTML structure, CDN script/style tags, modal dialogs |
-| `app.js` | All application logic (~1400 lines) |
-| `styles.css` | Dark theme, responsive layout, component styles (~900 lines) |
+| `app.js` | All application logic (~1600 lines) |
+| `styles.css` | Dark theme, responsive layout, component styles (~1000 lines) |
+| `manifest.json` | PWA web app manifest (name, icons, theme) |
+| `sw.js` | Service worker for offline shell caching |
+| `icon.svg` | App icon (used in manifest and as Apple touch icon) |
 
 ## APIs Used (no keys required)
 
@@ -40,6 +43,9 @@ Leaflet map is initialized once and reused. When changing locations, the map mus
 
 ### NWS Alerts
 The app fetches real NWS alerts from `api.weather.gov/alerts/active?point={lat},{lon}`. If the NWS API is unavailable (non-US locations, network issues), it falls back to local weather-code-based detection using Open-Meteo's hourly `weather_code` values.
+
+### PWA / Add to Home Screen
+The app is installable as a PWA. `manifest.json` defines the app metadata, `sw.js` caches the shell assets with a network-first strategy. On Chrome/Android the `beforeinstallprompt` event is captured and re-triggered from the footer install button. On iOS, the button shows a toast with manual instructions (tap Share > Add to Home Screen). The button hides itself if the app is already running in standalone mode.
 
 ## Deployment
 
