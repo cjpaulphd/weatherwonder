@@ -467,7 +467,7 @@ function renderHourlyForecast(data) {
     }
 }
 
-// Custom plugin to draw grid lines
+// Custom plugin to draw grid lines and day/night bands
 const gridLinesPlugin = {
     id: 'customGridLines',
     beforeDraw: (chart) => {
@@ -479,6 +479,36 @@ const gridLinesPlugin = {
         if (!chartArea || !yTempScale || !yPrecipScale) return;
 
         ctx.save();
+
+        // Draw day/night background bands
+        const isDayFlags = chart.data.isDayFlags;
+        if (isDayFlags && isDayFlags.length > 0) {
+            const xScale = chart.scales.x;
+            const dayColor = 'rgba(255, 255, 255, 0.06)';
+            const nightColor = 'rgba(0, 0, 0, 0.15)';
+
+            let bandStart = 0;
+            let bandIsDay = isDayFlags[0];
+
+            for (let i = 1; i <= isDayFlags.length; i++) {
+                const currentIsDay = i < isDayFlags.length ? isDayFlags[i] : !bandIsDay;
+                if (currentIsDay !== bandIsDay || i === isDayFlags.length) {
+                    // Draw the band from bandStart to i
+                    const x1 = bandStart === 0
+                        ? chartArea.left
+                        : (xScale.getPixelForValue(bandStart - 1) + xScale.getPixelForValue(bandStart)) / 2;
+                    const x2 = i >= isDayFlags.length
+                        ? chartArea.right
+                        : (xScale.getPixelForValue(i - 1) + xScale.getPixelForValue(i)) / 2;
+
+                    ctx.fillStyle = bandIsDay ? dayColor : nightColor;
+                    ctx.fillRect(x1, chartArea.top, x2 - x1, chartArea.bottom - chartArea.top);
+
+                    bandStart = i;
+                    bandIsDay = currentIsDay;
+                }
+            }
+        }
 
         // Draw temperature grid lines (every 10°F) - pink/red color
         const tempMin = Math.floor(yTempScale.min / 10) * 10;
@@ -577,6 +607,7 @@ function renderChart(data) {
     const temps = [];
     const precipProbs = [];
     const precipAmounts = [];
+    const isDayFlags = [];
 
     for (let i = startIndex; i < endIndex; i++) {
         const date = new Date(hourly.time[i]);
@@ -584,6 +615,7 @@ function renderChart(data) {
         temps.push((hourly.temperature_2m[i] * 9/5) + 32);
         precipProbs.push(hourly.precipitation_probability[i]);
         precipAmounts.push(hourly.precipitation[i] / 25.4);
+        isDayFlags.push(hourly.is_day[i]);
     }
 
     const minTemp = Math.min(...temps);
@@ -606,6 +638,7 @@ function renderChart(data) {
         type: 'line',
         data: {
             labels: labels,
+            isDayFlags: isDayFlags,
             datasets: [
                 {
                     label: 'Temperature',
