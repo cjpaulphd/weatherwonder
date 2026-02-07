@@ -867,6 +867,30 @@ function renderAstroData() {
     const moonPhase = getMoonPhaseInfo(moonIllum.phase);
     const illuminationPct = Math.round(moonIllum.fraction * 100);
 
+    // Calculate day length
+    let dayLengthStr = '—';
+    let dayChangeStr = '';
+    if (sunTimes.sunrise && sunTimes.sunset && !isNaN(sunTimes.sunrise.getTime()) && !isNaN(sunTimes.sunset.getTime())) {
+        const dayLengthMs = sunTimes.sunset - sunTimes.sunrise;
+        const dayHours = Math.floor(dayLengthMs / 3600000);
+        const dayMins = Math.round((dayLengthMs % 3600000) / 60000);
+        dayLengthStr = `${dayHours}h ${dayMins}m`;
+
+        // Compare with yesterday
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdaySun = SunCalc.getTimes(yesterday, lat, lng);
+        if (yesterdaySun.sunrise && yesterdaySun.sunset && !isNaN(yesterdaySun.sunrise.getTime()) && !isNaN(yesterdaySun.sunset.getTime())) {
+            const yesterdayLengthMs = yesterdaySun.sunset - yesterdaySun.sunrise;
+            const diffMs = dayLengthMs - yesterdayLengthMs;
+            const diffMins = Math.round(Math.abs(diffMs) / 60000);
+            if (diffMins > 0) {
+                const diffSecs = Math.round(Math.abs(diffMs) / 1000) % 60;
+                dayChangeStr = `${diffMs >= 0 ? '+' : '-'}${diffMins}m ${diffSecs}s vs yesterday`;
+            }
+        }
+    }
+
     container.innerHTML = `
         <div class="astro-group">
             <h4 class="astro-group-title">Twilight &amp; Sun</h4>
@@ -907,6 +931,14 @@ function renderAstroData() {
                     <span class="astro-label">Astronomical Dusk</span>
                     <span class="astro-value">${formatAstroTime(sunTimes.night)}</span>
                 </div>
+                <div class="astro-row highlight">
+                    <span class="astro-label">Day Length</span>
+                    <span class="astro-value">${dayLengthStr}</span>
+                </div>
+                ${dayChangeStr ? `<div class="astro-row">
+                    <span class="astro-label"></span>
+                    <span class="astro-value astro-change">${dayChangeStr}</span>
+                </div>` : ''}
             </div>
         </div>
         <div class="astro-group">
@@ -933,11 +965,15 @@ function renderAstroData() {
     `;
 }
 
-// Update location display with optional current temperature
-function updateLocationDisplay(currentTemp = null) {
+// Update location display with optional current temperature and feels-like
+function updateLocationDisplay(currentTemp = null, feelsLike = null) {
     const locationName = document.getElementById('location-name');
     if (currentTemp !== null) {
-        locationName.textContent = `${currentLocation.name}: ${currentTemp}°F`;
+        let display = `${currentLocation.name}: ${currentTemp}°F`;
+        if (feelsLike !== null && Math.abs(currentTemp - feelsLike) > 2) {
+            display += ` (feels ${feelsLike}°)`;
+        }
+        locationName.textContent = display;
     } else {
         locationName.textContent = currentLocation.name;
     }
@@ -953,17 +989,20 @@ async function loadWeather() {
 
         weatherData = await fetchWeatherData(currentLocation.latitude, currentLocation.longitude);
 
-        // Get current temperature from hourly data
+        // Get current temperature and feels-like from hourly data
         const now = new Date();
         let currentTemp = null;
+        let feelsLike = null;
         for (let i = 0; i < weatherData.hourly.time.length; i++) {
             const hourDate = new Date(weatherData.hourly.time[i]);
             if (hourDate >= now) {
-                currentTemp = formatTempValue(weatherData.hourly.temperature_2m[i > 0 ? i - 1 : 0]);
+                const idx = i > 0 ? i - 1 : 0;
+                currentTemp = formatTempValue(weatherData.hourly.temperature_2m[idx]);
+                feelsLike = formatTempValue(weatherData.hourly.apparent_temperature[idx]);
                 break;
             }
         }
-        updateLocationDisplay(currentTemp);
+        updateLocationDisplay(currentTemp, feelsLike);
 
         renderDailyForecast(weatherData);
         renderHourlyForecast(weatherData);
@@ -972,6 +1011,12 @@ async function loadWeather() {
         initializeRadar();
         renderAstroData();
 
+        // Update last-updated timestamp
+        const lastUpdated = document.getElementById('last-updated');
+        if (lastUpdated) {
+            lastUpdated.textContent = `Updated ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+        }
+
     } catch (error) {
         console.error('Error loading weather:', error);
         document.getElementById('daily-forecast').innerHTML =
@@ -979,40 +1024,107 @@ async function loadWeather() {
     }
 }
 
-// Check for weather alerts
-function checkWeatherAlerts(data) {
+// Check for weather alerts via NWS API, with local fallback
+async function checkWeatherAlerts(data) {
     const alertBanner = document.getElementById('alert-banner');
     const alertText = document.getElementById('alert-text');
+    const alertContainer = document.getElementById('alert-container');
 
-    const hourly = data.hourly;
-
-    let hasWinterWeather = false;
-    let hasThunderstorm = false;
-
-    for (let i = 0; i < Math.min(24, hourly.weather_code.length); i++) {
-        const code = hourly.weather_code[i];
-        if ([71, 73, 75, 77, 85, 86, 66, 67].includes(code)) {
-            hasWinterWeather = true;
-        }
-        if ([95, 96, 99].includes(code)) {
-            hasThunderstorm = true;
-        }
-    }
-
-    // Link to NWS alerts for the current location
+    // NWS forecast link for this location
     const nwsUrl = `https://forecast.weather.gov/MapClick.php?lat=${currentLocation.latitude}&lon=${currentLocation.longitude}`;
-    alertBanner.href = nwsUrl;
 
-    if (hasWinterWeather) {
-        alertBanner.classList.remove('hidden');
-        alertText.textContent = 'Winter Weather Advisory';
-        document.querySelector('.alert-icon').textContent = '❄️';
-    } else if (hasThunderstorm) {
-        alertBanner.classList.remove('hidden');
-        alertText.textContent = 'Thunderstorm Warning';
-        document.querySelector('.alert-icon').textContent = '⛈️';
-    } else {
-        alertBanner.classList.add('hidden');
+    try {
+        // Fetch real NWS active alerts for this point
+        const response = await fetch(
+            `https://api.weather.gov/alerts/active?point=${currentLocation.latitude},${currentLocation.longitude}`,
+            { headers: { 'User-Agent': 'WeatherWonder (cjpaulphd)' } }
+        );
+
+        if (!response.ok) throw new Error('NWS API error');
+
+        const alertData = await response.json();
+        const alerts = alertData.features || [];
+
+        if (alerts.length > 0) {
+            // Build alert display - show all active alerts
+            alertContainer.innerHTML = '';
+            alerts.forEach(alert => {
+                const props = alert.properties;
+                const severity = props.severity || 'Unknown';
+                const event = props.event || 'Weather Alert';
+                const headline = props.headline || event;
+                const alertUrl = props.web || nwsUrl;
+
+                let icon = '⚠️';
+                let bgColor = '#ff9800';
+                if (severity === 'Extreme') { icon = '🚨'; bgColor = '#d32f2f'; }
+                else if (severity === 'Severe') { icon = '⛈️'; bgColor = '#f44336'; }
+                else if (event.toLowerCase().includes('winter') || event.toLowerCase().includes('snow') || event.toLowerCase().includes('ice') || event.toLowerCase().includes('freeze') || event.toLowerCase().includes('cold') || event.toLowerCase().includes('blizzard')) {
+                    icon = '❄️';
+                }
+                else if (event.toLowerCase().includes('thunder') || event.toLowerCase().includes('tornado')) {
+                    icon = '⛈️';
+                }
+                else if (event.toLowerCase().includes('flood')) { icon = '🌊'; }
+                else if (event.toLowerCase().includes('wind')) { icon = '💨'; }
+                else if (event.toLowerCase().includes('heat')) { icon = '🌡️'; bgColor = '#ff5722'; }
+                else if (event.toLowerCase().includes('fog')) { icon = '🌫️'; }
+                else if (event.toLowerCase().includes('fire')) { icon = '🔥'; bgColor = '#ff5722'; }
+
+                const alertEl = document.createElement('a');
+                alertEl.className = 'alert-banner';
+                alertEl.href = alertUrl;
+                alertEl.target = '_blank';
+                alertEl.rel = 'noopener noreferrer';
+                alertEl.style.backgroundColor = bgColor;
+                alertEl.innerHTML = `
+                    <span class="alert-icon">${icon}</span>
+                    <span class="alert-text-content">${headline}</span>
+                    <span class="alert-arrow">›</span>
+                `;
+                alertContainer.appendChild(alertEl);
+            });
+
+            alertContainer.classList.remove('hidden');
+            alertBanner.classList.add('hidden');
+        } else {
+            alertContainer.innerHTML = '';
+            alertContainer.classList.add('hidden');
+            alertBanner.classList.add('hidden');
+        }
+    } catch (error) {
+        // Fallback to local weather-code detection if NWS API fails
+        console.warn('NWS Alerts API unavailable, using local detection:', error.message);
+        alertContainer.innerHTML = '';
+        alertContainer.classList.add('hidden');
+
+        const hourly = data.hourly;
+        let hasWinterWeather = false;
+        let hasThunderstorm = false;
+
+        for (let i = 0; i < Math.min(24, hourly.weather_code.length); i++) {
+            const code = hourly.weather_code[i];
+            if ([71, 73, 75, 77, 85, 86, 66, 67].includes(code)) {
+                hasWinterWeather = true;
+            }
+            if ([95, 96, 99].includes(code)) {
+                hasThunderstorm = true;
+            }
+        }
+
+        alertBanner.href = nwsUrl;
+
+        if (hasWinterWeather) {
+            alertBanner.classList.remove('hidden');
+            alertText.textContent = 'Winter Weather Advisory';
+            document.querySelector('.alert-icon').textContent = '❄️';
+        } else if (hasThunderstorm) {
+            alertBanner.classList.remove('hidden');
+            alertText.textContent = 'Thunderstorm Warning';
+            document.querySelector('.alert-icon').textContent = '⛈️';
+        } else {
+            alertBanner.classList.add('hidden');
+        }
     }
 }
 
