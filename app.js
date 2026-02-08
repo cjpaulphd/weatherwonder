@@ -138,6 +138,97 @@ function renderFavoritesList() {
     });
 }
 
+// Theme management with localStorage
+const THEME_KEY = 'weatherwonder_theme';
+
+function getStoredTheme() {
+    try {
+        return localStorage.getItem(THEME_KEY);
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveTheme(theme) {
+    try {
+        localStorage.setItem(THEME_KEY, theme);
+    } catch (e) {
+        console.error('Could not save theme:', e);
+    }
+}
+
+function getEffectiveTheme() {
+    const stored = getStoredTheme();
+    if (stored) return stored;
+    // Default to system preference, falling back to dark
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        return 'light';
+    }
+    return 'dark';
+}
+
+function applyTheme(theme) {
+    if (theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+    }
+    updateThemeToggleUI(theme);
+    updateThemeColor(theme);
+}
+
+function updateThemeToggleUI(theme) {
+    const icon = document.getElementById('theme-toggle-icon');
+    const label = document.getElementById('theme-toggle-label');
+    if (icon && label) {
+        if (theme === 'light') {
+            icon.textContent = '☀️';
+            label.textContent = 'Light';
+        } else {
+            icon.textContent = '🌙';
+            label.textContent = 'Dark';
+        }
+    }
+}
+
+function updateThemeColor(theme) {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+        meta.setAttribute('content', theme === 'light' ? '#f5f5f5' : '#1a1a1a');
+    }
+}
+
+function initializeTheme() {
+    const theme = getEffectiveTheme();
+    applyTheme(theme);
+
+    const toggle = document.getElementById('theme-toggle');
+    if (toggle) {
+        toggle.addEventListener('click', () => {
+            const current = getEffectiveTheme();
+            const next = current === 'dark' ? 'light' : 'dark';
+            saveTheme(next);
+            applyTheme(next);
+            // Re-render radar with appropriate tile layer
+            if (radarMap) {
+                radarMap.remove();
+                radarMap = null;
+                radarLayer = null;
+                initializeRadar();
+            }
+        });
+    }
+
+    // Listen for system theme changes (only if no stored preference)
+    if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+            if (!getStoredTheme()) {
+                applyTheme(getEffectiveTheme());
+            }
+        });
+    }
+}
+
 function openMenu() {
     document.getElementById('menu-panel').classList.remove('hidden');
     document.getElementById('menu-overlay').classList.remove('hidden');
@@ -484,8 +575,9 @@ const gridLinesPlugin = {
         const isDayFlags = chart.data.isDayFlags;
         if (isDayFlags && isDayFlags.length > 0) {
             const xScale = chart.scales.x;
-            const dayColor = 'rgba(255, 255, 255, 0.06)';
-            const nightColor = 'rgba(0, 0, 0, 0.15)';
+            const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+            const dayColor = isLight ? 'rgba(255, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.06)';
+            const nightColor = isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(0, 0, 0, 0.15)';
 
             let bandStart = 0;
             let bandIsDay = isDayFlags[0];
@@ -558,7 +650,8 @@ const gridLinesPlugin = {
 
         // Draw day separators
         const labels = chart.data.labels;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
+        ctx.strokeStyle = isLightTheme ? 'rgba(0, 0, 0, 0.15)' : 'rgba(255, 255, 255, 0.15)';
         ctx.setLineDash([]);
         ctx.lineWidth = 1;
 
@@ -689,9 +782,11 @@ function renderChart(data) {
                     display: false
                 },
                 tooltip: {
-                    backgroundColor: '#333',
-                    titleColor: '#fff',
-                    bodyColor: '#fff',
+                    backgroundColor: getEffectiveTheme() === 'light' ? '#ffffff' : '#333',
+                    titleColor: getEffectiveTheme() === 'light' ? '#1a1a1a' : '#fff',
+                    bodyColor: getEffectiveTheme() === 'light' ? '#1a1a1a' : '#fff',
+                    borderColor: getEffectiveTheme() === 'light' ? '#e0e0e0' : 'transparent',
+                    borderWidth: getEffectiveTheme() === 'light' ? 1 : 0,
                     padding: 12,
                     displayColors: true,
                     position: 'nearest',
@@ -790,8 +885,11 @@ async function initializeRadar() {
                 attributionControl: true
             });
 
-            // Add dark tile layer
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            // Add tile layer matching current theme
+            const tileUrl = getEffectiveTheme() === 'light'
+                ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+                : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+            L.tileLayer(tileUrl, {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
                 subdomains: 'abcd',
                 maxZoom: 19
@@ -1263,8 +1361,9 @@ async function takeScreenshot(sectionId) {
     if (!section) return;
 
     try {
+        const screenshotBg = getEffectiveTheme() === 'light' ? '#f5f5f5' : '#1a1a1a';
         const canvas = await html2canvas(section, {
-            backgroundColor: '#1a1a1a',
+            backgroundColor: screenshotBg,
             scale: 2
         });
 
@@ -1681,6 +1780,7 @@ if ('serviceWorker' in navigator) {
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
+    initializeTheme();
     updateLocationDisplay();
     initializeModal();
     initializeShareModal();
