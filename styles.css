@@ -20,6 +20,21 @@
     --rain-color: #2196f3;
 }
 
+[data-theme="light"] {
+    --bg-primary: #f5f5f5;
+    --bg-secondary: #e8e8e8;
+    --bg-card: #ffffff;
+    --text-primary: #1a1a1a;
+    --text-secondary: #666666;
+    --accent-blue: #0097a7;
+    --accent-red: #d32f2f;
+    --precip-blue: #0288d1;
+    --precip-green: #388e3c;
+    --temp-red: #c62828;
+    --snow-color: #c2185b;
+    --rain-color: #1565c0;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     background-color: var(--bg-primary);
@@ -98,6 +113,10 @@ body {
     bottom: 0;
     background-color: rgba(0, 0, 0, 0.6);
     z-index: 150;
+}
+
+[data-theme="light"] .menu-overlay {
+    background-color: rgba(0, 0, 0, 0.3);
 }
 
 .menu-overlay.hidden {
@@ -453,6 +472,14 @@ body {
     background-color: rgba(60, 60, 60, 0.3);
 }
 
+[data-theme="light"] .daily-card:nth-child(odd) {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .daily-card:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
 .daily-card .day-name {
     font-size: 10px;
     font-weight: 600;
@@ -605,6 +632,10 @@ body {
     align-items: center;
     justify-content: center;
     z-index: 200;
+}
+
+[data-theme="light"] .modal {
+    background-color: rgba(0, 0, 0, 0.5);
 }
 
 .modal.hidden {
@@ -911,6 +942,10 @@ body {
     background-color: #1a1a2e;
 }
 
+[data-theme="light"] .radar-map {
+    background-color: #d4e6f1;
+}
+
 .radar-legend {
     display: flex;
     justify-content: center;
@@ -960,6 +995,14 @@ body {
 
 .leaflet-control-attribution a {
     color: var(--accent-blue) !important;
+}
+
+[data-theme="light"] .leaflet-container {
+    background-color: #d4e6f1;
+}
+
+[data-theme="light"] .leaflet-control-attribution {
+    background-color: rgba(255, 255, 255, 0.8) !important;
 }
 
 /* RadarScope Link */
@@ -1021,6 +1064,10 @@ body {
     align-items: center;
     padding: 6px 8px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="light"] .astro-row {
+    border-bottom-color: rgba(0, 0, 0, 0.08);
 }
 
 .astro-row:last-child {
@@ -1085,6 +1132,31 @@ body {
 
 .install-btn.hidden {
     display: none;
+}
+
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    margin-bottom: 14px;
+    background-color: var(--bg-card);
+    color: var(--text-secondary);
+    border: 1px solid var(--bg-secondary);
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.theme-toggle:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-secondary);
+}
+
+.theme-toggle-icon {
+    font-size: 16px;
+    line-height: 1;
 }
 
 .footer-tagline {
