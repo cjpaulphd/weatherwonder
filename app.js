@@ -5,12 +5,39 @@ const API_BASE = 'https://api.open-meteo.com/v1/forecast';
 const GEOCODING_API = 'https://geocoding-api.open-meteo.com/v1/search';
 const RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
 
-// Default location (Durham, NC)
-let currentLocation = {
+// Default location (Durham, NC) - overridden by last used location if available
+const DEFAULT_LOCATION = {
     name: 'Durham, NC',
     latitude: 35.994,
     longitude: -78.8986
 };
+
+const LAST_LOCATION_KEY = 'weatherwonder_last_location';
+
+function getLastLocation() {
+    try {
+        const stored = localStorage.getItem(LAST_LOCATION_KEY);
+        if (stored) {
+            const loc = JSON.parse(stored);
+            if (loc.name && loc.latitude && loc.longitude) return loc;
+        }
+    } catch (e) {}
+    return null;
+}
+
+function saveLastLocation(location) {
+    try {
+        localStorage.setItem(LAST_LOCATION_KEY, JSON.stringify({
+            name: location.name,
+            latitude: location.latitude,
+            longitude: location.longitude
+        }));
+    } catch (e) {
+        console.error('Could not save last location:', e);
+    }
+}
+
+let currentLocation = getLastLocation() || DEFAULT_LOCATION;
 
 let forecastChart = null;
 let weatherData = null;
@@ -138,6 +165,145 @@ function renderFavoritesList() {
     });
 }
 
+// Temperature unit management with localStorage
+const TEMP_UNIT_KEY = 'weatherwonder_temp_unit';
+
+function getTempUnit() {
+    try {
+        return localStorage.getItem(TEMP_UNIT_KEY) || 'F';
+    } catch (e) {
+        return 'F';
+    }
+}
+
+function saveTempUnit(unit) {
+    try {
+        localStorage.setItem(TEMP_UNIT_KEY, unit);
+    } catch (e) {
+        console.error('Could not save temp unit:', e);
+    }
+}
+
+function updateTempToggleUI() {
+    const label = document.getElementById('temp-toggle-label');
+    if (label) {
+        const unit = getTempUnit();
+        // Show the unit you'd switch TO
+        label.textContent = unit === 'F' ? '°C' : '°F';
+    }
+}
+
+function initializeTempToggle() {
+    updateTempToggleUI();
+    const toggle = document.getElementById('temp-toggle');
+    if (toggle) {
+        toggle.addEventListener('click', () => {
+            const current = getTempUnit();
+            const next = current === 'F' ? 'C' : 'F';
+            saveTempUnit(next);
+            updateTempToggleUI();
+            // Re-render weather data with new unit
+            if (weatherData) {
+                renderDailyForecast(weatherData);
+                renderHourlyForecast(weatherData);
+                renderChart(weatherData);
+                // Re-update location display with current temp
+                reloadLocationTemp();
+            }
+        });
+    }
+}
+
+// Time format management with localStorage
+const TIME_FORMAT_KEY = 'weatherwonder_time_format';
+
+function getTimeFormat() {
+    try {
+        return localStorage.getItem(TIME_FORMAT_KEY) || '12';
+    } catch (e) {
+        return '12';
+    }
+}
+
+function saveTimeFormat(format) {
+    try {
+        localStorage.setItem(TIME_FORMAT_KEY, format);
+    } catch (e) {
+        console.error('Could not save time format:', e);
+    }
+}
+
+function updateTimeToggleUI() {
+    const label = document.getElementById('time-toggle-label');
+    if (label) {
+        const format = getTimeFormat();
+        // Show the format you'd switch TO
+        label.textContent = format === '12' ? '24hr' : '12hr';
+    }
+}
+
+function initializeTimeToggle() {
+    updateTimeToggleUI();
+    const toggle = document.getElementById('time-toggle');
+    if (toggle) {
+        toggle.addEventListener('click', () => {
+            const current = getTimeFormat();
+            const next = current === '12' ? '24' : '12';
+            saveTimeFormat(next);
+            updateTimeToggleUI();
+            // Re-render weather data with new time format
+            if (weatherData) {
+                renderHourlyForecast(weatherData);
+                renderChart(weatherData);
+                renderAstroData();
+                // Update last-updated timestamp
+                const lastUpdated = document.getElementById('last-updated');
+                if (lastUpdated && lastUpdated.dataset.timestamp) {
+                    const ts = new Date(lastUpdated.dataset.timestamp);
+                    lastUpdated.textContent = `Updated ${formatTime(ts)}`;
+                }
+            }
+        });
+    }
+}
+
+// Helper to re-update location display temperature after unit change
+function reloadLocationTemp() {
+    if (!weatherData) return;
+    const now = new Date();
+    let currentTemp = null;
+    let feelsLike = null;
+    for (let i = 0; i < weatherData.hourly.time.length; i++) {
+        const hourDate = new Date(weatherData.hourly.time[i]);
+        if (hourDate >= now) {
+            const idx = i > 0 ? i - 1 : 0;
+            currentTemp = formatTempValue(weatherData.hourly.temperature_2m[idx]);
+            feelsLike = formatTempValue(weatherData.hourly.apparent_temperature[idx]);
+            break;
+        }
+    }
+    updateLocationDisplay(currentTemp, feelsLike);
+}
+
+// Format a time according to user's 12/24 preference
+function formatTime(date) {
+    if (getTimeFormat() === '24') {
+        return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+// Format just the hour according to user's 12/24 preference
+function formatHour(date) {
+    if (getTimeFormat() === '24') {
+        return date.getHours().toString().padStart(2, '0') + ':00';
+    }
+    const h = date.getHours();
+    const suffix = h >= 12 ? 'p' : 'a';
+    const hour12 = h % 12 || 12;
+    return `${hour12}${suffix}`;
+}
+
 // Theme management with localStorage
 const THEME_KEY = 'weatherwonder_theme';
 
@@ -182,11 +348,13 @@ function updateThemeToggleUI(theme) {
     const label = document.getElementById('theme-toggle-label');
     if (icon && label) {
         if (theme === 'light') {
-            icon.textContent = '☀️';
-            label.textContent = 'Light';
-        } else {
+            // In light mode, show option to switch to dark
             icon.textContent = '🌙';
             label.textContent = 'Dark';
+        } else {
+            // In dark mode, show option to switch to light
+            icon.textContent = '☀️';
+            label.textContent = 'Light';
         }
     }
 }
@@ -285,9 +453,17 @@ function isSnow(code) {
     return [71, 73, 75, 77, 85, 86].includes(code);
 }
 
-// Format temperature (returns just the number)
+// Format temperature (returns just the number in current unit)
 function formatTempValue(temp) {
+    if (getTempUnit() === 'C') {
+        return Math.round(temp);
+    }
     return Math.round((temp * 9/5) + 32);
+}
+
+// Get temperature unit label
+function getTempUnitLabel() {
+    return getTempUnit() === 'C' ? '°C' : '°F';
 }
 
 // Format precipitation amount
@@ -469,7 +645,7 @@ function renderDailyForecast(data) {
                 <div class="am-icon" title="Morning">${amIcon}</div>
                 <div class="pm-icon" title="Evening">${pmIcon}</div>
             </div>
-            <div class="temp-range">${lowTemp} | ${highTemp} °F</div>
+            <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
             ${precipProb >= 10 ? `
                 <div class="precip-info ${precipClass}">
                     ${hasSnow ? '❄' : '💧'} ${precipProb}%
@@ -536,9 +712,9 @@ function renderHourlyForecast(data) {
 
         card.innerHTML = `
             ${dayLabel}
-            <div class="hour">${hour}</div>
+            <div class="hour">${formatHour(date)}</div>
             <div class="weather-icon">${getWeatherIcon(weatherCode, isNight)}</div>
-            <div class="temp">${temp}°F</div>
+            <div class="temp">${temp}${getTempUnitLabel()}</div>
             ${showWindchill ? `<div class="windchill">Feels ${apparentTemp}°</div>` : ''}
             <div class="wind">
                 <span class="wind-icon" style="transform: rotate(${windDir}deg)">${windArrow}</span>
@@ -705,7 +881,7 @@ function renderChart(data) {
     for (let i = startIndex; i < endIndex; i++) {
         const date = new Date(hourly.time[i]);
         labels.push(date);
-        temps.push((hourly.temperature_2m[i] * 9/5) + 32);
+        temps.push(getTempUnit() === 'C' ? hourly.temperature_2m[i] : (hourly.temperature_2m[i] * 9/5) + 32);
         precipProbs.push(hourly.precipitation_probability[i]);
         precipAmounts.push(hourly.precipitation[i] / 25.4);
         isDayFlags.push(hourly.is_day[i]);
@@ -794,17 +970,19 @@ function renderChart(data) {
                     caretPadding: 20,
                     callbacks: {
                         title: function(context) {
-                            const date = context[0].label;
-                            return new Date(date).toLocaleString('en-US', {
+                            const date = new Date(context[0].label);
+                            const use24 = getTimeFormat() === '24';
+                            return date.toLocaleString(use24 ? 'en-GB' : 'en-US', {
                                 weekday: 'short',
                                 month: 'short',
                                 day: 'numeric',
-                                hour: 'numeric'
+                                hour: use24 ? '2-digit' : 'numeric',
+                                ...(use24 ? { minute: '2-digit' } : {})
                             });
                         },
                         label: function(context) {
                             if (context.datasetIndex === 0) {
-                                return `Temperature: ${Math.round(context.raw)}°F`;
+                                return `Temperature: ${Math.round(context.raw)}${getTempUnitLabel()}`;
                             } else if (context.datasetIndex === 1) {
                                 return `Precip Chance: ${context.raw}%`;
                             } else {
@@ -941,8 +1119,9 @@ async function initializeRadar() {
 
             // Update time display
             const radarTime = new Date(latestFrame.time * 1000);
-            timeDisplay.textContent = `Radar: ${radarTime.toLocaleString('en-US', {
-                hour: 'numeric',
+            const use24 = getTimeFormat() === '24';
+            timeDisplay.textContent = `Radar: ${radarTime.toLocaleString(use24 ? 'en-GB' : 'en-US', {
+                hour: use24 ? '2-digit' : 'numeric',
                 minute: '2-digit',
                 month: 'short',
                 day: 'numeric'
@@ -958,10 +1137,7 @@ async function initializeRadar() {
 // Format time for astronomical display
 function formatAstroTime(date) {
     if (!date || isNaN(date.getTime())) return '—';
-    return date.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit'
-    });
+    return formatTime(date);
 }
 
 // Get moon phase name and emoji
@@ -1100,7 +1276,7 @@ function renderAstroData() {
 function updateLocationDisplay(currentTemp = null, feelsLike = null) {
     const locationName = document.getElementById('location-name');
     if (currentTemp !== null) {
-        let display = `${currentLocation.name}: ${currentTemp}°F`;
+        let display = `${currentLocation.name}: ${currentTemp}${getTempUnitLabel()}`;
         if (feelsLike !== null && Math.abs(currentTemp - feelsLike) > 2) {
             display += ` (feels ${feelsLike}°)`;
         }
@@ -1115,6 +1291,9 @@ function updateLocationDisplay(currentTemp = null, feelsLike = null) {
 // Load weather for current location
 async function loadWeather() {
     try {
+        // Save as last used location
+        saveLastLocation(currentLocation);
+
         document.getElementById('daily-forecast').innerHTML = '<div class="loading">Loading forecast</div>';
         document.getElementById('hourly-forecast').innerHTML = '';
 
@@ -1145,7 +1324,9 @@ async function loadWeather() {
         // Update last-updated timestamp
         const lastUpdated = document.getElementById('last-updated');
         if (lastUpdated) {
-            lastUpdated.textContent = `Updated ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+            const now2 = new Date();
+            lastUpdated.dataset.timestamp = now2.toISOString();
+            lastUpdated.textContent = `Updated ${formatTime(now2)}`;
         }
 
     } catch (error) {
@@ -1279,9 +1460,11 @@ function showAlertDetail(props, nwsUrl) {
     const description = (props.description || '').replace(/\n/g, '<br>');
     const instruction = (props.instruction || '').replace(/\n/g, '<br>');
     const areaDesc = props.areaDesc || '';
-    const onset = props.onset ? new Date(props.onset).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-    const ends = props.ends ? new Date(props.ends).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-    const expires = props.expires ? new Date(props.expires).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    const alertTimeLocale = getTimeFormat() === '24' ? 'en-GB' : 'en-US';
+    const alertTimeOpts = { weekday: 'short', month: 'short', day: 'numeric', hour: getTimeFormat() === '24' ? '2-digit' : 'numeric', minute: '2-digit' };
+    const onset = props.onset ? new Date(props.onset).toLocaleString(alertTimeLocale, alertTimeOpts) : '';
+    const ends = props.ends ? new Date(props.ends).toLocaleString(alertTimeLocale, alertTimeOpts) : '';
+    const expires = props.expires ? new Date(props.expires).toLocaleString(alertTimeLocale, alertTimeOpts) : '';
     const sender = props.senderName || '';
 
     header.innerHTML = `<h3>${event}</h3>`;
@@ -1781,6 +1964,8 @@ if ('serviceWorker' in navigator) {
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
     initializeTheme();
+    initializeTempToggle();
+    initializeTimeToggle();
     updateLocationDisplay();
     initializeModal();
     initializeShareModal();

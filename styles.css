@@ -1134,12 +1134,19 @@ body {
     display: none;
 }
 
+.footer-toggles {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
 .theme-toggle {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     padding: 8px 16px;
-    margin-bottom: 14px;
     background-color: var(--bg-card);
     color: var(--text-secondary);
     border: 1px solid var(--bg-secondary);
