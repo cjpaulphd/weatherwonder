@@ -681,7 +681,6 @@ function renderHourlyForecast(data) {
 
     for (let i = startIndex; i < Math.min(startIndex + 48, hourly.time.length); i++) {
         const date = new Date(hourly.time[i]);
-        const hour = date.getHours();
         const isNight = hourly.is_day[i] === 0;
 
         const card = document.createElement('div');
@@ -1963,15 +1962,20 @@ if ('serviceWorker' in navigator) {
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
-    initializeTheme();
-    initializeTempToggle();
-    initializeTimeToggle();
-    updateLocationDisplay();
-    initializeModal();
-    initializeShareModal();
-    initializeMenu();
-    initializeAlertDetailModal();
-    initializeInstallButton();
+    const inits = [
+        initializeTheme,
+        initializeTempToggle,
+        initializeTimeToggle,
+        updateLocationDisplay,
+        initializeModal,
+        initializeShareModal,
+        initializeMenu,
+        initializeAlertDetailModal,
+        initializeInstallButton
+    ];
+    inits.forEach(fn => {
+        try { fn(); } catch (e) { console.error('Init error in ' + fn.name + ':', e); }
+    });
     loadWeather();
 
     // Initialize scroll handler after weather loads

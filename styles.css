@@ -934,6 +934,7 @@ body {
     background-color: var(--bg-secondary);
     border-radius: 8px;
     overflow: hidden;
+    z-index: 0;
 }
 
 .radar-map {

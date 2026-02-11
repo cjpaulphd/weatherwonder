@@ -1,7 +1,7 @@
 // WeatherWonder Service Worker
 // Provides offline shell caching for PWA install support
 
-const CACHE_NAME = 'weatherwonder-v1';
+const CACHE_NAME = 'weatherwonder-v2';
 const SHELL_ASSETS = [
     './',
     './index.html',
