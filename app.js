@@ -296,7 +296,7 @@ function formatTime(date) {
 // Format just the hour according to user's 12/24 preference
 function formatHour(date) {
     if (getTimeFormat() === '24') {
-        return date.getHours().toString().padStart(2, '0') + ':00';
+        return date.getHours().toString().padStart(2, '0');
     }
     const h = date.getHours();
     const suffix = h >= 12 ? 'p' : 'a';
