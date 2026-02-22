@@ -1269,6 +1269,30 @@ body {
     color: var(--precip-blue);
 }
 
+.precip-history-avg {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.precip-history-diff {
+    font-size: 10px;
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+.precip-above {
+    color: #ef6c00;
+}
+
+.precip-below {
+    color: #42a5f5;
+}
+
+.precip-near {
+    color: var(--text-secondary);
+}
+
 @media (max-width: 480px) {
     .precip-history-grid {
         grid-template-columns: repeat(2, 1fr);
