@@ -575,15 +575,42 @@ async function fetchWeatherData(lat, lon) {
     return response.json();
 }
 
-// Geocode location name (supports city names and zip codes)
+// US state abbreviation lookup for "city, state" search parsing
+const US_STATE_ABBREVS = {
+    'al': 'alabama', 'ak': 'alaska', 'az': 'arizona', 'ar': 'arkansas',
+    'ca': 'california', 'co': 'colorado', 'ct': 'connecticut', 'de': 'delaware',
+    'fl': 'florida', 'ga': 'georgia', 'hi': 'hawaii', 'id': 'idaho',
+    'il': 'illinois', 'in': 'indiana', 'ia': 'iowa', 'ks': 'kansas',
+    'ky': 'kentucky', 'la': 'louisiana', 'me': 'maine', 'md': 'maryland',
+    'ma': 'massachusetts', 'mi': 'michigan', 'mn': 'minnesota', 'ms': 'mississippi',
+    'mo': 'missouri', 'mt': 'montana', 'ne': 'nebraska', 'nv': 'nevada',
+    'nh': 'new hampshire', 'nj': 'new jersey', 'nm': 'new mexico', 'ny': 'new york',
+    'nc': 'north carolina', 'nd': 'north dakota', 'oh': 'ohio', 'ok': 'oklahoma',
+    'or': 'oregon', 'pa': 'pennsylvania', 'ri': 'rhode island', 'sc': 'south carolina',
+    'sd': 'south dakota', 'tn': 'tennessee', 'tx': 'texas', 'ut': 'utah',
+    'vt': 'vermont', 'va': 'virginia', 'wa': 'washington', 'wv': 'west virginia',
+    'wi': 'wisconsin', 'wy': 'wyoming', 'dc': 'district of columbia'
+};
+
+// Geocode location name (supports city names, "city, state", and zip codes)
 async function geocodeLocation(query) {
     const trimmed = query.trim();
     const isZip = /^\d{5}(-\d{4})?$/.test(trimmed);
 
     if (!isZip) {
+        // Parse "city, state" or "city, country" patterns
+        let searchName = trimmed;
+        let regionFilter = null;
+
+        const commaMatch = trimmed.match(/^(.+?),\s*(.+)$/);
+        if (commaMatch) {
+            searchName = commaMatch[1].trim();
+            regionFilter = commaMatch[2].trim().toLowerCase();
+        }
+
         const params = new URLSearchParams({
-            name: trimmed,
-            count: 5,
+            name: searchName,
+            count: 10,
             language: 'en',
             format: 'json'
         });
@@ -593,23 +620,42 @@ async function geocodeLocation(query) {
         const data = await response.json();
 
         if (data.results && data.results.length > 0) {
-            return data.results;
+            let results = data.results;
+
+            // If the user provided a state/region filter, narrow results
+            if (regionFilter) {
+                const expandedFilter = US_STATE_ABBREVS[regionFilter] || regionFilter;
+                const filtered = results.filter(r => {
+                    const admin1 = (r.admin1 || '').toLowerCase();
+                    const country = (r.country || '').toLowerCase();
+                    const countryCode = (r.country_code || '').toLowerCase();
+                    return admin1 === expandedFilter
+                        || admin1.startsWith(expandedFilter)
+                        || country.startsWith(expandedFilter)
+                        || countryCode === regionFilter;
+                });
+                if (filtered.length > 0) {
+                    results = filtered;
+                }
+            }
+
+            return results;
         }
     }
 
     // For zip codes or when Open-Meteo returns no results, try Nominatim
-    const response = await fetch(
+    const nomResponse = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(trimmed)}&format=json&limit=5&addressdetails=1`,
         { headers: { 'User-Agent': 'WeatherWonder (cjpaulphd)' } }
     );
-    if (!response.ok) throw new Error('Failed to geocode location');
-    const data = await response.json();
+    if (!nomResponse.ok) throw new Error('Failed to geocode location');
+    const nomData = await nomResponse.json();
 
-    if (!data || data.length === 0) {
+    if (!nomData || nomData.length === 0) {
         throw new Error('Location not found');
     }
 
-    return data.map(r => ({
+    return nomData.map(r => ({
         name: r.address ? (r.address.city || r.address.town || r.address.village || r.address.hamlet || r.display_name.split(',')[0]) : r.display_name.split(',')[0],
         admin1: r.address ? (r.address.state || '') : '',
         admin2: r.address ? (r.address.county || '') : '',
