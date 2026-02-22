@@ -1426,13 +1426,13 @@ function renderAstroData() {
     `;
 }
 
-// Fetch precipitation history from Open-Meteo (past 7 days)
+// Fetch precipitation history from Open-Meteo (past 92 days)
 async function fetchPrecipHistory(lat, lon) {
     const params = new URLSearchParams({
         latitude: lat,
         longitude: lon,
         hourly: 'precipitation',
-        past_days: 7,
+        past_days: 92,
         forecast_days: 1,
         timezone: 'auto'
     });
@@ -1455,7 +1455,9 @@ function renderPrecipHistory(data) {
         { label: '24 Hours', hours: 24 },
         { label: '48 Hours', hours: 48 },
         { label: '72 Hours', hours: 72 },
-        { label: '7 Days', hours: 168 }
+        { label: '7 Days', hours: 168 },
+        { label: '1 Month', hours: 720 },
+        { label: '3 Months', hours: 2160 }
     ];
 
     // Find the last hour that's <= now
