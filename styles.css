@@ -1188,6 +1188,93 @@ body {
     text-decoration: underline;
 }
 
+/* Disambiguation Results */
+.disambiguation-results {
+    margin-top: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.disambiguation-results.hidden {
+    display: none;
+}
+
+.disambiguation-title {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.disambiguation-item {
+    padding: 10px 12px;
+    background-color: var(--bg-card);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.disambiguation-item:hover {
+    background-color: var(--bg-primary);
+    color: var(--accent-blue);
+}
+
+/* Favorite Item Actions */
+.favorite-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.favorite-item-rename {
+    background: none;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.favorite-item-rename:hover {
+    opacity: 1;
+}
+
+/* Precipitation History */
+.precip-history-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.precip-history-item {
+    background-color: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 12px 8px;
+    text-align: center;
+}
+
+.precip-history-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+.precip-history-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--precip-blue);
+}
+
+@media (max-width: 480px) {
+    .precip-history-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 @media (min-width: 481px) {
     .astro-container {
         flex-direction: row;
