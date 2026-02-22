@@ -44,6 +44,7 @@ let weatherData = null;
 let currentShareSection = null;
 let radarMap = null;
 let radarLayer = null;
+let precipHistoryData = null;
 
 // Favorites management with localStorage
 const FAVORITES_KEY = 'weatherwonder_favorites';
@@ -127,14 +128,17 @@ function renderFavoritesList() {
     list.innerHTML = favorites.map(fav => `
         <div class="favorite-item" data-lat="${fav.latitude}" data-lon="${fav.longitude}" data-name="${fav.name}">
             <span class="favorite-item-name">${fav.name}</span>
-            <button class="favorite-item-remove" data-lat="${fav.latitude}" data-lon="${fav.longitude}">&times;</button>
+            <div class="favorite-item-actions">
+                <button class="favorite-item-rename" data-lat="${fav.latitude}" data-lon="${fav.longitude}" title="Rename">✏️</button>
+                <button class="favorite-item-remove" data-lat="${fav.latitude}" data-lon="${fav.longitude}">&times;</button>
+            </div>
         </div>
     `).join('');
 
     // Add click handlers
     list.querySelectorAll('.favorite-item').forEach(item => {
         item.addEventListener('click', (e) => {
-            if (e.target.classList.contains('favorite-item-remove')) return;
+            if (e.target.classList.contains('favorite-item-remove') || e.target.classList.contains('favorite-item-rename')) return;
 
             const lat = parseFloat(item.dataset.lat);
             const lon = parseFloat(item.dataset.lon);
@@ -161,6 +165,32 @@ function renderFavoritesList() {
             const lat = parseFloat(btn.dataset.lat);
             const lon = parseFloat(btn.dataset.lon);
             removeFavorite(lat, lon);
+        });
+    });
+
+    // Rename handlers
+    list.querySelectorAll('.favorite-item-rename').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const lat = parseFloat(btn.dataset.lat);
+            const lon = parseFloat(btn.dataset.lon);
+            const favorites = getFavorites();
+            const fav = favorites.find(f => f.latitude === lat && f.longitude === lon);
+            if (!fav) return;
+
+            const newName = prompt('Rename location:', fav.name);
+            if (newName && newName.trim()) {
+                fav.name = newName.trim();
+                saveFavorites(favorites);
+                renderFavoritesList();
+
+                // Update current location name if this is the active location
+                if (currentLocation.latitude === lat && currentLocation.longitude === lon) {
+                    currentLocation.name = newName.trim();
+                    updateLocationDisplay();
+                    reloadLocationTemp();
+                }
+            }
         });
     });
 }
@@ -209,6 +239,10 @@ function initializeTempToggle() {
                 renderChart(weatherData);
                 // Re-update location display with current temp
                 reloadLocationTemp();
+                // Re-render precipitation history with new unit
+                if (precipHistoryData) {
+                    renderPrecipHistory(precipHistoryData);
+                }
             }
         });
     }
@@ -541,26 +575,101 @@ async function fetchWeatherData(lat, lon) {
     return response.json();
 }
 
-// Geocode location name
+// Geocode location name (supports city names and zip codes)
 async function geocodeLocation(query) {
-    const params = new URLSearchParams({
-        name: query,
-        count: 5,
-        language: 'en',
-        format: 'json'
-    });
+    const trimmed = query.trim();
+    const isZip = /^\d{5}(-\d{4})?$/.test(trimmed);
 
-    const response = await fetch(`${GEOCODING_API}?${params}`);
-    if (!response.ok) {
-        throw new Error('Failed to geocode location');
+    if (!isZip) {
+        const params = new URLSearchParams({
+            name: trimmed,
+            count: 5,
+            language: 'en',
+            format: 'json'
+        });
+
+        const response = await fetch(`${GEOCODING_API}?${params}`);
+        if (!response.ok) throw new Error('Failed to geocode location');
+        const data = await response.json();
+
+        if (data.results && data.results.length > 0) {
+            return data.results;
+        }
     }
+
+    // For zip codes or when Open-Meteo returns no results, try Nominatim
+    const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(trimmed)}&format=json&limit=5&addressdetails=1`,
+        { headers: { 'User-Agent': 'WeatherWonder (cjpaulphd)' } }
+    );
+    if (!response.ok) throw new Error('Failed to geocode location');
     const data = await response.json();
 
-    if (!data.results || data.results.length === 0) {
+    if (!data || data.length === 0) {
         throw new Error('Location not found');
     }
 
-    return data.results[0];
+    return data.map(r => ({
+        name: r.address ? (r.address.city || r.address.town || r.address.village || r.address.hamlet || r.display_name.split(',')[0]) : r.display_name.split(',')[0],
+        admin1: r.address ? (r.address.state || '') : '',
+        admin2: r.address ? (r.address.county || '') : '',
+        country: r.address ? (r.address.country || '') : '',
+        latitude: parseFloat(r.lat),
+        longitude: parseFloat(r.lon)
+    }));
+}
+
+// Select a geocoded location and load its weather
+function selectLocation(result) {
+    currentLocation = {
+        name: `${result.name}${result.admin1 ? ', ' + result.admin1 : ''}`,
+        latitude: result.latitude,
+        longitude: result.longitude
+    };
+    updateLocationDisplay();
+
+    if (radarMap) {
+        radarMap.remove();
+        radarMap = null;
+        radarLayer = null;
+    }
+
+    loadWeather();
+}
+
+// Show disambiguation list for multiple geocoding results
+function showDisambiguation(results) {
+    const container = document.getElementById('disambiguation-results');
+    container.innerHTML = '<p class="disambiguation-title">Multiple locations found:</p>';
+
+    results.forEach(result => {
+        const item = document.createElement('div');
+        item.className = 'disambiguation-item';
+
+        let label = result.name;
+        if (result.admin1) label += `, ${result.admin1}`;
+        if (result.country) label += `, ${result.country}`;
+
+        item.textContent = label;
+        item.addEventListener('click', () => {
+            selectLocation(result);
+            document.getElementById('location-modal').classList.add('hidden');
+            clearDisambiguation();
+        });
+
+        container.appendChild(item);
+    });
+
+    container.classList.remove('hidden');
+}
+
+// Clear disambiguation results
+function clearDisambiguation() {
+    const container = document.getElementById('disambiguation-results');
+    if (container) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+    }
 }
 
 // Get AM/PM weather codes from hourly data for a specific date
@@ -1271,6 +1380,80 @@ function renderAstroData() {
     `;
 }
 
+// Fetch precipitation history from Open-Meteo (past 7 days)
+async function fetchPrecipHistory(lat, lon) {
+    const params = new URLSearchParams({
+        latitude: lat,
+        longitude: lon,
+        hourly: 'precipitation',
+        past_days: 7,
+        forecast_days: 1,
+        timezone: 'auto'
+    });
+
+    const response = await fetch(`${API_BASE}?${params}`);
+    if (!response.ok) throw new Error('Failed to fetch precipitation history');
+    return response.json();
+}
+
+// Render precipitation history for past 24/48/72/168 hours
+function renderPrecipHistory(data) {
+    const container = document.getElementById('precip-history');
+    if (!container) return;
+
+    const hourly = data.hourly;
+    const now = new Date();
+    const isMetric = getTempUnit() === 'C';
+
+    const periods = [
+        { label: '24 Hours', hours: 24 },
+        { label: '48 Hours', hours: 48 },
+        { label: '72 Hours', hours: 72 },
+        { label: '7 Days', hours: 168 }
+    ];
+
+    // Find the last hour that's <= now
+    let nowIndex = 0;
+    for (let i = 0; i < hourly.time.length; i++) {
+        const t = new Date(hourly.time[i]);
+        if (t <= now) {
+            nowIndex = i;
+        } else {
+            break;
+        }
+    }
+
+    const results = periods.map(period => {
+        let sum = 0;
+        const startIndex = Math.max(0, nowIndex - period.hours + 1);
+        for (let i = startIndex; i <= nowIndex; i++) {
+            sum += hourly.precipitation[i] || 0;
+        }
+
+        let formatted;
+        if (isMetric) {
+            const cm = sum / 10;
+            formatted = `${cm.toFixed(2)} cm`;
+        } else {
+            const inches = sum / 25.4;
+            formatted = `${inches.toFixed(2)}"`;
+        }
+
+        return { label: period.label, value: formatted };
+    });
+
+    container.innerHTML = `
+        <div class="precip-history-grid">
+            ${results.map(r => `
+                <div class="precip-history-item">
+                    <div class="precip-history-label">${r.label}</div>
+                    <div class="precip-history-value">${r.value}</div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
 // Update location display with optional current temperature and feels-like
 function updateLocationDisplay(currentTemp = null, feelsLike = null) {
     const locationName = document.getElementById('location-name');
@@ -1319,6 +1502,18 @@ async function loadWeather() {
         checkWeatherAlerts(weatherData);
         initializeRadar();
         renderAstroData();
+
+        // Fetch and render precipitation history
+        fetchPrecipHistory(currentLocation.latitude, currentLocation.longitude)
+            .then(data => {
+                precipHistoryData = data;
+                renderPrecipHistory(data);
+            })
+            .catch(err => {
+                console.error('Error loading precipitation history:', err);
+                const container = document.getElementById('precip-history');
+                if (container) container.innerHTML = '<div class="error">Precipitation history unavailable</div>';
+            });
 
         // Update last-updated timestamp
         const lastUpdated = document.getElementById('last-updated');
@@ -1686,6 +1881,7 @@ function initializeModal() {
     });
 
     locationDisplay.addEventListener('click', () => {
+        clearDisambiguation();
         modal.classList.remove('hidden');
         locationInput.focus();
     });
@@ -1707,25 +1903,16 @@ function initializeModal() {
         try {
             searchBtn.disabled = true;
             searchBtn.textContent = 'Searching...';
+            clearDisambiguation();
 
-            const result = await geocodeLocation(query);
-            currentLocation = {
-                name: `${result.name}${result.admin1 ? ', ' + result.admin1 : ''}`,
-                latitude: result.latitude,
-                longitude: result.longitude
-            };
+            const results = await geocodeLocation(query);
 
-            updateLocationDisplay();
-            modal.classList.add('hidden');
-
-            // Reset radar map for new location
-            if (radarMap) {
-                radarMap.remove();
-                radarMap = null;
-                radarLayer = null;
+            if (results.length === 1) {
+                selectLocation(results[0]);
+                modal.classList.add('hidden');
+            } else {
+                showDisambiguation(results);
             }
-
-            loadWeather();
 
         } catch (error) {
             alert('Location not found: ' + error.message);
@@ -1866,6 +2053,7 @@ function initializeMenu() {
     // Change location from menu
     menuChangeLocation.addEventListener('click', () => {
         closeMenu();
+        clearDisambiguation();
         document.getElementById('location-modal').classList.remove('hidden');
         document.getElementById('location-input').focus();
     });

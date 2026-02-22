@@ -167,6 +167,16 @@
             </a>
         </section>
 
+        <!-- Precipitation History Section -->
+        <section class="forecast-section" id="precip-history-section">
+            <div class="section-header">
+                <h2>PRECIPITATION HISTORY</h2>
+            </div>
+            <div id="precip-history" class="precip-history-container">
+                <div class="loading">Loading precipitation history</div>
+            </div>
+        </section>
+
         <!-- Astronomical Section -->
         <section class="forecast-section" id="astro-section">
             <div class="section-header">
@@ -213,13 +223,14 @@
             <div class="modal-content">
                 <h3>Enter Location</h3>
                 <div class="input-wrapper">
-                    <input type="text" id="location-input" placeholder="City name or coordinates">
+                    <input type="text" id="location-input" placeholder="City or Zip">
                     <button id="clear-location-input" class="clear-input-btn" type="button">&times;</button>
                 </div>
                 <div class="modal-buttons">
                     <button id="use-current-location" class="btn-secondary">Use Current Location</button>
                     <button id="search-location" class="btn-primary">Search</button>
                 </div>
+                <div id="disambiguation-results" class="disambiguation-results hidden"></div>
                 <button id="close-modal" class="close-btn">&times;</button>
             </div>
         </div>
