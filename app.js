@@ -45,6 +45,7 @@ let currentShareSection = null;
 let radarMap = null;
 let radarLayer = null;
 let precipHistoryData = null;
+let precipHistoricalAvg = null;
 
 // Favorites management with localStorage
 const FAVORITES_KEY = 'weatherwonder_favorites';
@@ -241,7 +242,7 @@ function initializeTempToggle() {
                 reloadLocationTemp();
                 // Re-render precipitation history with new unit
                 if (precipHistoryData) {
-                    renderPrecipHistory(precipHistoryData);
+                    renderPrecipHistory(precipHistoryData, precipHistoricalAvg);
                 }
             }
         });
@@ -1442,8 +1443,78 @@ async function fetchPrecipHistory(lat, lon) {
     return response.json();
 }
 
+// Fetch historical precipitation averages from Open-Meteo Archive API
+// Returns 10-year average precipitation for the same 30-day and 90-day calendar windows
+async function fetchHistoricalPrecipAvg(lat, lon) {
+    const now = new Date();
+    const endYear = now.getFullYear() - 1; // most recent full year with reliable archive data
+    const startYear = endYear - 9; // 10 years of data
+
+    // Define the calendar window: 90 days back from today's month/day
+    // Use the 3-month window (which contains the 1-month window)
+    const threeMonthsAgo = new Date(now);
+    threeMonthsAgo.setDate(threeMonthsAgo.getDate() - 90);
+    const oneMonthAgo = new Date(now);
+    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+
+    const fmt = d => d.toISOString().split('T')[0];
+
+    // Build start/end for the full 10-year span
+    const archiveStart = new Date(startYear, threeMonthsAgo.getMonth(), threeMonthsAgo.getDate());
+    const archiveEnd = new Date(endYear, now.getMonth(), now.getDate());
+
+    const params = new URLSearchParams({
+        latitude: lat,
+        longitude: lon,
+        daily: 'precipitation_sum',
+        start_date: fmt(archiveStart),
+        end_date: fmt(archiveEnd),
+        timezone: 'auto'
+    });
+
+    const response = await fetch(`https://archive-api.open-meteo.com/v1/archive?${params}`);
+    if (!response.ok) throw new Error('Failed to fetch historical precipitation');
+    const data = await response.json();
+
+    const daily = data.daily;
+    const oneMonthTotals = [];
+    const threeMonthTotals = [];
+
+    // For each year, sum precipitation in the matching calendar windows
+    for (let year = startYear; year <= endYear; year++) {
+        const yearEnd = new Date(year, now.getMonth(), now.getDate());
+        const yearOneMonthStart = new Date(yearEnd);
+        yearOneMonthStart.setDate(yearOneMonthStart.getDate() - 30);
+        const yearThreeMonthStart = new Date(yearEnd);
+        yearThreeMonthStart.setDate(yearThreeMonthStart.getDate() - 90);
+
+        let oneMonthSum = 0;
+        let threeMonthSum = 0;
+
+        for (let i = 0; i < daily.time.length; i++) {
+            const d = new Date(daily.time[i] + 'T00:00:00');
+            if (d >= yearThreeMonthStart && d <= yearEnd) {
+                threeMonthSum += daily.precipitation_sum[i] || 0;
+                if (d >= yearOneMonthStart) {
+                    oneMonthSum += daily.precipitation_sum[i] || 0;
+                }
+            }
+        }
+
+        oneMonthTotals.push(oneMonthSum);
+        threeMonthTotals.push(threeMonthSum);
+    }
+
+    const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+
+    return {
+        oneMonthAvg: avg(oneMonthTotals),   // in mm
+        threeMonthAvg: avg(threeMonthTotals) // in mm
+    };
+}
+
 // Render precipitation history for past 24/48/72/168 hours
-function renderPrecipHistory(data) {
+function renderPrecipHistory(data, histAvg) {
     const container = document.getElementById('precip-history');
     if (!container) return;
 
@@ -1456,8 +1527,8 @@ function renderPrecipHistory(data) {
         { label: '48 Hours', hours: 48 },
         { label: '72 Hours', hours: 72 },
         { label: '7 Days', hours: 168 },
-        { label: '1 Month', hours: 720 },
-        { label: '3 Months', hours: 2160 }
+        { label: '1 Month', hours: 720, avgKey: 'oneMonthAvg' },
+        { label: '3 Months', hours: 2160, avgKey: 'threeMonthAvg' }
     ];
 
     // Find the last hour that's <= now
@@ -1487,7 +1558,34 @@ function renderPrecipHistory(data) {
             formatted = `${inches.toFixed(2)}"`;
         }
 
-        return { label: period.label, value: formatted };
+        // Build historical average comparison HTML for 1 Month and 3 Months
+        let avgHtml = '';
+        if (period.avgKey && histAvg && histAvg[period.avgKey] != null) {
+            const avgMm = histAvg[period.avgKey];
+            let avgFormatted;
+            if (isMetric) {
+                avgFormatted = `${(avgMm / 10).toFixed(2)} cm`;
+            } else {
+                avgFormatted = `${(avgMm / 25.4).toFixed(2)}"`;
+            }
+
+            let diffHtml = '';
+            if (avgMm > 0) {
+                const pctDiff = ((sum - avgMm) / avgMm) * 100;
+                const absPct = Math.abs(Math.round(pctDiff));
+                if (pctDiff >= 5) {
+                    diffHtml = `<div class="precip-history-diff precip-above">+${absPct}% above</div>`;
+                } else if (pctDiff <= -5) {
+                    diffHtml = `<div class="precip-history-diff precip-below">&minus;${absPct}% below</div>`;
+                } else {
+                    diffHtml = `<div class="precip-history-diff precip-near">Near avg</div>`;
+                }
+            }
+
+            avgHtml = `<div class="precip-history-avg">vs. ${avgFormatted} avg</div>${diffHtml}`;
+        }
+
+        return { label: period.label, value: formatted, avgHtml };
     });
 
     container.innerHTML = `
@@ -1496,6 +1594,7 @@ function renderPrecipHistory(data) {
                 <div class="precip-history-item">
                     <div class="precip-history-label">${r.label}</div>
                     <div class="precip-history-value">${r.value}</div>
+                    ${r.avgHtml}
                 </div>
             `).join('')}
         </div>
@@ -1551,11 +1650,15 @@ async function loadWeather() {
         initializeRadar();
         renderAstroData();
 
-        // Fetch and render precipitation history
-        fetchPrecipHistory(currentLocation.latitude, currentLocation.longitude)
-            .then(data => {
+        // Fetch and render precipitation history + historical averages
+        Promise.all([
+            fetchPrecipHistory(currentLocation.latitude, currentLocation.longitude),
+            fetchHistoricalPrecipAvg(currentLocation.latitude, currentLocation.longitude).catch(() => null)
+        ])
+            .then(([data, histAvg]) => {
                 precipHistoryData = data;
-                renderPrecipHistory(data);
+                precipHistoricalAvg = histAvg;
+                renderPrecipHistory(data, histAvg);
             })
             .catch(err => {
                 console.error('Error loading precipitation history:', err);
@@ -2165,11 +2268,12 @@ function initializeInstallButton() {
     // Don't show if already installed as PWA
     if (isInStandaloneMode()) return;
 
-    // On iOS, show the button with manual instructions
+    // On iOS, show the button and open the step-by-step instruction modal
     if (isIOS()) {
         btn.classList.remove('hidden');
         btn.addEventListener('click', () => {
-            showToast('Tap the Share button (box with arrow) then "Add to Home Screen"');
+            const modal = document.getElementById('ios-install-modal');
+            if (modal) modal.classList.remove('hidden');
         });
         return;
     }
@@ -2191,6 +2295,66 @@ function initializeInstallButton() {
     });
 }
 
+function initializeIOSInstallModal() {
+    const modal = document.getElementById('ios-install-modal');
+    if (!modal) return;
+    const closeX = document.getElementById('close-ios-install-x');
+    const closeBtn = document.getElementById('close-ios-install');
+    const hide = () => modal.classList.add('hidden');
+    if (closeX) closeX.addEventListener('click', hide);
+    if (closeBtn) closeBtn.addEventListener('click', hide);
+    modal.addEventListener('click', (e) => { if (e.target === modal) hide(); });
+}
+
+function initializeShareAppModal() {
+    const btn = document.getElementById('share-app-btn');
+    const modal = document.getElementById('share-app-modal');
+    if (!btn || !modal) return;
+
+    const appUrl = 'https://cjpaulphd.github.io/weatherwonder/';
+    const closeBtn = document.getElementById('close-share-app-modal');
+    const copyBtn = document.getElementById('copy-app-url');
+    const nativeBtn = document.getElementById('share-app-native');
+
+    btn.addEventListener('click', () => modal.classList.remove('hidden'));
+
+    const hide = () => modal.classList.add('hidden');
+    if (closeBtn) closeBtn.addEventListener('click', hide);
+    modal.addEventListener('click', (e) => { if (e.target === modal) hide(); });
+
+    if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(appUrl).then(() => {
+                copyBtn.textContent = 'Copied!';
+                copyBtn.classList.add('success');
+                setTimeout(() => {
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.classList.remove('success');
+                }, 2000);
+            }).catch(() => showToast('Failed to copy link'));
+        });
+    }
+
+    if (nativeBtn) {
+        if (navigator.share) {
+            nativeBtn.addEventListener('click', async () => {
+                try {
+                    await navigator.share({
+                        title: 'WeatherWonder',
+                        text: 'Check out WeatherWonder — a free, open-source weather dashboard with radar, precipitation history, and more!',
+                        url: appUrl
+                    });
+                    hide();
+                } catch (e) {
+                    if (e.name !== 'AbortError') showToast('Failed to share');
+                }
+            });
+        } else {
+            nativeBtn.style.display = 'none';
+        }
+    }
+}
+
 // Register service worker
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -2207,7 +2371,9 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeShareModal,
         initializeMenu,
         initializeAlertDetailModal,
-        initializeInstallButton
+        initializeInstallButton,
+        initializeIOSInstallModal,
+        initializeShareAppModal
     ];
     inits.forEach(fn => {
         try { fn(); } catch (e) { console.error('Init error in ' + fn.name + ':', e); }

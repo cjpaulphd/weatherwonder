@@ -149,6 +149,16 @@ body {
     border-bottom: 1px solid var(--bg-card);
 }
 
+.menu-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.menu-logo {
+    border-radius: 6px;
+}
+
 .menu-header h3 {
     color: var(--accent-blue);
     font-size: 18px;
@@ -1167,11 +1177,42 @@ body {
     line-height: 1;
 }
 
+.share-app-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 18px;
+    margin-bottom: 14px;
+    background-color: var(--bg-card);
+    color: var(--text-secondary);
+    border: 1px solid var(--bg-secondary);
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.share-app-btn:hover {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
 .footer-tagline {
     font-size: 12px;
     color: var(--text-secondary);
     letter-spacing: 0.5px;
     margin-bottom: 6px;
+}
+
+.footer-tagline-link {
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.footer-tagline-link:hover {
+    text-decoration: underline;
 }
 
 .footer-attribution {
@@ -1186,6 +1227,130 @@ body {
 
 .footer-attribution a:hover {
     text-decoration: underline;
+}
+
+.footer-license {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.footer-license a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.footer-license a:hover {
+    text-decoration: underline;
+}
+
+/* iOS Install Instructions Modal */
+.ios-install-content {
+    text-align: center;
+    padding: 28px 24px;
+}
+
+.ios-install-subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+}
+
+.ios-install-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.ios-install-step {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px;
+    background-color: var(--bg-primary);
+    border-radius: 10px;
+}
+
+.ios-step-number {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--accent-blue);
+    color: var(--bg-primary);
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.ios-step-text {
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--text-primary);
+}
+
+.ios-share-icon {
+    display: inline-flex;
+    vertical-align: middle;
+    color: var(--accent-blue);
+    margin: 0 2px;
+}
+
+.ios-install-note {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 18px;
+    font-style: italic;
+}
+
+.ios-install-dismiss {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+}
+
+/* Share App Modal */
+.share-app-modal-content {
+    text-align: center;
+    padding: 28px 24px;
+}
+
+.share-app-subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 18px;
+}
+
+.share-app-url-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.share-app-url-input {
+    flex: 1;
+    padding: 10px 12px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--bg-card);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 12px;
+    min-width: 0;
+}
+
+.share-app-copy-btn {
+    flex-shrink: 0;
+    padding: 10px 16px;
+}
+
+.share-app-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
 /* Disambiguation Results */
@@ -1267,6 +1432,30 @@ body {
     font-size: 18px;
     font-weight: 600;
     color: var(--precip-blue);
+}
+
+.precip-history-avg {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.precip-history-diff {
+    font-size: 10px;
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+.precip-above {
+    color: #ef6c00;
+}
+
+.precip-below {
+    color: #42a5f5;
+}
+
+.precip-near {
+    color: var(--text-secondary);
 }
 
 @media (max-width: 480px) {

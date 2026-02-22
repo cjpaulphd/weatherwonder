@@ -57,7 +57,14 @@
         <div id="menu-overlay" class="menu-overlay hidden"></div>
         <nav id="menu-panel" class="menu-panel hidden">
             <div class="menu-header">
-                <h3>WeatherWonder</h3>
+                <div class="menu-brand">
+                    <svg class="menu-logo" width="28" height="28" viewBox="0 0 512 512">
+                        <rect width="512" height="512" rx="108" fill="var(--bg-card)"/>
+                        <path d="M72 148 L128 364 L184 220 L240 364 L296 148" fill="none" stroke="var(--accent-blue)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M216 180 L272 396 L328 252 L384 396 L440 180" fill="none" stroke="var(--accent-blue)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+                    </svg>
+                    <h3>WeatherWonder</h3>
+                </div>
                 <button id="close-menu" class="close-btn">&times;</button>
             </div>
             <div class="menu-section">
@@ -195,6 +202,14 @@
                 </svg>
                 <span id="install-btn-text">Add to Home Screen</span>
             </button>
+            <button id="share-app-btn" class="share-app-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                    <polyline points="16 6 12 2 8 6"></polyline>
+                    <line x1="12" y1="2" x2="12" y2="15"></line>
+                </svg>
+                <span>Share This App</span>
+            </button>
             <div class="footer-toggles">
                 <button id="theme-toggle" class="theme-toggle">
                     <span class="theme-toggle-icon" id="theme-toggle-icon">☀️</span>
@@ -209,14 +224,73 @@
                     <span id="time-toggle-label">24hr</span>
                 </button>
             </div>
-            <div class="footer-tagline">WeatherWonder by cjpaulphd</div>
+            <div class="footer-tagline">
+                <a href="https://github.com/cjpaulphd/weatherwonder" target="_blank" rel="noopener" class="footer-tagline-link">WeatherWonder</a> by cjpaulphd
+            </div>
             <div class="footer-attribution">
                 Data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>
                 &middot; <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>
                 &middot; <a href="https://www.weather.gov/" target="_blank" rel="noopener">NWS</a>
                 &middot; <a href="https://github.com/mourner/suncalc" target="_blank" rel="noopener">SunCalc</a>
             </div>
+            <div class="footer-license">
+                <a href="https://github.com/cjpaulphd/weatherwonder/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a> &middot; Open Source
+            </div>
         </footer>
+
+        <!-- iOS Install Instructions Modal -->
+        <div id="ios-install-modal" class="modal hidden">
+            <div class="modal-content ios-install-content">
+                <h3>Add to Home Screen</h3>
+                <p class="ios-install-subtitle">Install WeatherWonder as an app on your device</p>
+                <div class="ios-install-steps">
+                    <div class="ios-install-step">
+                        <div class="ios-step-number">1</div>
+                        <div class="ios-step-text">
+                            Tap the <strong>Share</strong> button
+                            <span class="ios-share-icon">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                                    <polyline points="16 6 12 2 8 6"></polyline>
+                                    <line x1="12" y1="2" x2="12" y2="15"></line>
+                                </svg>
+                            </span>
+                            in Safari's toolbar
+                        </div>
+                    </div>
+                    <div class="ios-install-step">
+                        <div class="ios-step-number">2</div>
+                        <div class="ios-step-text">Scroll down and tap <strong>"Add to Home Screen"</strong></div>
+                    </div>
+                    <div class="ios-install-step">
+                        <div class="ios-step-number">3</div>
+                        <div class="ios-step-text">Tap <strong>"Add"</strong> to confirm</div>
+                    </div>
+                </div>
+                <p class="ios-install-note">The app will appear on your home screen and work offline.</p>
+                <button id="close-ios-install" class="btn-primary ios-install-dismiss">Got It</button>
+                <button id="close-ios-install-x" class="close-btn">&times;</button>
+            </div>
+        </div>
+
+        <!-- Share App Modal -->
+        <div id="share-app-modal" class="modal hidden">
+            <div class="modal-content share-app-modal-content">
+                <h3>Share WeatherWonder</h3>
+                <p class="share-app-subtitle">Send this free weather app to friends &amp; family</p>
+                <div class="share-app-url-row">
+                    <input type="text" id="share-app-url" class="share-app-url-input" value="https://cjpaulphd.github.io/weatherwonder/" readonly>
+                    <button id="copy-app-url" class="btn-primary share-app-copy-btn">Copy</button>
+                </div>
+                <div class="share-app-options">
+                    <button id="share-app-native" class="share-option-btn share-primary">
+                        <span class="share-icon">📤</span>
+                        <span>Share via...</span>
+                    </button>
+                </div>
+                <button id="close-share-app-modal" class="close-btn">&times;</button>
+            </div>
+        </div>
 
         <!-- Location Search Modal -->
         <div id="location-modal" class="modal hidden">
