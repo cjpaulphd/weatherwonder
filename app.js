@@ -2268,11 +2268,12 @@ function initializeInstallButton() {
     // Don't show if already installed as PWA
     if (isInStandaloneMode()) return;
 
-    // On iOS, show the button with manual instructions
+    // On iOS, show the button and open the step-by-step instruction modal
     if (isIOS()) {
         btn.classList.remove('hidden');
         btn.addEventListener('click', () => {
-            showToast('Tap the Share button (box with arrow) then "Add to Home Screen"');
+            const modal = document.getElementById('ios-install-modal');
+            if (modal) modal.classList.remove('hidden');
         });
         return;
     }
@@ -2294,6 +2295,66 @@ function initializeInstallButton() {
     });
 }
 
+function initializeIOSInstallModal() {
+    const modal = document.getElementById('ios-install-modal');
+    if (!modal) return;
+    const closeX = document.getElementById('close-ios-install-x');
+    const closeBtn = document.getElementById('close-ios-install');
+    const hide = () => modal.classList.add('hidden');
+    if (closeX) closeX.addEventListener('click', hide);
+    if (closeBtn) closeBtn.addEventListener('click', hide);
+    modal.addEventListener('click', (e) => { if (e.target === modal) hide(); });
+}
+
+function initializeShareAppModal() {
+    const btn = document.getElementById('share-app-btn');
+    const modal = document.getElementById('share-app-modal');
+    if (!btn || !modal) return;
+
+    const appUrl = 'https://cjpaulphd.github.io/weatherwonder/';
+    const closeBtn = document.getElementById('close-share-app-modal');
+    const copyBtn = document.getElementById('copy-app-url');
+    const nativeBtn = document.getElementById('share-app-native');
+
+    btn.addEventListener('click', () => modal.classList.remove('hidden'));
+
+    const hide = () => modal.classList.add('hidden');
+    if (closeBtn) closeBtn.addEventListener('click', hide);
+    modal.addEventListener('click', (e) => { if (e.target === modal) hide(); });
+
+    if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(appUrl).then(() => {
+                copyBtn.textContent = 'Copied!';
+                copyBtn.classList.add('success');
+                setTimeout(() => {
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.classList.remove('success');
+                }, 2000);
+            }).catch(() => showToast('Failed to copy link'));
+        });
+    }
+
+    if (nativeBtn) {
+        if (navigator.share) {
+            nativeBtn.addEventListener('click', async () => {
+                try {
+                    await navigator.share({
+                        title: 'WeatherWonder',
+                        text: 'Check out WeatherWonder — a free, open-source weather dashboard with radar, precipitation history, and more!',
+                        url: appUrl
+                    });
+                    hide();
+                } catch (e) {
+                    if (e.name !== 'AbortError') showToast('Failed to share');
+                }
+            });
+        } else {
+            nativeBtn.style.display = 'none';
+        }
+    }
+}
+
 // Register service worker
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -2310,7 +2371,9 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeShareModal,
         initializeMenu,
         initializeAlertDetailModal,
-        initializeInstallButton
+        initializeInstallButton,
+        initializeIOSInstallModal,
+        initializeShareAppModal
     ];
     inits.forEach(fn => {
         try { fn(); } catch (e) { console.error('Init error in ' + fn.name + ':', e); }
