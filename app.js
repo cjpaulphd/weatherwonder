@@ -1582,7 +1582,7 @@ function renderPrecipHistory(data, histAvg) {
                 }
             }
 
-            avgHtml = `<div class="precip-history-avg">vs. ${avgFormatted} avg</div>${diffHtml}`;
+            avgHtml = `<div class="precip-history-avg">vs. ${avgFormatted} 10-yr avg</div>${diffHtml}`;
         }
 
         return { label: period.label, value: formatted, avgHtml };

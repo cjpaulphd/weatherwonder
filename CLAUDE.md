@@ -20,7 +20,8 @@ WeatherWonder is a client-side weather dashboard deployed on GitHub Pages. It's 
 | `styles.css` | Dark theme, responsive layout, component styles (~1000 lines) |
 | `manifest.json` | PWA web app manifest (name, icons, theme) |
 | `sw.js` | Service worker for offline shell caching |
-| `icon.svg` | App icon (used in manifest and as Apple touch icon) |
+| `icon.svg` | App icon — overlapping double-W logo (used in manifest and as Apple touch icon) |
+| `LICENSE` | MIT License |
 
 ## APIs Used (no keys required)
 
@@ -45,7 +46,10 @@ Leaflet map is initialized once and reused. When changing locations, the map mus
 The app fetches real NWS alerts from `api.weather.gov/alerts/active?point={lat},{lon}`. If the NWS API is unavailable (non-US locations, network issues), it falls back to local weather-code-based detection using Open-Meteo's hourly `weather_code` values.
 
 ### PWA / Add to Home Screen
-The app is installable as a PWA. `manifest.json` defines the app metadata, `sw.js` caches the shell assets with a network-first strategy. On Chrome/Android the `beforeinstallprompt` event is captured and re-triggered from the footer install button. On iOS, the button shows a toast with manual instructions (tap Share > Add to Home Screen). The button hides itself if the app is already running in standalone mode.
+The app is installable as a PWA. `manifest.json` defines the app metadata, `sw.js` caches the shell assets with a network-first strategy. On Chrome/Android the `beforeinstallprompt` event is captured and re-triggered from the footer install button. On iOS, the button opens a step-by-step instruction modal (not a toast) showing how to tap Share > Add to Home Screen. The button hides itself if the app is already running in standalone mode.
+
+### Branding / Footer
+The footer includes: install button, "Share This App" button (opens modal with copy-URL + native share), toggle buttons (theme/temp/time), tagline linking to the GitHub repo, data attribution links, and MIT license line. The side menu header shows an inline WW logo mark next to the app name.
 
 ## Deployment
 
