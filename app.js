@@ -1379,7 +1379,7 @@ function renderAstroData() {
     const moonTimes = SunCalc.getMoonTimes(utcNow, lat, lng);
 
     // Get moon illumination
-    const moonIllum = SunCalc.getMoonIllumination(now);
+    const moonIllum = SunCalc.getMoonIllumination(utcNow);
     const moonPhase = getMoonPhaseInfo(moonIllum.phase);
     const illuminationPct = Math.round(moonIllum.fraction * 100);
 
