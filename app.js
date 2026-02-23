@@ -516,8 +516,12 @@ function getTempUnitLabel() {
     return getTempUnit() === 'C' ? '°C' : '°F';
 }
 
-// Format precipitation amount
+// Format precipitation amount (mm in metric, inches in imperial)
 function formatPrecip(mm) {
+    if (getTempUnit() === 'C') {
+        if (mm < 0.1) return '';
+        return `${mm.toFixed(1)} mm`;
+    }
     const inches = mm / 25.4;
     if (inches < 0.01) return '';
     return `${inches.toFixed(2)}"`;
@@ -527,6 +531,14 @@ function formatPrecip(mm) {
 function getWindDirection(deg) {
     const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
     return dirs[Math.round(deg / 22.5) % 16];
+}
+
+// Format wind speed in current unit (API returns mph; convert to km/h in metric mode)
+function formatWindSpeed(mph) {
+    if (getTempUnit() === 'C') {
+        return `${Math.round(mph * 1.60934)} km/h`;
+    }
+    return `${Math.round(mph)} mph`;
 }
 
 // Get day name
@@ -851,7 +863,7 @@ function renderDailyForecast(data) {
                 <div class="pm-icon" title="Evening">${pmIcon}</div>
             </div>
             <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
-            <div class="wind-info">${getWindDirection(windDir)} ${Math.round(windSpeed)}</div>
+            <div class="wind-info">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
             ${precipProb >= 10 ? `
                 <div class="precip-info ${precipClass}">
                     ${hasSnow ? '❄' : '💧'} ${precipProb}%
@@ -921,7 +933,7 @@ function renderHourlyForecast(data) {
             <div class="temp">${temp}${getTempUnitLabel()}</div>
             ${showWindchill ? `<div class="windchill">Feels ${apparentTemp}°</div>` : ''}
             <div class="wind">
-                ${getWindDirection(windDir)} ${Math.round(windSpeed)}
+                ${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}
             </div>
             ${precipProb >= 10 ? `
                 <div class="precip-chance ${precipClass}">
