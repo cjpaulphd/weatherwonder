@@ -1490,3 +1490,182 @@ body {
         flex: 1;
     }
 }
+
+/* CIT2000 Easter Egg Button */
+.cit2000-btn {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 4px 12px;
+    background: transparent;
+    border: 1px solid var(--bg-secondary);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 9px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+    cursor: pointer;
+    opacity: 0.3;
+    transition: opacity 0.3s;
+}
+
+.cit2000-btn:hover {
+    opacity: 0.7;
+}
+
+/* CIT2000 Pahooootie Banner */
+.cit2000-banner {
+    margin-top: 10px;
+    padding: 8px 16px;
+    font-size: 24px;
+    font-weight: 900;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, #ff0000, #ff7700, #ffff00, #00ff00, #0077ff, #8800ff, #ff0000);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: rainbow-text-scroll 3s linear infinite;
+}
+
+.cit2000-banner.hidden {
+    display: none;
+}
+
+@keyframes rainbow-text-scroll {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
+
+/* CIT2000 Rainbow Theme */
+[data-theme="cit2000"] {
+    --bg-primary: #1a0a2e;
+    --bg-secondary: #2a1040;
+    --bg-card: #3a1850;
+    --text-primary: #ffffff;
+    --text-secondary: #cc99ff;
+    --accent-blue: #ff00ff;
+    --accent-red: #ff4444;
+    --precip-blue: #00ffff;
+    --precip-green: #00ff88;
+    --temp-red: #ff6699;
+    --snow-color: #ff00ff;
+    --rain-color: #00ccff;
+}
+
+[data-theme="cit2000"] body,
+[data-theme="cit2000"] .app-container {
+    background: linear-gradient(180deg, #1a0a2e 0%, #0a1a3e 25%, #1a0a2e 50%, #2a0a1e 75%, #1a0a2e 100%);
+    background-size: 100% 400%;
+    animation: cit2000-bg-drift 20s ease-in-out infinite;
+}
+
+@keyframes cit2000-bg-drift {
+    0%, 100% { background-position: 0% 0%; }
+    50% { background-position: 0% 100%; }
+}
+
+[data-theme="cit2000"] .header {
+    background: linear-gradient(90deg, #ff000033, #ff770033, #ffff0033, #00ff0033, #0077ff33, #8800ff33);
+    background-size: 300% 100%;
+    animation: rainbow-slide 4s linear infinite;
+}
+
+@keyframes rainbow-slide {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 300% 50%; }
+}
+
+[data-theme="cit2000"] .section-header h2 {
+    background: linear-gradient(90deg, #ff0000, #ff7700, #ffff00, #00ff00, #0077ff, #8800ff);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: rainbow-text-scroll 3s linear infinite;
+}
+
+[data-theme="cit2000"] .forecast-section {
+    border: 1px solid;
+    border-image: linear-gradient(90deg, #ff0000, #ff7700, #ffff00, #00ff00, #0077ff, #8800ff) 1;
+}
+
+[data-theme="cit2000"] .daily-card {
+    background: linear-gradient(135deg, #2a1040, #1a2040);
+    border: 1px solid #ff00ff44;
+}
+
+[data-theme="cit2000"] .daily-card:hover {
+    border-color: #ff00ff;
+    box-shadow: 0 0 12px #ff00ff44;
+}
+
+[data-theme="cit2000"] .hourly-card {
+    background: linear-gradient(135deg, #1a2040, #2a1040);
+    border: 1px solid #00ffff44;
+}
+
+[data-theme="cit2000"] .theme-toggle,
+[data-theme="cit2000"] .share-app-btn {
+    border-color: #ff00ff44;
+}
+
+[data-theme="cit2000"] .theme-toggle:hover,
+[data-theme="cit2000"] .share-app-btn:hover {
+    background: #ff00ff22;
+    border-color: #ff00ff;
+}
+
+[data-theme="cit2000"] .cit2000-btn {
+    opacity: 1;
+    border-color: #ff00ff;
+    color: #ff00ff;
+    font-size: 11px;
+    animation: cit2000-btn-glow 2s ease-in-out infinite;
+}
+
+@keyframes cit2000-btn-glow {
+    0%, 100% { box-shadow: 0 0 4px #ff00ff44; }
+    50% { box-shadow: 0 0 16px #ff00ff88; }
+}
+
+[data-theme="cit2000"] .footer-tagline-link {
+    background: linear-gradient(90deg, #ff0000, #ff7700, #ffff00, #00ff00, #0077ff, #8800ff);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: rainbow-text-scroll 3s linear infinite;
+}
+
+[data-theme="cit2000"] .astro-group {
+    background: linear-gradient(135deg, #2a1040, #1a2050);
+    border: 1px solid #8800ff44;
+}
+
+[data-theme="cit2000"] .precip-history-item {
+    background: linear-gradient(135deg, #1a2050, #2a1040);
+    border: 1px solid #00ffff33;
+}
+
+[data-theme="cit2000"] .radar-container {
+    border: 1px solid #ff00ff44;
+}
+
+[data-theme="cit2000"] .install-btn {
+    background: linear-gradient(90deg, #ff00ff, #00ffff);
+}
+
+[data-theme="cit2000"] .btn-primary {
+    background: linear-gradient(90deg, #ff00ff, #8800ff);
+}
+
+[data-theme="cit2000"] #location-name {
+    background: linear-gradient(90deg, #ff00ff, #00ffff, #ffff00, #ff00ff);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: rainbow-text-scroll 4s linear infinite;
+}
