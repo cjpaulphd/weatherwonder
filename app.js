@@ -50,6 +50,88 @@ let radarLayer = null;
 let precipHistoryData = null;
 let precipHistoricalAvg = null;
 
+// CIT2000 Easter Egg Mode
+const CIT2000_KEY = 'weatherwonder_cit2000';
+
+function isCIT2000() {
+    try {
+        return localStorage.getItem(CIT2000_KEY) === 'on';
+    } catch (e) {
+        return false;
+    }
+}
+
+function setCIT2000(on) {
+    try {
+        localStorage.setItem(CIT2000_KEY, on ? 'on' : 'off');
+    } catch (e) {}
+}
+
+function applyCIT2000(on) {
+    const banner = document.getElementById('cit2000-banner');
+    // Section header renames for fun
+    const sectionMap = {
+        'daily-section': { normal: 'DAILY FORECAST', fun: 'DAILY PAHOOOOTIE FORECAST' },
+        'hourly-section': { normal: 'HOURLY FORECAST', fun: 'HOURLY VIBE CHECK' },
+        'radar-section': { normal: 'DOPPLER RADAR (50 mi)', fun: 'DOPPLER RADAR (80,467,200,000 µm)' },
+        'precip-history-section': { normal: 'PRECIPITATION HISTORY', fun: 'SKY JUICE HISTORY' },
+        'astro-section': { normal: 'SUN & MOON', fun: 'SPACE ORBS' }
+    };
+    if (on) {
+        document.documentElement.setAttribute('data-theme', 'cit2000');
+        if (banner) banner.classList.remove('hidden');
+        document.title = 'WeatherWonder CIT2000 - Pahooootie Edition';
+        Object.entries(sectionMap).forEach(([id, texts]) => {
+            const section = document.getElementById(id);
+            if (section) {
+                const h2 = section.querySelector('.section-header h2');
+                if (h2) h2.textContent = texts.fun;
+            }
+        });
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        if (banner) banner.classList.add('hidden');
+        document.title = 'WeatherWonder - Precipitation Forecast';
+        Object.entries(sectionMap).forEach(([id, texts]) => {
+            const section = document.getElementById(id);
+            if (section) {
+                const h2 = section.querySelector('.section-header h2');
+                if (h2) h2.textContent = texts.normal;
+            }
+        });
+        // Restore the user's actual theme
+        const theme = getEffectiveTheme();
+        applyTheme(theme);
+    }
+}
+
+function toggleCIT2000() {
+    const on = !isCIT2000();
+    setCIT2000(on);
+    applyCIT2000(on);
+    // Re-render everything with the new units
+    if (weatherData) {
+        renderDailyForecast(weatherData);
+        renderHourlyForecast(weatherData);
+        renderChart(weatherData);
+        reloadLocationTemp();
+        if (precipHistoryData) {
+            renderPrecipHistory(precipHistoryData, precipHistoricalAvg);
+        }
+    }
+}
+
+function initializeCIT2000() {
+    const btn = document.getElementById('cit2000-btn');
+    if (btn) {
+        btn.addEventListener('click', toggleCIT2000);
+    }
+    // Restore state on load
+    if (isCIT2000()) {
+        applyCIT2000(true);
+    }
+}
+
 // Favorites management with localStorage
 const FAVORITES_KEY = 'weatherwonder_favorites';
 
@@ -490,6 +572,40 @@ const weatherCodes = {
     99: { icon: '⛈️', desc: 'Thunderstorm with heavy hail' }
 };
 
+// CIT2000 silly weather descriptions
+const cit2000Descs = {
+    0: 'Aggressive sunshine',
+    1: 'Suspiciously clear',
+    2: 'Clouds plotting something',
+    3: 'Sky fully loaded',
+    45: 'Ghost weather',
+    48: 'Extra spooky ghost weather',
+    51: 'Sky is misting you',
+    53: 'Medium sky juice',
+    55: 'Maximum sky juice',
+    61: 'Rain (water edition)',
+    63: 'Serious rain business',
+    65: 'Sky waterfall activated',
+    71: 'Frozen confetti',
+    73: 'Frozen confetti deluxe',
+    75: 'Snow apocalypse',
+    77: 'Tiny ice pellet party',
+    80: 'Surprise water attack',
+    81: 'Rain ambush',
+    82: 'Rain boss fight',
+    85: 'Snow surprise',
+    86: 'Snow boss fight',
+    95: 'Zeus is angry',
+    96: 'Zeus throwing ice cubes',
+    99: 'Zeus rage mode'
+};
+
+function getWeatherDesc(code) {
+    if (isCIT2000() && cit2000Descs[code]) return cit2000Descs[code];
+    const weather = weatherCodes[code] || { icon: '❓', desc: 'Unknown' };
+    return weather.desc;
+}
+
 // Get weather icon from code
 function getWeatherIcon(code, isNight = false) {
     const weather = weatherCodes[code] || { icon: '❓', desc: 'Unknown' };
@@ -506,6 +622,10 @@ function isSnow(code) {
 
 // Format temperature (returns just the number in current unit)
 function formatTempValue(temp) {
+    if (isCIT2000()) {
+        // Kelvin: Celsius + 273.15
+        return Math.round(temp + 273.15);
+    }
     if (getTempUnit() === 'C') {
         return Math.round(temp);
     }
@@ -514,11 +634,17 @@ function formatTempValue(temp) {
 
 // Get temperature unit label
 function getTempUnitLabel() {
+    if (isCIT2000()) return ' K';
     return getTempUnit() === 'C' ? '°C' : '°F';
 }
 
-// Format precipitation amount (mm in metric, inches in imperial)
+// Format precipitation amount (mm in metric, inches in imperial, microns in CIT2000)
 function formatPrecip(mm) {
+    if (isCIT2000()) {
+        const microns = mm * 1000;
+        if (microns < 100) return '';
+        return `${Math.round(microns).toLocaleString()} µm`;
+    }
     if (getTempUnit() === 'C') {
         if (mm < 0.1) return '';
         return `${mm.toFixed(1)} mm`;
@@ -534,8 +660,13 @@ function getWindDirection(deg) {
     return dirs[Math.round(deg / 22.5) % 16];
 }
 
-// Format wind speed in current unit (API returns mph; convert to km/h in metric mode)
+// Format wind speed in current unit (API returns mph; convert to km/h in metric mode, µm/s in CIT2000)
 function formatWindSpeed(mph) {
+    if (isCIT2000()) {
+        // 1 mph = 447,040 µm/s
+        const microns = Math.round(mph * 447040);
+        return `${microns.toLocaleString()} µm/s`;
+    }
     if (getTempUnit() === 'C') {
         return `${Math.round(mph * 1.60934)} km/h`;
     }
@@ -958,12 +1089,13 @@ function renderHourlyForecast(data) {
         // Show windchill if it differs from actual temp by more than 2 degrees
         const showWindchill = Math.abs(temp - apparentTemp) > 2;
 
+        const feelsLabel = isCIT2000() ? 'Vibes' : 'Feels';
         card.innerHTML = `
             ${dayLabel}
             <div class="hour">${formatHour(date)}</div>
             <div class="weather-icon">${getWeatherIcon(weatherCode, isNight)}</div>
             <div class="temp">${temp}${getTempUnitLabel()}</div>
-            ${showWindchill ? `<div class="windchill">Feels ${apparentTemp}°</div>` : ''}
+            ${showWindchill ? `<div class="windchill">${feelsLabel} ${apparentTemp}${isCIT2000() ? ' K' : '°'}</div>` : ''}
             <div class="wind">
                 ${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}
             </div>
@@ -1128,7 +1260,7 @@ function renderChart(data) {
     for (let i = startIndex; i < endIndex; i++) {
         const date = new Date(hourly.time[i]);
         labels.push(date);
-        temps.push(getTempUnit() === 'C' ? hourly.temperature_2m[i] : (hourly.temperature_2m[i] * 9/5) + 32);
+        temps.push(isCIT2000() ? hourly.temperature_2m[i] + 273.15 : (getTempUnit() === 'C' ? hourly.temperature_2m[i] : (hourly.temperature_2m[i] * 9/5) + 32));
         precipProbs.push(hourly.precipitation_probability[i]);
         precipAmounts.push(hourly.precipitation[i] / 25.4);
         isDayFlags.push(hourly.is_day[i]);
@@ -1619,6 +1751,7 @@ function renderPrecipHistory(data, histAvg) {
     const hourly = data.hourly;
     const now = getLocationNow();
     const isMetric = getTempUnit() === 'C';
+    const isCit = isCIT2000();
 
     const periods = [
         { label: '24 Hours', hours: 24 },
@@ -1648,7 +1781,10 @@ function renderPrecipHistory(data, histAvg) {
         }
 
         let formatted;
-        if (isMetric) {
+        if (isCit) {
+            const microns = sum * 1000;
+            formatted = `${Math.round(microns).toLocaleString()} µm`;
+        } else if (isMetric) {
             formatted = `${sum.toFixed(1)} mm`;
         } else {
             const inches = sum / 25.4;
@@ -1660,7 +1796,9 @@ function renderPrecipHistory(data, histAvg) {
         if (period.avgKey && histAvg && histAvg[period.avgKey] != null) {
             const avgMm = histAvg[period.avgKey];
             let avgFormatted;
-            if (isMetric) {
+            if (isCit) {
+                avgFormatted = `${Math.round(avgMm * 1000).toLocaleString()} µm`;
+            } else if (isMetric) {
                 avgFormatted = `${avgMm.toFixed(1)} mm`;
             } else {
                 avgFormatted = `${(avgMm / 25.4).toFixed(2)}"`;
@@ -1704,7 +1842,7 @@ function updateLocationDisplay(currentTemp = null, feelsLike = null) {
     if (currentTemp !== null) {
         let display = `${currentLocation.name}: ${currentTemp}${getTempUnitLabel()}`;
         if (feelsLike !== null && Math.abs(currentTemp - feelsLike) > 2) {
-            display += ` (feels ${feelsLike}°)`;
+            display += isCIT2000() ? ` (vibes ${feelsLike} K)` : ` (feels ${feelsLike}°)`;
         }
         locationName.textContent = display;
     } else {
@@ -2482,7 +2620,8 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeAlertDetailModal,
         initializeInstallButton,
         initializeIOSInstallModal,
-        initializeShareAppModal
+        initializeShareAppModal,
+        initializeCIT2000
     ];
     inits.forEach(fn => {
         try { fn(); } catch (e) { console.error('Init error in ' + fn.name + ':', e); }
