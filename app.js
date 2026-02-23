@@ -1649,8 +1649,7 @@ function renderPrecipHistory(data, histAvg) {
 
         let formatted;
         if (isMetric) {
-            const cm = sum / 10;
-            formatted = `${cm.toFixed(2)} cm`;
+            formatted = `${sum.toFixed(1)} mm`;
         } else {
             const inches = sum / 25.4;
             formatted = `${inches.toFixed(2)}"`;
@@ -1662,7 +1661,7 @@ function renderPrecipHistory(data, histAvg) {
             const avgMm = histAvg[period.avgKey];
             let avgFormatted;
             if (isMetric) {
-                avgFormatted = `${(avgMm / 10).toFixed(2)} cm`;
+                avgFormatted = `${avgMm.toFixed(1)} mm`;
             } else {
                 avgFormatted = `${(avgMm / 25.4).toFixed(2)}"`;
             }
