@@ -4,6 +4,7 @@
 const API_BASE = 'https://api.open-meteo.com/v1/forecast';
 const GEOCODING_API = 'https://geocoding-api.open-meteo.com/v1/search';
 const RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
+const AQI_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 
 // Default location (Durham, NC) - overridden by last used location if available
 const DEFAULT_LOCATION = {
@@ -633,6 +634,37 @@ async function fetchWeatherData(lat, lon) {
         throw new Error('Failed to fetch weather data');
     }
     return response.json();
+}
+
+// Fetch current AQI from Open-Meteo Air Quality API
+async function fetchAQI(lat, lon) {
+    const params = new URLSearchParams({
+        latitude: lat,
+        longitude: lon,
+        current: 'us_aqi'
+    });
+    const response = await fetch(`${AQI_API}?${params}`);
+    if (!response.ok) throw new Error('Failed to fetch AQI');
+    const data = await response.json();
+    return data.current.us_aqi;
+}
+
+// Render AQI value with EPA color coding
+function renderAQI(aqi) {
+    const el = document.getElementById('aqi-display');
+    if (!el) return;
+    if (aqi == null) { el.textContent = ''; return; }
+
+    let color;
+    if (aqi <= 50) color = '#00e400';
+    else if (aqi <= 100) color = '#e6d700';
+    else if (aqi <= 150) color = '#ff7e00';
+    else if (aqi <= 200) color = '#ff0000';
+    else if (aqi <= 300) color = '#8f3f97';
+    else color = '#cc00cc';
+
+    el.textContent = `AQI ${Math.round(aqi)}`;
+    el.style.color = color;
 }
 
 // US state abbreviation lookup for "city, state" search parsing
@@ -1617,8 +1649,7 @@ function renderPrecipHistory(data, histAvg) {
 
         let formatted;
         if (isMetric) {
-            const cm = sum / 10;
-            formatted = `${cm.toFixed(2)} cm`;
+            formatted = `${sum.toFixed(1)} mm`;
         } else {
             const inches = sum / 25.4;
             formatted = `${inches.toFixed(2)}"`;
@@ -1630,7 +1661,7 @@ function renderPrecipHistory(data, histAvg) {
             const avgMm = histAvg[period.avgKey];
             let avgFormatted;
             if (isMetric) {
-                avgFormatted = `${(avgMm / 10).toFixed(2)} cm`;
+                avgFormatted = `${avgMm.toFixed(1)} mm`;
             } else {
                 avgFormatted = `${(avgMm / 25.4).toFixed(2)}"`;
             }
@@ -1713,6 +1744,11 @@ async function loadWeather() {
             }
         }
         updateLocationDisplay(currentTemp, feelsLike);
+
+        // Fetch and render AQI (non-blocking)
+        fetchAQI(currentLocation.latitude, currentLocation.longitude)
+            .then(aqi => renderAQI(aqi))
+            .catch(() => renderAQI(null));
 
         renderDailyForecast(weatherData);
         renderHourlyForecast(weatherData);
