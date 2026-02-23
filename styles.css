@@ -248,6 +248,17 @@ body {
     padding: 2px 16px 4px;
 }
 
+.aqi-display {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 2px 16px 6px;
+}
+
+.aqi-display:empty {
+    display: none;
+}
+
 /* Alert Container & Banner */
 .alert-container {
     display: flex;
