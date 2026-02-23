@@ -523,6 +523,12 @@ function formatPrecip(mm) {
     return `${inches.toFixed(2)}"`;
 }
 
+// Convert wind direction degrees to compass abbreviation
+function getWindDirection(deg) {
+    const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    return dirs[Math.round(deg / 22.5) % 16];
+}
+
 // Get day name
 function getDayName(date, short = false) {
     const today = getLocationNow();
@@ -599,7 +605,9 @@ async function fetchWeatherData(lat, lon) {
             'precipitation_probability_max',
             'precipitation_sum',
             'snowfall_sum',
-            'weather_code'
+            'weather_code',
+            'wind_speed_10m_max',
+            'wind_direction_10m_dominant'
         ].join(','),
         temperature_unit: 'celsius',
         wind_speed_unit: 'mph',
@@ -820,6 +828,8 @@ function renderDailyForecast(data) {
         const hasSnow = daily.snowfall_sum[i] > 0;
         const hasPrecip = daily.precipitation_sum[i] > 0;
         const precipProb = daily.precipitation_probability_max[i];
+        const windSpeed = daily.wind_speed_10m_max[i];
+        const windDir = daily.wind_direction_10m_dominant[i];
 
         // Get AM/PM weather codes from hourly data
         const { amCode, pmCode } = getAmPmWeatherCodes(data, date);
@@ -841,6 +851,7 @@ function renderDailyForecast(data) {
                 <div class="pm-icon" title="Evening">${pmIcon}</div>
             </div>
             <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
+            <div class="wind-info">${getWindDirection(windDir)} ${Math.round(windSpeed)}</div>
             ${precipProb >= 10 ? `
                 <div class="precip-info ${precipClass}">
                     ${hasSnow ? '❄' : '💧'} ${precipProb}%
@@ -898,7 +909,6 @@ function renderHourlyForecast(data) {
         const temp = formatTempValue(hourly.temperature_2m[i]);
         const apparentTemp = formatTempValue(hourly.apparent_temperature[i]);
 
-        const windArrow = '↑';
         let precipClass = hasSnow ? 'snow' : '';
 
         // Show windchill if it differs from actual temp by more than 2 degrees
@@ -911,8 +921,7 @@ function renderHourlyForecast(data) {
             <div class="temp">${temp}${getTempUnitLabel()}</div>
             ${showWindchill ? `<div class="windchill">Feels ${apparentTemp}°</div>` : ''}
             <div class="wind">
-                <span class="wind-icon" style="transform: rotate(${windDir}deg)">${windArrow}</span>
-                ${Math.round(windSpeed)} mph
+                ${getWindDirection(windDir)} ${Math.round(windSpeed)}
             </div>
             ${precipProb >= 10 ? `
                 <div class="precip-chance ${precipClass}">

@@ -33,6 +33,12 @@ WeatherWonder is a client-side weather dashboard deployed on GitHub Pages. It's 
 
 ## Important Patterns
 
+### Timezone Handling
+Open-Meteo returns times in the location's timezone (via `timezone: 'auto'`), but the time strings lack a UTC offset, so `new Date()` parses them as browser-local. The IANA timezone (e.g. `"Pacific/Auckland"`) is stored in `currentLocation.timezone` from the API response. Key helpers:
+- **`getLocationNow()`** — returns a Date whose local components match the location's wall-clock time, for correct comparison with parsed Open-Meteo strings
+- **`getLocationTimezone()`** — returns the IANA timezone string
+- **`formatTime(date, tz)` / `formatHour(date, tz)`** — pass `tz` for UTC-correct dates (SunCalc, radar, alerts); omit for Open-Meteo times already parsed with correct hour digits
+
 ### Date Parsing
 Open-Meteo returns daily dates as `"YYYY-MM-DD"` strings. JavaScript's `new Date("YYYY-MM-DD")` parses these as **UTC midnight**, which shifts to the previous day in US timezones. Always append `"T00:00:00"` when parsing daily dates to force local time interpretation. See `renderDailyForecast()`.
 
