@@ -7,9 +7,10 @@ A mobile-first weather dashboard that provides comprehensive forecasts, live rad
 ## Features
 
 ### Forecast
-- **7-Day Daily Forecast** — AM/PM weather icons, high/low temperatures, precipitation probability and amounts
-- **48-Hour Hourly Forecast** — Temperature, feels-like/windchill, wind speed + direction, precipitation breakdown
+- **7-Day Daily Forecast** — AM/PM weather icons, high/low temperatures, dominant wind direction + max speed, precipitation probability and amounts
+- **48-Hour Hourly Forecast** — Temperature, feels-like/windchill, compass wind direction + speed (e.g. NNW 12), precipitation breakdown
 - **Interactive Chart** — Multi-axis line chart showing temperature, precipitation probability, and precipitation amounts with colored grid lines and day separators
+- **Precipitation History** — 24h through 3-month totals with comparison to 10-year historical averages
 
 ### Radar & Alerts
 - **Live Doppler Radar** — Real-time precipitation radar with 50-mile radius overlay via RainViewer
@@ -23,13 +24,16 @@ A mobile-first weather dashboard that provides comprehensive forecasts, live rad
 
 ### User Experience
 - **Location Search** — Search any city or use GPS for current location
+- **Timezone-Aware** — All times display in the viewed location's local timezone, not the browser's
 - **Favorite Locations** — Save locations locally and switch between them from the side menu
 - **Refresh Button** — One-tap weather data refresh
 - **Feels-Like Temperature** — Displayed in the header when it differs significantly from actual temp
 - **Last Updated Timestamp** — Shows when data was last fetched
-- **Sharing** — Screenshot, link copy, and native device sharing
-- **Add to Home Screen** — Installable as a PWA on iOS, Android, and desktop browsers
-- **Dark Theme** — Mobile-optimized dark UI
+- **Sharing** — Screenshot, link copy, and native device sharing for individual forecast sections
+- **Share This App** — Footer button to copy the app URL or share via native device sharing
+- **Add to Home Screen** — Installable as a PWA on iOS (step-by-step instruction modal), Android, and desktop browsers
+- **Dark/Light Theme** — Toggle between dark and light themes, defaults to system preference
+- **Unit Toggles** — Switch between °F/°C and 12/24-hour time formats
 - **Responsive Design** — Scales from mobile to desktop (max 960px)
 
 ## Data Sources
@@ -78,10 +82,11 @@ This project is deployed via GitHub Pages from the `main` branch:
 weatherwonder/
 ├── index.html      # HTML structure and CDN script tags
 ├── app.js          # All application logic, API calls, and rendering
-├── styles.css      # Dark theme styling and responsive layout
+├── styles.css      # Dark/light theme styling and responsive layout
 ├── manifest.json   # PWA web app manifest
 ├── sw.js           # Service worker for offline shell caching
-├── icon.svg        # App icon (manifest + Apple touch icon)
+├── icon.svg        # Overlapping double-W logo (manifest + Apple touch icon)
+├── LICENSE         # MIT License
 ├── CLAUDE.md       # AI assistant project context
 └── README.md       # This file
 ```
@@ -108,6 +113,10 @@ Works in all modern browsers (Chrome, Firefox, Safari, Edge). Optimized for mobi
 ## Privacy
 
 All favorite locations and preferences are stored locally in your browser via `localStorage`. No personal data is sent to any server. Only anonymous weather API requests are made for the selected location coordinates.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
 
 ## Author
 

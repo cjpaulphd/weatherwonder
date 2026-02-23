@@ -27,11 +27,13 @@ function getLastLocation() {
 
 function saveLastLocation(location) {
     try {
-        localStorage.setItem(LAST_LOCATION_KEY, JSON.stringify({
+        const obj = {
             name: location.name,
             latitude: location.latitude,
             longitude: location.longitude
-        }));
+        };
+        if (location.timezone) obj.timezone = location.timezone;
+        localStorage.setItem(LAST_LOCATION_KEY, JSON.stringify(obj));
     } catch (e) {
         console.error('Could not save last location:', e);
     }
@@ -305,7 +307,7 @@ function initializeTimeToggle() {
 // Helper to re-update location display temperature after unit change
 function reloadLocationTemp() {
     if (!weatherData) return;
-    const now = new Date();
+    const now = getLocationNow();
     let currentTemp = null;
     let feelsLike = null;
     for (let i = 0; i < weatherData.hourly.time.length; i++) {
@@ -320,20 +322,33 @@ function reloadLocationTemp() {
     updateLocationDisplay(currentTemp, feelsLike);
 }
 
-// Format a time according to user's 12/24 preference
-function formatTime(date) {
+// Format a time according to user's 12/24 preference.
+// Pass tz (IANA timezone string) to format a UTC-correct Date in a specific timezone
+// (e.g. SunCalc results, radar timestamps). Omit tz for Open-Meteo times that are
+// already parsed as browser-local with the correct hour digits.
+function formatTime(date, tz) {
+    const opts = { hour: '2-digit', minute: '2-digit' };
+    if (tz) opts.timeZone = tz;
     if (getTimeFormat() === '24') {
-        return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        return date.toLocaleTimeString('en-GB', opts);
     }
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    opts.hour = 'numeric';
+    return date.toLocaleTimeString('en-US', opts);
 }
 
-// Format just the hour according to user's 12/24 preference
-function formatHour(date) {
-    if (getTimeFormat() === '24') {
-        return date.getHours().toString().padStart(2, '0');
+// Format just the hour according to user's 12/24 preference.
+// Pass tz for UTC-correct dates that need timezone conversion.
+function formatHour(date, tz) {
+    let h;
+    if (tz) {
+        h = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', hour12: false }).format(date), 10);
+        if (h === 24) h = 0;
+    } else {
+        h = date.getHours();
     }
-    const h = date.getHours();
+    if (getTimeFormat() === '24') {
+        return h.toString().padStart(2, '0');
+    }
     const suffix = h >= 12 ? 'p' : 'a';
     const hour12 = h % 12 || 12;
     return `${hour12}${suffix}`;
@@ -508,9 +523,15 @@ function formatPrecip(mm) {
     return `${inches.toFixed(2)}"`;
 }
 
+// Convert wind direction degrees to compass abbreviation
+function getWindDirection(deg) {
+    const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    return dirs[Math.round(deg / 22.5) % 16];
+}
+
 // Get day name
 function getDayName(date, short = false) {
-    const today = new Date();
+    const today = getLocationNow();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -531,11 +552,35 @@ function getDayName(date, short = false) {
 
 }
 
-// Get midnight of current day
+// Get midnight of current day in the location's timezone.
+// Returns a "fake-local" Date whose local components match the location's wall-clock.
+// This is used for comparing against Open-Meteo time strings that are parsed as browser-local.
 function getMidnightToday() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today;
+    const now = getLocationNow();
+    now.setHours(0, 0, 0, 0);
+    return now;
+}
+
+// Get a Date whose local components (getHours, getDate, etc.) reflect the current
+// wall-clock time in the viewed location's timezone. This allows correct comparison
+// with Open-Meteo time strings, which are parsed by new Date() as browser-local but
+// actually represent the location's local time.
+function getLocationNow() {
+    const tz = currentLocation.timezone;
+    if (!tz) return new Date();
+    const parts = {};
+    new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+    }).formatToParts(new Date()).forEach(p => { parts[p.type] = parseInt(p.value, 10); });
+    return new Date(parts.year, parts.month - 1, parts.day, parts.hour === 24 ? 0 : parts.hour, parts.minute, parts.second);
+}
+
+// Get the IANA timezone string for the current location, or undefined
+function getLocationTimezone() {
+    return currentLocation.timezone;
 }
 
 // Fetch weather data from Open-Meteo API
@@ -560,7 +605,9 @@ async function fetchWeatherData(lat, lon) {
             'precipitation_probability_max',
             'precipitation_sum',
             'snowfall_sum',
-            'weather_code'
+            'weather_code',
+            'wind_speed_10m_max',
+            'wind_direction_10m_dominant'
         ].join(','),
         temperature_unit: 'celsius',
         wind_speed_unit: 'mph',
@@ -781,6 +828,8 @@ function renderDailyForecast(data) {
         const hasSnow = daily.snowfall_sum[i] > 0;
         const hasPrecip = daily.precipitation_sum[i] > 0;
         const precipProb = daily.precipitation_probability_max[i];
+        const windSpeed = daily.wind_speed_10m_max[i];
+        const windDir = daily.wind_direction_10m_dominant[i];
 
         // Get AM/PM weather codes from hourly data
         const { amCode, pmCode } = getAmPmWeatherCodes(data, date);
@@ -802,6 +851,7 @@ function renderDailyForecast(data) {
                 <div class="pm-icon" title="Evening">${pmIcon}</div>
             </div>
             <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
+            <div class="wind-info">${getWindDirection(windDir)} ${Math.round(windSpeed)}</div>
             ${precipProb >= 10 ? `
                 <div class="precip-info ${precipClass}">
                     ${hasSnow ? '❄' : '💧'} ${precipProb}%
@@ -822,7 +872,7 @@ function renderHourlyForecast(data) {
     container.innerHTML = '';
 
     const hourly = data.hourly;
-    const now = new Date();
+    const now = getLocationNow();
 
     let startIndex = 0;
     for (let i = 0; i < hourly.time.length; i++) {
@@ -859,7 +909,6 @@ function renderHourlyForecast(data) {
         const temp = formatTempValue(hourly.temperature_2m[i]);
         const apparentTemp = formatTempValue(hourly.apparent_temperature[i]);
 
-        const windArrow = '↑';
         let precipClass = hasSnow ? 'snow' : '';
 
         // Show windchill if it differs from actual temp by more than 2 degrees
@@ -872,8 +921,7 @@ function renderHourlyForecast(data) {
             <div class="temp">${temp}${getTempUnitLabel()}</div>
             ${showWindchill ? `<div class="windchill">Feels ${apparentTemp}°</div>` : ''}
             <div class="wind">
-                <span class="wind-icon" style="transform: rotate(${windDir}deg)">${windArrow}</span>
-                ${Math.round(windSpeed)} mph
+                ${getWindDirection(windDir)} ${Math.round(windSpeed)}
             </div>
             ${precipProb >= 10 ? `
                 <div class="precip-chance ${precipClass}">
@@ -1272,15 +1320,18 @@ async function initializeRadar() {
                 zIndex: 100
             }).addTo(radarMap);
 
-            // Update time display
+            // Update time display — show in location's timezone
             const radarTime = new Date(latestFrame.time * 1000);
             const use24 = getTimeFormat() === '24';
-            timeDisplay.textContent = `Radar: ${radarTime.toLocaleString(use24 ? 'en-GB' : 'en-US', {
+            const radarOpts = {
                 hour: use24 ? '2-digit' : 'numeric',
                 minute: '2-digit',
                 month: 'short',
                 day: 'numeric'
-            })}`;
+            };
+            const tz = getLocationTimezone();
+            if (tz) radarOpts.timeZone = tz;
+            timeDisplay.textContent = `Radar: ${radarTime.toLocaleString(use24 ? 'en-GB' : 'en-US', radarOpts)}`;
         }
 
     } catch (error) {
@@ -1289,10 +1340,10 @@ async function initializeRadar() {
     }
 }
 
-// Format time for astronomical display
+// Format time for astronomical display — always in the location's timezone
 function formatAstroTime(date) {
     if (!date || isNaN(date.getTime())) return '—';
-    return formatTime(date);
+    return formatTime(date, getLocationTimezone());
 }
 
 // Get moon phase name and emoji
@@ -1314,15 +1365,18 @@ function renderAstroData() {
     const container = document.getElementById('astro-data');
     if (!container) return;
 
-    const now = new Date();
+    // Use a Date that represents "today noon" in the location's timezone so SunCalc
+    // calculates for the correct calendar date even when the browser is in a different day.
+    const locationNow = getLocationNow();
+    const utcNow = new Date(Date.UTC(locationNow.getFullYear(), locationNow.getMonth(), locationNow.getDate(), 12, 0, 0));
     const lat = currentLocation.latitude;
     const lng = currentLocation.longitude;
 
     // Get sun times
-    const sunTimes = SunCalc.getTimes(now, lat, lng);
+    const sunTimes = SunCalc.getTimes(utcNow, lat, lng);
 
     // Get moon times
-    const moonTimes = SunCalc.getMoonTimes(now, lat, lng);
+    const moonTimes = SunCalc.getMoonTimes(utcNow, lat, lng);
 
     // Get moon illumination
     const moonIllum = SunCalc.getMoonIllumination(now);
@@ -1339,7 +1393,7 @@ function renderAstroData() {
         dayLengthStr = `${dayHours}h ${dayMins}m`;
 
         // Compare with yesterday
-        const yesterday = new Date(now);
+        const yesterday = new Date(utcNow);
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdaySun = SunCalc.getTimes(yesterday, lat, lng);
         if (yesterdaySun.sunrise && yesterdaySun.sunset && !isNaN(yesterdaySun.sunrise.getTime()) && !isNaN(yesterdaySun.sunset.getTime())) {
@@ -1519,7 +1573,7 @@ function renderPrecipHistory(data, histAvg) {
     if (!container) return;
 
     const hourly = data.hourly;
-    const now = new Date();
+    const now = getLocationNow();
     const isMetric = getTempUnit() === 'C';
 
     const periods = [
@@ -1531,7 +1585,7 @@ function renderPrecipHistory(data, histAvg) {
         { label: '3 Months', hours: 2160, avgKey: 'threeMonthAvg' }
     ];
 
-    // Find the last hour that's <= now
+    // Find the last hour that's <= now (in the location's timezone)
     let nowIndex = 0;
     for (let i = 0; i < hourly.time.length; i++) {
         const t = new Date(hourly.time[i]);
@@ -1628,8 +1682,13 @@ async function loadWeather() {
 
         weatherData = await fetchWeatherData(currentLocation.latitude, currentLocation.longitude);
 
+        // Store the location's IANA timezone from the API response (e.g. "Pacific/Auckland")
+        if (weatherData.timezone) {
+            currentLocation.timezone = weatherData.timezone;
+        }
+
         // Get current temperature and feels-like from hourly data
-        const now = new Date();
+        const now = getLocationNow();
         let currentTemp = null;
         let feelsLike = null;
         for (let i = 0; i < weatherData.hourly.time.length; i++) {
@@ -1807,6 +1866,8 @@ function showAlertDetail(props, nwsUrl) {
     const areaDesc = props.areaDesc || '';
     const alertTimeLocale = getTimeFormat() === '24' ? 'en-GB' : 'en-US';
     const alertTimeOpts = { weekday: 'short', month: 'short', day: 'numeric', hour: getTimeFormat() === '24' ? '2-digit' : 'numeric', minute: '2-digit' };
+    const tz = getLocationTimezone();
+    if (tz) alertTimeOpts.timeZone = tz;
     const onset = props.onset ? new Date(props.onset).toLocaleString(alertTimeLocale, alertTimeOpts) : '';
     const ends = props.ends ? new Date(props.ends).toLocaleString(alertTimeLocale, alertTimeOpts) : '';
     const expires = props.expires ? new Date(props.expires).toLocaleString(alertTimeLocale, alertTimeOpts) : '';

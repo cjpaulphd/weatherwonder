@@ -526,6 +526,12 @@ body {
     white-space: nowrap;
 }
 
+.daily-card .wind-info {
+    font-size: 9px;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+}
+
 .daily-card .precip-info {
     font-size: 10px;
     color: var(--precip-blue);
