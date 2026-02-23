@@ -132,6 +132,14 @@ function initializeCIT2000() {
     }
 }
 
+// Exit CIT2000 mode if active (called by normal toggle buttons)
+function exitCIT2000IfActive() {
+    if (!isCIT2000()) return false;
+    setCIT2000(false);
+    applyCIT2000(false);
+    return true;
+}
+
 // Favorites management with localStorage
 const FAVORITES_KEY = 'weatherwonder_favorites';
 
@@ -314,6 +322,7 @@ function initializeTempToggle() {
     const toggle = document.getElementById('temp-toggle');
     if (toggle) {
         toggle.addEventListener('click', () => {
+            exitCIT2000IfActive();
             const current = getTempUnit();
             const next = current === 'F' ? 'C' : 'F';
             saveTempUnit(next);
@@ -367,6 +376,7 @@ function initializeTimeToggle() {
     const toggle = document.getElementById('time-toggle');
     if (toggle) {
         toggle.addEventListener('click', () => {
+            exitCIT2000IfActive();
             const current = getTimeFormat();
             const next = current === '12' ? '24' : '12';
             saveTimeFormat(next);
@@ -506,6 +516,7 @@ function initializeTheme() {
     const toggle = document.getElementById('theme-toggle');
     if (toggle) {
         toggle.addEventListener('click', () => {
+            exitCIT2000IfActive();
             const current = getEffectiveTheme();
             const next = current === 'dark' ? 'light' : 'dark';
             saveTheme(next);
