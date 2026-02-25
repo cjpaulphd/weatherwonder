@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="icon.svg">
     <link rel="stylesheet" href="styles.css">
     <script>
-        // Apply theme before render to prevent flash
+        // Apply theme and CIT2000 before render to prevent flash
         (function() {
             var theme = null;
             try { theme = localStorage.getItem('weatherwonder_theme'); } catch(e) {}
@@ -20,6 +20,11 @@
                 theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
             }
             if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+            try {
+                if (localStorage.getItem('weatherwonder_cit2000') === 'on') {
+                    document.documentElement.classList.add('cit2000-active');
+                }
+            } catch(e) {}
         })();
     </script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -226,6 +231,10 @@
                     <span class="theme-toggle-icon">🕐</span>
                     <span id="time-toggle-label">24hr</span>
                 </button>
+                <button id="cit2000-btn" class="theme-toggle cit2000-btn">
+                    <span class="theme-toggle-icon">🌈</span>
+                    <span class="cit2000-label">CIT2000</span>
+                </button>
             </div>
             <div class="footer-tagline">
                 <a href="https://github.com/cjpaulphd/weatherwonder" target="_blank" rel="noopener" class="footer-tagline-link">WeatherWonder</a> by cjpaulphd
@@ -240,7 +249,6 @@
             <div class="footer-license">
                 <a href="https://github.com/cjpaulphd/weatherwonder" target="_blank" rel="noopener">MIT License</a> &middot; Open Source
             </div>
-            <button id="cit2000-btn" class="cit2000-btn">CIT2000</button>
             <div id="cit2000-banner" class="cit2000-banner hidden">Pahooootie</div>
         </footer>
 
