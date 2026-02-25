@@ -118,8 +118,12 @@ function toggleCIT2000() {
     const on = !isCIT2000();
     setCIT2000(on);
     applyCIT2000(on);
-    // If turning off CIT2000 and user was on Kelvin, revert to Fahrenheit
-    if (!on && getTempUnit() === 'K') {
+    trackEvent('cit2000-' + (on ? 'on' : 'off'));
+    if (on) {
+        // Switch to Kelvin (microns) when entering CIT2000 mode
+        saveTempUnit('K');
+    } else if (getTempUnit() === 'K') {
+        // If turning off CIT2000 and user was on Kelvin, revert to Fahrenheit
         saveTempUnit('F');
     }
     updateTempToggleUI();
