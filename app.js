@@ -82,7 +82,7 @@ function applyCIT2000(on) {
     const sectionMap = {
         'daily-section': { normal: 'DAILY FORECAST', fun: 'DAILY PAHOOOOTIE FORECAST' },
         'hourly-section': { normal: 'HOURLY FORECAST', fun: 'HOURLY VIBE CHECK' },
-        'radar-section': { normal: 'DOPPLER RADAR (50 mi)', fun: 'DOPPLER RADAR (80,467,200,000 µm)' },
+        'radar-section': { normal: 'DOPPLER RADAR (50 mi)', fun: 'BLEEPS / SWEEPS / CREEPS' },
         'precip-history-section': { normal: 'PRECIPITATION HISTORY', fun: 'SKY JUICE HISTORY' },
         'astro-section': { normal: 'SUN & MOON', fun: 'SPACE ORBS' }
     };
