@@ -41,12 +41,14 @@ body {
     color: var(--text-primary);
     min-height: 100vh;
     line-height: 1.4;
+    overflow-x: hidden;
 }
 
 .app-container {
     max-width: 960px;
     margin: 0 auto;
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
 /* Header */
@@ -541,6 +543,9 @@ body {
     font-size: 9px;
     color: var(--text-secondary);
     margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .daily-card .precip-info {
@@ -555,6 +560,9 @@ body {
 .daily-card .precip-amount {
     font-size: 9px;
     color: var(--precip-green);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Chart Container */
@@ -619,6 +627,10 @@ body {
     font-size: 11px;
     color: var(--text-secondary);
     margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
 
 .hourly-card .wind-icon {
@@ -639,6 +651,9 @@ body {
 .hourly-card .precip-amount {
     font-size: 11px;
     color: var(--precip-green);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .hourly-card .windchill {
@@ -1165,7 +1180,7 @@ body {
 .footer-toggles {
     display: flex;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
     margin-bottom: 14px;
     flex-wrap: wrap;
 }
@@ -1173,8 +1188,8 @@ body {
 .theme-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
+    gap: 6px;
+    padding: 8px 12px;
     background-color: var(--bg-card);
     color: var(--text-secondary);
     border: 1px solid var(--bg-secondary);
@@ -1491,25 +1506,51 @@ body {
     }
 }
 
-/* CIT2000 Easter Egg Button */
-.cit2000-btn {
-    display: inline-block;
-    margin-top: 12px;
-    padding: 4px 12px;
-    background: transparent;
-    border: 1px solid var(--bg-secondary);
-    border-radius: 4px;
-    color: var(--text-secondary);
-    font-size: 9px;
+/* CIT2000 Toggle Button — base inherits from .theme-toggle */
+
+/* CIT2000 "Seek the Joy!" tagline after hourly forecast */
+.cit2000-seek-joy {
+    text-align: center;
+    padding: 12px 16px;
+    font-size: 16px;
+    font-weight: 700;
     font-family: 'Courier New', monospace;
-    letter-spacing: 1px;
-    cursor: pointer;
-    opacity: 0.3;
-    transition: opacity 0.3s;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, #ff0000, #ff7700, #ffff00, #00ff00, #0077ff, #8800ff, #ff0000);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: rainbow-text-scroll 3s linear infinite;
 }
 
-.cit2000-btn:hover {
-    opacity: 0.7;
+.cit2000-seek-joy.hidden {
+    display: none;
+}
+
+/* Smaller font for long micron/kelvin values in cards */
+.daily-card .wind-info.kelvin-units {
+    font-size: 7px;
+}
+
+.daily-card .precip-amount.kelvin-units {
+    font-size: 7px;
+}
+
+.hourly-card .wind.kelvin-units {
+    font-size: 9px;
+}
+
+.hourly-card .precip-amount.kelvin-units {
+    font-size: 9px;
+}
+
+.precip-history-value.kelvin-units {
+    font-size: 14px;
+}
+
+.precip-history-avg.kelvin-units {
+    font-size: 9px;
 }
 
 /* CIT2000 Pahooootie Banner */
@@ -1538,8 +1579,8 @@ body {
     100% { background-position: 200% 50%; }
 }
 
-/* CIT2000 Rainbow Theme */
-[data-theme="cit2000"] {
+/* CIT2000 Rainbow Theme (Dark) */
+.cit2000-active {
     --bg-primary: #1a0a2e;
     --bg-secondary: #2a1040;
     --bg-card: #3a1850;
@@ -1554,9 +1595,32 @@ body {
     --rain-color: #00ccff;
 }
 
-[data-theme="cit2000"] body,
-[data-theme="cit2000"] .app-container {
+/* CIT2000 Rainbow Theme (Light) */
+.cit2000-active[data-theme="light"] {
+    --bg-primary: #f0e0ff;
+    --bg-secondary: #e0d0ee;
+    --bg-card: #fff0ff;
+    --text-primary: #2a0a3e;
+    --text-secondary: #7744aa;
+    --accent-blue: #cc00cc;
+    --accent-red: #dd2222;
+    --precip-blue: #0099bb;
+    --precip-green: #008855;
+    --temp-red: #cc3366;
+    --snow-color: #cc00cc;
+    --rain-color: #0088cc;
+}
+
+.cit2000-active body,
+.cit2000-active .app-container {
     background: linear-gradient(180deg, #1a0a2e 0%, #0a1a3e 25%, #1a0a2e 50%, #2a0a1e 75%, #1a0a2e 100%);
+    background-size: 100% 400%;
+    animation: cit2000-bg-drift 20s ease-in-out infinite;
+}
+
+.cit2000-active[data-theme="light"] body,
+.cit2000-active[data-theme="light"] .app-container {
+    background: linear-gradient(180deg, #f0e0ff 0%, #e0f0ff 25%, #f0e0ff 50%, #ffe0f0 75%, #f0e0ff 100%);
     background-size: 100% 400%;
     animation: cit2000-bg-drift 20s ease-in-out infinite;
 }
@@ -1566,7 +1630,7 @@ body {
     50% { background-position: 0% 100%; }
 }
 
-[data-theme="cit2000"] .header {
+.cit2000-active .header {
     background: linear-gradient(90deg, #ff000033, #ff770033, #ffff0033, #00ff0033, #0077ff33, #8800ff33);
     background-size: 300% 100%;
     animation: rainbow-slide 4s linear infinite;
@@ -1577,7 +1641,7 @@ body {
     100% { background-position: 300% 50%; }
 }
 
-[data-theme="cit2000"] .section-header h2 {
+.cit2000-active .section-header h2 {
     background: linear-gradient(90deg, #ff0000, #ff7700, #ffff00, #00ff00, #0077ff, #8800ff);
     background-size: 200% 100%;
     -webkit-background-clip: text;
@@ -1586,42 +1650,51 @@ body {
     animation: rainbow-text-scroll 3s linear infinite;
 }
 
-[data-theme="cit2000"] .forecast-section {
-    border: 1px solid;
-    border-image: linear-gradient(90deg, #ff0000, #ff7700, #ffff00, #00ff00, #0077ff, #8800ff) 1;
+.cit2000-active .forecast-section {
+    border-bottom: none;
+    outline: 1px solid #ff00ff44;
+    outline-offset: -1px;
 }
 
-[data-theme="cit2000"] .daily-card {
+.cit2000-active .daily-card {
     background: linear-gradient(135deg, #2a1040, #1a2040);
     border: 1px solid #ff00ff44;
 }
 
-[data-theme="cit2000"] .daily-card:hover {
+.cit2000-active[data-theme="light"] .daily-card {
+    background: linear-gradient(135deg, #f0d8ff, #e0e8ff);
+}
+
+.cit2000-active .daily-card:hover {
     border-color: #ff00ff;
     box-shadow: 0 0 12px #ff00ff44;
 }
 
-[data-theme="cit2000"] .hourly-card {
+.cit2000-active .hourly-card {
     background: linear-gradient(135deg, #1a2040, #2a1040);
     border: 1px solid #00ffff44;
 }
 
-[data-theme="cit2000"] .theme-toggle,
-[data-theme="cit2000"] .share-app-btn {
+.cit2000-active[data-theme="light"] .hourly-card {
+    background: linear-gradient(135deg, #e0e8ff, #f0d8ff);
+}
+
+.cit2000-active .theme-toggle,
+.cit2000-active .share-app-btn,
+.cit2000-active .cit2000-btn {
     border-color: #ff00ff44;
 }
 
-[data-theme="cit2000"] .theme-toggle:hover,
-[data-theme="cit2000"] .share-app-btn:hover {
+.cit2000-active .theme-toggle:hover,
+.cit2000-active .share-app-btn:hover,
+.cit2000-active .cit2000-btn:hover {
     background: #ff00ff22;
     border-color: #ff00ff;
 }
 
-[data-theme="cit2000"] .cit2000-btn {
-    opacity: 1;
+.cit2000-active .cit2000-btn {
     border-color: #ff00ff;
     color: #ff00ff;
-    font-size: 11px;
     animation: cit2000-btn-glow 2s ease-in-out infinite;
 }
 
@@ -1630,7 +1703,7 @@ body {
     50% { box-shadow: 0 0 16px #ff00ff88; }
 }
 
-[data-theme="cit2000"] .footer-tagline-link {
+.cit2000-active .footer-tagline-link {
     background: linear-gradient(90deg, #ff0000, #ff7700, #ffff00, #00ff00, #0077ff, #8800ff);
     background-size: 200% 100%;
     -webkit-background-clip: text;
@@ -1639,29 +1712,37 @@ body {
     animation: rainbow-text-scroll 3s linear infinite;
 }
 
-[data-theme="cit2000"] .astro-group {
+.cit2000-active .astro-group {
     background: linear-gradient(135deg, #2a1040, #1a2050);
     border: 1px solid #8800ff44;
 }
 
-[data-theme="cit2000"] .precip-history-item {
+.cit2000-active[data-theme="light"] .astro-group {
+    background: linear-gradient(135deg, #f0d8ff, #e0e0ff);
+}
+
+.cit2000-active .precip-history-item {
     background: linear-gradient(135deg, #1a2050, #2a1040);
     border: 1px solid #00ffff33;
 }
 
-[data-theme="cit2000"] .radar-container {
+.cit2000-active[data-theme="light"] .precip-history-item {
+    background: linear-gradient(135deg, #e0e0ff, #f0d8ff);
+}
+
+.cit2000-active .radar-container {
     border: 1px solid #ff00ff44;
 }
 
-[data-theme="cit2000"] .install-btn {
+.cit2000-active .install-btn {
     background: linear-gradient(90deg, #ff00ff, #00ffff);
 }
 
-[data-theme="cit2000"] .btn-primary {
+.cit2000-active .btn-primary {
     background: linear-gradient(90deg, #ff00ff, #8800ff);
 }
 
-[data-theme="cit2000"] #location-name {
+.cit2000-active #location-name {
     background: linear-gradient(90deg, #ff00ff, #00ffff, #ffff00, #ff00ff);
     background-size: 200% 100%;
     -webkit-background-clip: text;

@@ -69,6 +69,7 @@ function setCIT2000(on) {
 
 function applyCIT2000(on) {
     const banner = document.getElementById('cit2000-banner');
+    const seekJoy = document.getElementById('cit2000-seek-joy');
     // Section header renames for fun
     const sectionMap = {
         'daily-section': { normal: 'DAILY FORECAST', fun: 'DAILY PAHOOOOTIE FORECAST' },
@@ -78,8 +79,9 @@ function applyCIT2000(on) {
         'astro-section': { normal: 'SUN & MOON', fun: 'SPACE ORBS' }
     };
     if (on) {
-        document.documentElement.setAttribute('data-theme', 'cit2000');
+        document.documentElement.classList.add('cit2000-active');
         if (banner) banner.classList.remove('hidden');
+        if (seekJoy) seekJoy.classList.remove('hidden');
         document.title = 'WeatherWonder CIT2000 - Pahooootie Edition';
         Object.entries(sectionMap).forEach(([id, texts]) => {
             const section = document.getElementById(id);
@@ -89,8 +91,9 @@ function applyCIT2000(on) {
             }
         });
     } else {
-        document.documentElement.removeAttribute('data-theme');
+        document.documentElement.classList.remove('cit2000-active');
         if (banner) banner.classList.add('hidden');
+        if (seekJoy) seekJoy.classList.add('hidden');
         document.title = 'WeatherWonder - Precipitation Forecast';
         Object.entries(sectionMap).forEach(([id, texts]) => {
             const section = document.getElementById(id);
@@ -99,16 +102,19 @@ function applyCIT2000(on) {
                 if (h2) h2.textContent = texts.normal;
             }
         });
-        // Restore the user's actual theme
-        const theme = getEffectiveTheme();
-        applyTheme(theme);
     }
+    updateCIT2000ToggleUI();
 }
 
 function toggleCIT2000() {
     const on = !isCIT2000();
     setCIT2000(on);
     applyCIT2000(on);
+    // If turning off CIT2000 and user was on Kelvin, revert to Fahrenheit
+    if (!on && getTempUnit() === 'K') {
+        saveTempUnit('F');
+    }
+    updateTempToggleUI();
     // Re-render everything with the new units
     if (weatherData) {
         renderDailyForecast(weatherData);
@@ -121,6 +127,15 @@ function toggleCIT2000() {
     }
 }
 
+function updateCIT2000ToggleUI() {
+    const btn = document.getElementById('cit2000-btn');
+    if (!btn) return;
+    const label = btn.querySelector('.cit2000-label');
+    if (label) {
+        label.textContent = isCIT2000() ? 'CIT2000 On' : 'CIT2000';
+    }
+}
+
 function initializeCIT2000() {
     const btn = document.getElementById('cit2000-btn');
     if (btn) {
@@ -130,14 +145,7 @@ function initializeCIT2000() {
     if (isCIT2000()) {
         applyCIT2000(true);
     }
-}
-
-// Exit CIT2000 mode if active (called by normal toggle buttons)
-function exitCIT2000IfActive() {
-    if (!isCIT2000()) return false;
-    setCIT2000(false);
-    applyCIT2000(false);
-    return true;
+    updateCIT2000ToggleUI();
 }
 
 // Favorites management with localStorage
@@ -312,8 +320,11 @@ function updateTempToggleUI() {
     const label = document.getElementById('temp-toggle-label');
     if (label) {
         const unit = getTempUnit();
+        const cit = isCIT2000();
         // Show the unit you'd switch TO
-        label.textContent = unit === 'F' ? '°C' : '°F';
+        if (unit === 'F') label.textContent = '°C';
+        else if (unit === 'C') label.textContent = cit ? 'K' : '°F';
+        else label.textContent = '°F'; // K → F
     }
 }
 
@@ -322,9 +333,10 @@ function initializeTempToggle() {
     const toggle = document.getElementById('temp-toggle');
     if (toggle) {
         toggle.addEventListener('click', () => {
-            exitCIT2000IfActive();
             const current = getTempUnit();
-            const next = current === 'F' ? 'C' : 'F';
+            const cit = isCIT2000();
+            // F → C → K (only in CIT2000) → F
+            const next = current === 'F' ? 'C' : (current === 'C' && cit) ? 'K' : 'F';
             saveTempUnit(next);
             updateTempToggleUI();
             // Re-render weather data with new unit
@@ -376,7 +388,6 @@ function initializeTimeToggle() {
     const toggle = document.getElementById('time-toggle');
     if (toggle) {
         toggle.addEventListener('click', () => {
-            exitCIT2000IfActive();
             const current = getTimeFormat();
             const next = current === '12' ? '24' : '12';
             saveTimeFormat(next);
@@ -516,7 +527,6 @@ function initializeTheme() {
     const toggle = document.getElementById('theme-toggle');
     if (toggle) {
         toggle.addEventListener('click', () => {
-            exitCIT2000IfActive();
             const current = getEffectiveTheme();
             const next = current === 'dark' ? 'light' : 'dark';
             saveTheme(next);
@@ -633,30 +643,28 @@ function isSnow(code) {
 
 // Format temperature (returns just the number in current unit)
 function formatTempValue(temp) {
-    if (isCIT2000()) {
-        // Kelvin: Celsius + 273.15
-        return Math.round(temp + 273.15);
-    }
-    if (getTempUnit() === 'C') {
-        return Math.round(temp);
-    }
+    const unit = getTempUnit();
+    if (unit === 'K') return Math.round(temp + 273.15);
+    if (unit === 'C') return Math.round(temp);
     return Math.round((temp * 9/5) + 32);
 }
 
 // Get temperature unit label
 function getTempUnitLabel() {
-    if (isCIT2000()) return ' K';
-    return getTempUnit() === 'C' ? '°C' : '°F';
+    const unit = getTempUnit();
+    if (unit === 'K') return ' K';
+    return unit === 'C' ? '°C' : '°F';
 }
 
-// Format precipitation amount (mm in metric, inches in imperial, microns in CIT2000)
+// Format precipitation amount (mm in metric, inches in imperial, microns in Kelvin mode)
 function formatPrecip(mm) {
-    if (isCIT2000()) {
+    const unit = getTempUnit();
+    if (unit === 'K') {
         const microns = mm * 1000;
         if (microns < 100) return '';
         return `${Math.round(microns).toLocaleString()} µm`;
     }
-    if (getTempUnit() === 'C') {
+    if (unit === 'C') {
         if (mm < 0.1) return '';
         return `${mm.toFixed(1)} mm`;
     }
@@ -671,14 +679,15 @@ function getWindDirection(deg) {
     return dirs[Math.round(deg / 22.5) % 16];
 }
 
-// Format wind speed in current unit (API returns mph; convert to km/h in metric mode, µm/s in CIT2000)
+// Format wind speed in current unit (API returns mph; convert to km/h in metric mode, µm/s in Kelvin mode)
 function formatWindSpeed(mph) {
-    if (isCIT2000()) {
+    const unit = getTempUnit();
+    if (unit === 'K') {
         // 1 mph = 447,040 µm/s
         const microns = Math.round(mph * 447040);
         return `${microns.toLocaleString()} µm/s`;
     }
-    if (getTempUnit() === 'C') {
+    if (unit === 'C') {
         return `${Math.round(mph * 1.60934)} km/h`;
     }
     return `${Math.round(mph)} mph`;
@@ -1030,6 +1039,7 @@ function renderDailyForecast(data) {
         const amIcon = amCode !== null ? getWeatherIcon(amCode) : getWeatherIcon(dailyWeatherCode);
         const pmIcon = pmCode !== null ? getWeatherIcon(pmCode, true) : getWeatherIcon(dailyWeatherCode, true);
 
+        const kClass = getTempUnit() === 'K' ? ' kelvin-units' : '';
         card.innerHTML = `
             <div class="day-name">${getDayName(date, true)}</div>
             <div class="weather-icons">
@@ -1037,14 +1047,14 @@ function renderDailyForecast(data) {
                 <div class="pm-icon" title="Evening">${pmIcon}</div>
             </div>
             <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
-            <div class="wind-info">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
+            <div class="wind-info${kClass}">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
             ${precipProb >= 10 ? `
                 <div class="precip-info ${precipClass}">
                     ${hasSnow ? '❄' : '💧'} ${precipProb}%
                 </div>
             ` : ''}
             ${hasPrecip ? `
-                <div class="precip-amount">${formatPrecip(daily.precipitation_sum[i])}</div>
+                <div class="precip-amount${kClass}">${formatPrecip(daily.precipitation_sum[i])}</div>
             ` : ''}
         `;
 
@@ -1101,13 +1111,14 @@ function renderHourlyForecast(data) {
         const showWindchill = Math.abs(temp - apparentTemp) > 2;
 
         const feelsLabel = isCIT2000() ? 'Vibes' : 'Feels';
+        const hkClass = getTempUnit() === 'K' ? ' kelvin-units' : '';
         card.innerHTML = `
             ${dayLabel}
             <div class="hour">${formatHour(date)}</div>
             <div class="weather-icon">${getWeatherIcon(weatherCode, isNight)}</div>
             <div class="temp">${temp}${getTempUnitLabel()}</div>
-            ${showWindchill ? `<div class="windchill">${feelsLabel} ${apparentTemp}${isCIT2000() ? ' K' : '°'}</div>` : ''}
-            <div class="wind">
+            ${showWindchill ? `<div class="windchill">${feelsLabel} ${apparentTemp}${getTempUnitLabel()}</div>` : ''}
+            <div class="wind${hkClass}">
                 ${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}
             </div>
             ${precipProb >= 10 ? `
@@ -1116,7 +1127,7 @@ function renderHourlyForecast(data) {
                 </div>
             ` : ''}
             ${precip > 0 ? `
-                <div class="precip-amount">${formatPrecip(precip)}</div>
+                <div class="precip-amount${hkClass}">${formatPrecip(precip)}</div>
             ` : ''}
         `;
 
@@ -1188,7 +1199,8 @@ const gridLinesPlugin = {
                 ctx.fillStyle = 'rgba(239, 154, 154, 0.7)';
                 ctx.font = '9px sans-serif';
                 ctx.textAlign = 'left';
-                ctx.fillText(`${temp}°`, chartArea.left + 2, y - 2);
+                const tLabel = getTempUnit() === 'K' ? `${temp}K` : `${temp}°`;
+                ctx.fillText(tLabel, chartArea.left + 2, y - 2);
             }
         }
 
@@ -1271,7 +1283,8 @@ function renderChart(data) {
     for (let i = startIndex; i < endIndex; i++) {
         const date = new Date(hourly.time[i]);
         labels.push(date);
-        temps.push(isCIT2000() ? hourly.temperature_2m[i] + 273.15 : (getTempUnit() === 'C' ? hourly.temperature_2m[i] : (hourly.temperature_2m[i] * 9/5) + 32));
+        const tu = getTempUnit();
+        temps.push(tu === 'K' ? hourly.temperature_2m[i] + 273.15 : (tu === 'C' ? hourly.temperature_2m[i] : (hourly.temperature_2m[i] * 9/5) + 32));
         precipProbs.push(hourly.precipitation_probability[i]);
         precipAmounts.push(hourly.precipitation[i] / 25.4);
         isDayFlags.push(hourly.is_day[i]);
@@ -1761,8 +1774,9 @@ function renderPrecipHistory(data, histAvg) {
 
     const hourly = data.hourly;
     const now = getLocationNow();
-    const isMetric = getTempUnit() === 'C';
-    const isCit = isCIT2000();
+    const tempUnit = getTempUnit();
+    const isMetric = tempUnit === 'C';
+    const isKelvin = tempUnit === 'K';
 
     const periods = [
         { label: '24 Hours', hours: 24 },
@@ -1792,7 +1806,7 @@ function renderPrecipHistory(data, histAvg) {
         }
 
         let formatted;
-        if (isCit) {
+        if (isKelvin) {
             const microns = sum * 1000;
             formatted = `${Math.round(microns).toLocaleString()} µm`;
         } else if (isMetric) {
@@ -1807,7 +1821,7 @@ function renderPrecipHistory(data, histAvg) {
         if (period.avgKey && histAvg && histAvg[period.avgKey] != null) {
             const avgMm = histAvg[period.avgKey];
             let avgFormatted;
-            if (isCit) {
+            if (isKelvin) {
                 avgFormatted = `${Math.round(avgMm * 1000).toLocaleString()} µm`;
             } else if (isMetric) {
                 avgFormatted = `${avgMm.toFixed(1)} mm`;
@@ -1828,18 +1842,19 @@ function renderPrecipHistory(data, histAvg) {
                 }
             }
 
-            avgHtml = `<div class="precip-history-avg">vs. ${avgFormatted} 10-yr avg</div>${diffHtml}`;
+            avgHtml = `<div class="precip-history-avg${isKelvin ? ' kelvin-units' : ''}">vs. ${avgFormatted} 10-yr avg</div>${diffHtml}`;
         }
 
         return { label: period.label, value: formatted, avgHtml };
     });
 
+    const pkClass = isKelvin ? ' kelvin-units' : '';
     container.innerHTML = `
         <div class="precip-history-grid">
             ${results.map(r => `
                 <div class="precip-history-item">
                     <div class="precip-history-label">${r.label}</div>
-                    <div class="precip-history-value">${r.value}</div>
+                    <div class="precip-history-value${pkClass}">${r.value}</div>
                     ${r.avgHtml}
                 </div>
             `).join('')}
@@ -1853,7 +1868,8 @@ function updateLocationDisplay(currentTemp = null, feelsLike = null) {
     if (currentTemp !== null) {
         let display = `${currentLocation.name}: ${currentTemp}${getTempUnitLabel()}`;
         if (feelsLike !== null && Math.abs(currentTemp - feelsLike) > 2) {
-            display += isCIT2000() ? ` (vibes ${feelsLike} K)` : ` (feels ${feelsLike}°)`;
+            const feelsWord = isCIT2000() ? 'vibes' : 'feels';
+            display += ` (${feelsWord} ${feelsLike}${getTempUnitLabel()})`;
         }
         locationName.textContent = display;
     } else {
