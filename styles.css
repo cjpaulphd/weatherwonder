@@ -48,7 +48,6 @@ body {
     max-width: 960px;
     margin: 0 auto;
     min-height: 100vh;
-    overflow-x: hidden;
 }
 
 /* Header */
