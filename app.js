@@ -69,6 +69,7 @@ function setCIT2000(on) {
 
 function applyCIT2000(on) {
     const banner = document.getElementById('cit2000-banner');
+    const seekJoy = document.getElementById('cit2000-seek-joy');
     // Section header renames for fun
     const sectionMap = {
         'daily-section': { normal: 'DAILY FORECAST', fun: 'DAILY PAHOOOOTIE FORECAST' },
@@ -80,6 +81,7 @@ function applyCIT2000(on) {
     if (on) {
         document.documentElement.classList.add('cit2000-active');
         if (banner) banner.classList.remove('hidden');
+        if (seekJoy) seekJoy.classList.remove('hidden');
         document.title = 'WeatherWonder CIT2000 - Pahooootie Edition';
         Object.entries(sectionMap).forEach(([id, texts]) => {
             const section = document.getElementById(id);
@@ -91,6 +93,7 @@ function applyCIT2000(on) {
     } else {
         document.documentElement.classList.remove('cit2000-active');
         if (banner) banner.classList.add('hidden');
+        if (seekJoy) seekJoy.classList.add('hidden');
         document.title = 'WeatherWonder - Precipitation Forecast';
         Object.entries(sectionMap).forEach(([id, texts]) => {
             const section = document.getElementById(id);
@@ -107,6 +110,11 @@ function toggleCIT2000() {
     const on = !isCIT2000();
     setCIT2000(on);
     applyCIT2000(on);
+    // If turning off CIT2000 and user was on Kelvin, revert to Fahrenheit
+    if (!on && getTempUnit() === 'K') {
+        saveTempUnit('F');
+    }
+    updateTempToggleUI();
     // Re-render everything with the new units
     if (weatherData) {
         renderDailyForecast(weatherData);
@@ -312,10 +320,11 @@ function updateTempToggleUI() {
     const label = document.getElementById('temp-toggle-label');
     if (label) {
         const unit = getTempUnit();
+        const cit = isCIT2000();
         // Show the unit you'd switch TO
         if (unit === 'F') label.textContent = '°C';
-        else if (unit === 'C') label.textContent = 'K';
-        else label.textContent = '°F';
+        else if (unit === 'C') label.textContent = cit ? 'K' : '°F';
+        else label.textContent = '°F'; // K → F
     }
 }
 
@@ -325,7 +334,9 @@ function initializeTempToggle() {
     if (toggle) {
         toggle.addEventListener('click', () => {
             const current = getTempUnit();
-            const next = current === 'F' ? 'C' : current === 'C' ? 'K' : 'F';
+            const cit = isCIT2000();
+            // F → C → K (only in CIT2000) → F
+            const next = current === 'F' ? 'C' : (current === 'C' && cit) ? 'K' : 'F';
             saveTempUnit(next);
             updateTempToggleUI();
             // Re-render weather data with new unit
@@ -651,7 +662,6 @@ function formatPrecip(mm) {
     if (unit === 'K') {
         const microns = mm * 1000;
         if (microns < 100) return '';
-        if (microns >= 10000) return `${(microns / 1000).toFixed(0)}k µm`;
         return `${Math.round(microns).toLocaleString()} µm`;
     }
     if (unit === 'C') {
@@ -673,11 +683,9 @@ function getWindDirection(deg) {
 function formatWindSpeed(mph) {
     const unit = getTempUnit();
     if (unit === 'K') {
-        // 1 mph = 447,040 µm/s — use compact notation for readability
+        // 1 mph = 447,040 µm/s
         const microns = Math.round(mph * 447040);
-        if (microns >= 1000000) return `${(microns / 1000000).toFixed(1)}M µm/s`;
-        if (microns >= 1000) return `${Math.round(microns / 1000)}k µm/s`;
-        return `${microns} µm/s`;
+        return `${microns.toLocaleString()} µm/s`;
     }
     if (unit === 'C') {
         return `${Math.round(mph * 1.60934)} km/h`;
@@ -1031,6 +1039,7 @@ function renderDailyForecast(data) {
         const amIcon = amCode !== null ? getWeatherIcon(amCode) : getWeatherIcon(dailyWeatherCode);
         const pmIcon = pmCode !== null ? getWeatherIcon(pmCode, true) : getWeatherIcon(dailyWeatherCode, true);
 
+        const kClass = getTempUnit() === 'K' ? ' kelvin-units' : '';
         card.innerHTML = `
             <div class="day-name">${getDayName(date, true)}</div>
             <div class="weather-icons">
@@ -1038,14 +1047,14 @@ function renderDailyForecast(data) {
                 <div class="pm-icon" title="Evening">${pmIcon}</div>
             </div>
             <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
-            <div class="wind-info">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
+            <div class="wind-info${kClass}">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
             ${precipProb >= 10 ? `
                 <div class="precip-info ${precipClass}">
                     ${hasSnow ? '❄' : '💧'} ${precipProb}%
                 </div>
             ` : ''}
             ${hasPrecip ? `
-                <div class="precip-amount">${formatPrecip(daily.precipitation_sum[i])}</div>
+                <div class="precip-amount${kClass}">${formatPrecip(daily.precipitation_sum[i])}</div>
             ` : ''}
         `;
 
@@ -1102,13 +1111,14 @@ function renderHourlyForecast(data) {
         const showWindchill = Math.abs(temp - apparentTemp) > 2;
 
         const feelsLabel = isCIT2000() ? 'Vibes' : 'Feels';
+        const hkClass = getTempUnit() === 'K' ? ' kelvin-units' : '';
         card.innerHTML = `
             ${dayLabel}
             <div class="hour">${formatHour(date)}</div>
             <div class="weather-icon">${getWeatherIcon(weatherCode, isNight)}</div>
             <div class="temp">${temp}${getTempUnitLabel()}</div>
             ${showWindchill ? `<div class="windchill">${feelsLabel} ${apparentTemp}${getTempUnitLabel()}</div>` : ''}
-            <div class="wind">
+            <div class="wind${hkClass}">
                 ${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}
             </div>
             ${precipProb >= 10 ? `
@@ -1117,7 +1127,7 @@ function renderHourlyForecast(data) {
                 </div>
             ` : ''}
             ${precip > 0 ? `
-                <div class="precip-amount">${formatPrecip(precip)}</div>
+                <div class="precip-amount${hkClass}">${formatPrecip(precip)}</div>
             ` : ''}
         `;
 
@@ -1798,9 +1808,7 @@ function renderPrecipHistory(data, histAvg) {
         let formatted;
         if (isKelvin) {
             const microns = sum * 1000;
-            if (microns >= 1000000) formatted = `${(microns / 1000000).toFixed(1)}M µm`;
-            else if (microns >= 10000) formatted = `${(microns / 1000).toFixed(0)}k µm`;
-            else formatted = `${Math.round(microns).toLocaleString()} µm`;
+            formatted = `${Math.round(microns).toLocaleString()} µm`;
         } else if (isMetric) {
             formatted = `${sum.toFixed(1)} mm`;
         } else {
@@ -1814,10 +1822,7 @@ function renderPrecipHistory(data, histAvg) {
             const avgMm = histAvg[period.avgKey];
             let avgFormatted;
             if (isKelvin) {
-                const avgMicrons = avgMm * 1000;
-                if (avgMicrons >= 1000000) avgFormatted = `${(avgMicrons / 1000000).toFixed(1)}M µm`;
-                else if (avgMicrons >= 10000) avgFormatted = `${(avgMicrons / 1000).toFixed(0)}k µm`;
-                else avgFormatted = `${Math.round(avgMicrons).toLocaleString()} µm`;
+                avgFormatted = `${Math.round(avgMm * 1000).toLocaleString()} µm`;
             } else if (isMetric) {
                 avgFormatted = `${avgMm.toFixed(1)} mm`;
             } else {
@@ -1837,18 +1842,19 @@ function renderPrecipHistory(data, histAvg) {
                 }
             }
 
-            avgHtml = `<div class="precip-history-avg">vs. ${avgFormatted} 10-yr avg</div>${diffHtml}`;
+            avgHtml = `<div class="precip-history-avg${isKelvin ? ' kelvin-units' : ''}">vs. ${avgFormatted} 10-yr avg</div>${diffHtml}`;
         }
 
         return { label: period.label, value: formatted, avgHtml };
     });
 
+    const pkClass = isKelvin ? ' kelvin-units' : '';
     container.innerHTML = `
         <div class="precip-history-grid">
             ${results.map(r => `
                 <div class="precip-history-item">
                     <div class="precip-history-label">${r.label}</div>
-                    <div class="precip-history-value">${r.value}</div>
+                    <div class="precip-history-value${pkClass}">${r.value}</div>
                     ${r.avgHtml}
                 </div>
             `).join('')}

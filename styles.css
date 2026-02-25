@@ -1508,6 +1508,51 @@ body {
 
 /* CIT2000 Toggle Button — base inherits from .theme-toggle */
 
+/* CIT2000 "Seek the Joy!" tagline after hourly forecast */
+.cit2000-seek-joy {
+    text-align: center;
+    padding: 12px 16px;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, #ff0000, #ff7700, #ffff00, #00ff00, #0077ff, #8800ff, #ff0000);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: rainbow-text-scroll 3s linear infinite;
+}
+
+.cit2000-seek-joy.hidden {
+    display: none;
+}
+
+/* Smaller font for long micron/kelvin values in cards */
+.daily-card .wind-info.kelvin-units {
+    font-size: 7px;
+}
+
+.daily-card .precip-amount.kelvin-units {
+    font-size: 7px;
+}
+
+.hourly-card .wind.kelvin-units {
+    font-size: 9px;
+}
+
+.hourly-card .precip-amount.kelvin-units {
+    font-size: 9px;
+}
+
+.precip-history-value.kelvin-units {
+    font-size: 14px;
+}
+
+.precip-history-avg.kelvin-units {
+    font-size: 9px;
+}
+
 /* CIT2000 Pahooootie Banner */
 .cit2000-banner {
     margin-top: 10px;
