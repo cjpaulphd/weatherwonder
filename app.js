@@ -346,6 +346,7 @@ function initializeTempToggle() {
             // F → C → K (only in CIT2000) → F
             const next = current === 'F' ? 'C' : (current === 'C' && cit) ? 'K' : 'F';
             saveTempUnit(next);
+            trackEvent('temp-' + next);
             updateTempToggleUI();
             // Re-render weather data with new unit
             if (weatherData) {
@@ -399,6 +400,7 @@ function initializeTimeToggle() {
             const current = getTimeFormat();
             const next = current === '12' ? '24' : '12';
             saveTimeFormat(next);
+            trackEvent('time-' + next + 'hr');
             updateTimeToggleUI();
             // Re-render weather data with new time format
             if (weatherData) {
@@ -538,6 +540,7 @@ function initializeTheme() {
             const current = getEffectiveTheme();
             const next = current === 'dark' ? 'light' : 'dark';
             saveTheme(next);
+            trackEvent('theme-' + next);
             applyTheme(next);
             // Re-render radar with appropriate tile layer
             if (radarMap) {
