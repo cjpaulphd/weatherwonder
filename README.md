@@ -112,7 +112,9 @@ Works in all modern browsers (Chrome, Firefox, Safari, Edge). Optimized for mobi
 
 ## Privacy
 
-All favorite locations and preferences are stored locally in your browser via `localStorage`. No personal data is sent to any server. Only anonymous weather API requests are made for the selected location coordinates.
+All favorite locations and preferences are stored locally in your browser via `localStorage`. No personal data is collected or sent to any server. Only anonymous weather API requests are made for the selected location coordinates.
+
+This site uses [GoatCounter](https://www.goatcounter.com/) for privacy-friendly, anonymous usage statistics. GoatCounter does not use cookies, does not collect personal or identifiable data, and is fully GDPR/CCPA compliant without requiring a consent banner. The statistics collected are limited to anonymous page views and aggregate counts (browser type, screen size, country from IP — the IP itself is not stored).
 
 ## License
 

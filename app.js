@@ -50,6 +50,14 @@ let radarLayer = null;
 let precipHistoryData = null;
 let precipHistoricalAvg = null;
 
+// Privacy-preserving usage events (GoatCounter)
+// Only tracks action names, never location data, coordinates, or user info
+function trackEvent(name) {
+    if (window.goatcounter && window.goatcounter.count) {
+        window.goatcounter.count({ path: 'event-' + name, title: name, event: true });
+    }
+}
+
 // CIT2000 Easter Egg Mode
 const CIT2000_KEY = 'weatherwonder_cit2000';
 
@@ -110,8 +118,12 @@ function toggleCIT2000() {
     const on = !isCIT2000();
     setCIT2000(on);
     applyCIT2000(on);
-    // If turning off CIT2000 and user was on Kelvin, revert to Fahrenheit
-    if (!on && getTempUnit() === 'K') {
+    trackEvent('cit2000-' + (on ? 'on' : 'off'));
+    if (on) {
+        // Switch to Kelvin (microns) when entering CIT2000 mode
+        saveTempUnit('K');
+    } else if (getTempUnit() === 'K') {
+        // If turning off CIT2000 and user was on Kelvin, revert to Fahrenheit
         saveTempUnit('F');
     }
     updateTempToggleUI();
@@ -338,6 +350,7 @@ function initializeTempToggle() {
             // F → C → K (only in CIT2000) → F
             const next = current === 'F' ? 'C' : (current === 'C' && cit) ? 'K' : 'F';
             saveTempUnit(next);
+            trackEvent('temp-' + next);
             updateTempToggleUI();
             // Re-render weather data with new unit
             if (weatherData) {
@@ -391,6 +404,7 @@ function initializeTimeToggle() {
             const current = getTimeFormat();
             const next = current === '12' ? '24' : '12';
             saveTimeFormat(next);
+            trackEvent('time-' + next + 'hr');
             updateTimeToggleUI();
             // Re-render weather data with new time format
             if (weatherData) {
@@ -530,6 +544,7 @@ function initializeTheme() {
             const current = getEffectiveTheme();
             const next = current === 'dark' ? 'light' : 'dark';
             saveTheme(next);
+            trackEvent('theme-' + next);
             applyTheme(next);
             // Re-render radar with appropriate tile layer
             if (radarMap) {
@@ -910,6 +925,7 @@ async function geocodeLocation(query) {
 
 // Select a geocoded location and load its weather
 function selectLocation(result) {
+    trackEvent('location-search');
     currentLocation = {
         name: `${result.name}${result.admin1 ? ', ' + result.admin1 : ''}`,
         latitude: result.latitude,
@@ -1946,6 +1962,8 @@ async function loadWeather() {
             lastUpdated.textContent = `Updated ${formatTime(now2)}`;
         }
 
+        trackEvent('weather-loaded');
+
     } catch (error) {
         console.error('Error loading weather:', error);
         document.getElementById('daily-forecast').innerHTML =
@@ -2261,18 +2279,21 @@ function initializeShareModal() {
 
     // Screenshot button
     shareScreenshotBtn.addEventListener('click', async () => {
+        trackEvent('share-screenshot');
         shareModal.classList.add('hidden');
         await takeScreenshot(currentShareSection);
     });
 
     // Copy link button
     shareLinkBtn.addEventListener('click', () => {
+        trackEvent('share-link');
         copyLink();
         shareModal.classList.add('hidden');
     });
 
     // Share both screenshot and link
     shareBothBtn.addEventListener('click', async () => {
+        trackEvent('share-both');
         shareModal.classList.add('hidden');
         // Take screenshot
         await takeScreenshot(currentShareSection);
@@ -2284,6 +2305,7 @@ function initializeShareModal() {
 
     // Native share button (iOS/Android share sheet)
     shareNativeBtn.addEventListener('click', async () => {
+        trackEvent('share-native');
         shareModal.classList.add('hidden');
         await nativeShare();
     });
@@ -2374,6 +2396,7 @@ function initializeModal() {
                 longitude: coords.longitude
             };
 
+            trackEvent('gps-location');
             updateLocationDisplay();
             modal.classList.add('hidden');
 
@@ -2558,6 +2581,7 @@ function initializeInstallButton() {
             deferredInstallPrompt.prompt();
             const result = await deferredInstallPrompt.userChoice;
             if (result.outcome === 'accepted') {
+                trackEvent('pwa-installed');
                 btn.classList.add('hidden');
                 showToast('WeatherWonder added to home screen!', true);
             }
