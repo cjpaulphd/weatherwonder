@@ -50,6 +50,14 @@ let radarLayer = null;
 let precipHistoryData = null;
 let precipHistoricalAvg = null;
 
+// Privacy-preserving usage events (GoatCounter)
+// Only tracks action names, never location data, coordinates, or user info
+function trackEvent(name) {
+    if (window.goatcounter && window.goatcounter.count) {
+        window.goatcounter.count({ path: 'event-' + name, title: name, event: true });
+    }
+}
+
 // CIT2000 Easter Egg Mode
 const CIT2000_KEY = 'weatherwonder_cit2000';
 
@@ -910,6 +918,7 @@ async function geocodeLocation(query) {
 
 // Select a geocoded location and load its weather
 function selectLocation(result) {
+    trackEvent('location-search');
     currentLocation = {
         name: `${result.name}${result.admin1 ? ', ' + result.admin1 : ''}`,
         latitude: result.latitude,
@@ -1946,6 +1955,8 @@ async function loadWeather() {
             lastUpdated.textContent = `Updated ${formatTime(now2)}`;
         }
 
+        trackEvent('weather-loaded');
+
     } catch (error) {
         console.error('Error loading weather:', error);
         document.getElementById('daily-forecast').innerHTML =
@@ -2261,18 +2272,21 @@ function initializeShareModal() {
 
     // Screenshot button
     shareScreenshotBtn.addEventListener('click', async () => {
+        trackEvent('share-screenshot');
         shareModal.classList.add('hidden');
         await takeScreenshot(currentShareSection);
     });
 
     // Copy link button
     shareLinkBtn.addEventListener('click', () => {
+        trackEvent('share-link');
         copyLink();
         shareModal.classList.add('hidden');
     });
 
     // Share both screenshot and link
     shareBothBtn.addEventListener('click', async () => {
+        trackEvent('share-both');
         shareModal.classList.add('hidden');
         // Take screenshot
         await takeScreenshot(currentShareSection);
@@ -2284,6 +2298,7 @@ function initializeShareModal() {
 
     // Native share button (iOS/Android share sheet)
     shareNativeBtn.addEventListener('click', async () => {
+        trackEvent('share-native');
         shareModal.classList.add('hidden');
         await nativeShare();
     });
@@ -2374,6 +2389,7 @@ function initializeModal() {
                 longitude: coords.longitude
             };
 
+            trackEvent('gps-location');
             updateLocationDisplay();
             modal.classList.add('hidden');
 
@@ -2558,6 +2574,7 @@ function initializeInstallButton() {
             deferredInstallPrompt.prompt();
             const result = await deferredInstallPrompt.userChoice;
             if (result.outcome === 'accepted') {
+                trackEvent('pwa-installed');
                 btn.classList.add('hidden');
                 showToast('WeatherWonder added to home screen!', true);
             }
