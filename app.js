@@ -137,6 +137,9 @@ function toggleCIT2000() {
             renderPrecipHistory(precipHistoryData, precipHistoricalAvg);
         }
     }
+    if (on) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 }
 
 function updateCIT2000ToggleUI() {
