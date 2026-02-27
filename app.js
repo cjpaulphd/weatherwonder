@@ -549,6 +549,10 @@ function initializeTheme() {
             saveTheme(next);
             trackEvent('theme-' + next);
             applyTheme(next);
+            // Re-render chart with correct theme colors
+            if (weatherData) {
+                renderChart(weatherData);
+            }
             // Re-render radar with appropriate tile layer
             if (radarMap) {
                 radarMap.remove();
@@ -1172,8 +1176,21 @@ const gridLinesPlugin = {
         if (isDayFlags && isDayFlags.length > 0) {
             const xScale = chart.scales.x;
             const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-            const dayColor = isLight ? 'rgba(255, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.06)';
-            const nightColor = isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(0, 0, 0, 0.15)';
+            const isCit = document.documentElement.classList.contains('cit2000-active');
+            let dayColor, nightColor;
+            if (isCit && !isLight) {
+                dayColor = 'rgba(255, 255, 255, 0.04)';
+                nightColor = 'rgba(0, 0, 0, 0.2)';
+            } else if (isCit && isLight) {
+                dayColor = 'rgba(255, 255, 255, 0.3)';
+                nightColor = 'rgba(128, 0, 128, 0.08)';
+            } else if (isLight) {
+                dayColor = 'rgba(255, 255, 255, 0.4)';
+                nightColor = 'rgba(0, 0, 0, 0.08)';
+            } else {
+                dayColor = 'rgba(255, 255, 255, 0.06)';
+                nightColor = 'rgba(0, 0, 0, 0.15)';
+            }
 
             let bandStart = 0;
             let bandIsDay = isDayFlags[0];
@@ -1198,11 +1215,14 @@ const gridLinesPlugin = {
             }
         }
 
+        // Get dynamic theme-aware grid colors
+        const gridColors = getChartColors();
+
         // Draw temperature grid lines (every 10°F) - pink/red color
         const tempMin = Math.floor(yTempScale.min / 10) * 10;
         const tempMax = Math.ceil(yTempScale.max / 10) * 10;
 
-        ctx.strokeStyle = 'rgba(239, 154, 154, 0.3)';
+        ctx.strokeStyle = gridColors.tempGridLine;
         ctx.lineWidth = 1;
         ctx.setLineDash([5, 5]);
 
@@ -1215,7 +1235,7 @@ const gridLinesPlugin = {
                 ctx.stroke();
 
                 // Draw temperature label on left
-                ctx.fillStyle = 'rgba(239, 154, 154, 0.7)';
+                ctx.fillStyle = gridColors.tempGridLabel;
                 ctx.font = '9px sans-serif';
                 ctx.textAlign = 'left';
                 const tLabel = getTempUnit() === 'K' ? `${temp}K` : `${temp}°`;
@@ -1226,7 +1246,7 @@ const gridLinesPlugin = {
         // Draw precipitation amount grid lines (every 0.10") - green color
         const precipMax = Math.ceil(yPrecipScale.max * 10) / 10;
 
-        ctx.strokeStyle = 'rgba(102, 187, 106, 0.3)';
+        ctx.strokeStyle = gridColors.precipGridLine;
         ctx.setLineDash([3, 3]);
 
         for (let precip = 0.1; precip <= precipMax; precip += 0.1) {
@@ -1238,7 +1258,7 @@ const gridLinesPlugin = {
                 ctx.stroke();
 
                 // Draw precip label on right
-                ctx.fillStyle = 'rgba(102, 187, 106, 0.7)';
+                ctx.fillStyle = gridColors.precipGridLabel;
                 ctx.font = '9px sans-serif';
                 ctx.textAlign = 'right';
                 ctx.fillText(`${precip.toFixed(1)}"`, chartArea.right - 2, y - 2);
@@ -1272,6 +1292,43 @@ const gridLinesPlugin = {
 
 // Register the plugin
 Chart.register(gridLinesPlugin);
+
+// Get theme-aware chart colors (adapts to dark/light/CIT2000 modes)
+function getChartColors() {
+    const styles = getComputedStyle(document.documentElement);
+    const tempRed = styles.getPropertyValue('--temp-red').trim();
+    const precipBlue = styles.getPropertyValue('--precip-blue').trim();
+    const precipGreen = styles.getPropertyValue('--precip-green').trim();
+
+    // Parse hex color to rgba with alpha
+    function hexToRgba(hex, alpha) {
+        // Handle both #rgb and #rrggbb and named-style from CSS vars
+        let r, g, b;
+        hex = hex.replace('#', '');
+        if (hex.length === 3) {
+            r = parseInt(hex[0] + hex[0], 16);
+            g = parseInt(hex[1] + hex[1], 16);
+            b = parseInt(hex[2] + hex[2], 16);
+        } else {
+            r = parseInt(hex.substring(0, 2), 16);
+            g = parseInt(hex.substring(2, 4), 16);
+            b = parseInt(hex.substring(4, 6), 16);
+        }
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    return {
+        tempBorder: tempRed,
+        precipProbBorder: precipBlue,
+        precipProbBg: hexToRgba(precipBlue, 0.1),
+        precipAmountBorder: precipGreen,
+        precipAmountBg: hexToRgba(precipGreen, 0.3),
+        tempGridLine: hexToRgba(tempRed, 0.3),
+        tempGridLabel: hexToRgba(tempRed, 0.7),
+        precipGridLine: hexToRgba(precipGreen, 0.3),
+        precipGridLabel: hexToRgba(precipGreen, 0.7)
+    };
+}
 
 // Render the temperature/precipitation chart - starting from midnight today
 function renderChart(data) {
@@ -1325,6 +1382,8 @@ function renderChart(data) {
         forecastChart.destroy();
     }
 
+    const colors = getChartColors();
+
     forecastChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -1334,7 +1393,7 @@ function renderChart(data) {
                 {
                     label: 'Temperature',
                     data: temps,
-                    borderColor: '#ef9a9a',
+                    borderColor: colors.tempBorder,
                     backgroundColor: 'transparent',
                     borderWidth: 2,
                     tension: 0.4,
@@ -1345,8 +1404,8 @@ function renderChart(data) {
                 {
                     label: 'Precipitation Probability',
                     data: precipProbs,
-                    borderColor: '#4fc3f7',
-                    backgroundColor: 'rgba(79, 195, 247, 0.1)',
+                    borderColor: colors.precipProbBorder,
+                    backgroundColor: colors.precipProbBg,
                     borderWidth: 2,
                     tension: 0.4,
                     pointRadius: 0,
@@ -1357,8 +1416,8 @@ function renderChart(data) {
                 {
                     label: 'Precipitation Amount',
                     data: precipAmounts,
-                    borderColor: '#66bb6a',
-                    backgroundColor: 'rgba(102, 187, 106, 0.3)',
+                    borderColor: colors.precipAmountBorder,
+                    backgroundColor: colors.precipAmountBg,
                     borderWidth: 2,
                     tension: 0.4,
                     pointRadius: 0,
@@ -1900,6 +1959,8 @@ function updateLocationDisplay(currentTemp = null, feelsLike = null) {
 
 // Load weather for current location
 async function loadWeather() {
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) refreshBtn.classList.add('spinning');
     try {
         // Save as last used location
         saveLastLocation(currentLocation);
@@ -1971,6 +2032,8 @@ async function loadWeather() {
         console.error('Error loading weather:', error);
         document.getElementById('daily-forecast').innerHTML =
             `<div class="error">Failed to load weather data: ${error.message}</div>`;
+    } finally {
+        if (refreshBtn) refreshBtn.classList.remove('spinning');
     }
 }
 
@@ -2656,6 +2719,95 @@ function initializeShareAppModal() {
     }
 }
 
+// Pull-to-Refresh
+function initializePullToRefresh() {
+    const indicator = document.getElementById('pull-to-refresh');
+    if (!indicator) return;
+
+    let startY = 0;
+    let currentY = 0;
+    let pulling = false;
+    let refreshing = false;
+    const THRESHOLD = 80;
+    const MAX_PULL = 120;
+
+    function getScrollTop() {
+        return window.scrollY || document.documentElement.scrollTop;
+    }
+
+    document.addEventListener('touchstart', (e) => {
+        if (refreshing) return;
+        if (getScrollTop() > 5) return;
+        startY = e.touches[0].clientY;
+        pulling = true;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!pulling || refreshing) return;
+        currentY = e.touches[0].clientY;
+        const pullDistance = currentY - startY;
+
+        if (pullDistance < 0 || getScrollTop() > 5) {
+            pulling = false;
+            indicator.classList.remove('visible');
+            indicator.style.transform = 'translateX(-50%) translateY(-60px)';
+            return;
+        }
+
+        const cappedDistance = Math.min(pullDistance, MAX_PULL);
+        const progress = Math.min(cappedDistance / THRESHOLD, 1);
+
+        indicator.classList.add('visible');
+        indicator.style.transform = `translateX(-50%) translateY(${cappedDistance - 20}px)`;
+
+        // Rotate the WW logo based on pull progress
+        const svg = indicator.querySelector('svg');
+        if (svg) {
+            svg.style.transform = `rotate(${progress * 180}deg)`;
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+        if (!pulling || refreshing) return;
+        const pullDistance = currentY - startY;
+        pulling = false;
+
+        if (pullDistance >= THRESHOLD) {
+            // Trigger refresh
+            refreshing = true;
+            indicator.classList.add('refreshing');
+            indicator.style.transform = 'translateX(-50%) translateY(20px)';
+
+            // Reset radar map for full re-initialization
+            if (radarMap) {
+                radarMap.remove();
+                radarMap = null;
+                radarLayer = null;
+            }
+
+            loadWeather().then(() => {
+                setTimeout(() => {
+                    indicator.classList.remove('visible', 'refreshing');
+                    indicator.style.transform = 'translateX(-50%) translateY(-60px)';
+                    const svg = indicator.querySelector('svg');
+                    if (svg) svg.style.transform = '';
+                    refreshing = false;
+                }, 400);
+            });
+            trackEvent('pull-to-refresh');
+        } else {
+            // Snap back
+            indicator.classList.remove('visible');
+            indicator.style.transform = 'translateX(-50%) translateY(-60px)';
+            const svg = indicator.querySelector('svg');
+            if (svg) svg.style.transform = '';
+        }
+
+        startY = 0;
+        currentY = 0;
+    }, { passive: true });
+}
+
 // Register service worker
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -2675,7 +2827,8 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeInstallButton,
         initializeIOSInstallModal,
         initializeShareAppModal,
-        initializeCIT2000
+        initializeCIT2000,
+        initializePullToRefresh
     ];
     inits.forEach(fn => {
         try { fn(); } catch (e) { console.error('Init error in ' + fn.name + ':', e); }
