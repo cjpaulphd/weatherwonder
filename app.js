@@ -441,6 +441,7 @@ function reloadLocationTemp() {
         }
     }
     updateLocationDisplay(currentTemp, feelsLike);
+    renderConditionsBar();
 }
 
 // Format a time according to user's 12/24 preference.
@@ -777,6 +778,7 @@ async function fetchWeatherData(lat, lon) {
         hourly: [
             'temperature_2m',
             'apparent_temperature',
+            'relative_humidity_2m',
             'precipitation_probability',
             'precipitation',
             'snowfall',
@@ -822,22 +824,68 @@ async function fetchAQI(lat, lon) {
     return data.current.us_aqi;
 }
 
-// Render AQI value with EPA color coding
-function renderAQI(aqi) {
-    const el = document.getElementById('aqi-display');
+// Get EPA color for AQI value
+function getAQIColor(aqi) {
+    if (aqi <= 50) return '#00e400';
+    if (aqi <= 100) return '#e6d700';
+    if (aqi <= 150) return '#ff7e00';
+    if (aqi <= 200) return '#ff0000';
+    if (aqi <= 300) return '#8f3f97';
+    return '#cc00cc';
+}
+
+// Get color for humidity level
+function getHumidityColor(humidity) {
+    if (humidity <= 30) return '#ff9800';   // Dry - orange
+    if (humidity <= 60) return '#00e400';   // Comfortable - green
+    if (humidity <= 80) return '#e6d700';   // Humid - yellow
+    return '#4fc3f7';                       // Very humid - blue
+}
+
+// Get color for wind speed (mph)
+function getWindColor(mph) {
+    if (mph <= 5) return 'var(--text-secondary)';  // Calm - muted
+    if (mph <= 15) return '#00e400';                // Light - green
+    if (mph <= 25) return '#e6d700';                // Moderate - yellow
+    if (mph <= 40) return '#ff7e00';                // Strong - orange
+    return '#ff0000';                               // Severe - red
+}
+
+// Store current conditions for re-rendering on unit change
+let currentConditions = { aqi: null, humidity: null, windSpeed: null, windDir: null };
+
+// Render conditions bar (AQI, humidity, wind) on a single compact line
+function renderConditionsBar() {
+    const el = document.getElementById('conditions-bar');
     if (!el) return;
-    if (aqi == null) { el.textContent = ''; return; }
 
-    let color;
-    if (aqi <= 50) color = '#00e400';
-    else if (aqi <= 100) color = '#e6d700';
-    else if (aqi <= 150) color = '#ff7e00';
-    else if (aqi <= 200) color = '#ff0000';
-    else if (aqi <= 300) color = '#8f3f97';
-    else color = '#cc00cc';
+    const { aqi, humidity, windSpeed, windDir } = currentConditions;
+    const parts = [];
 
-    el.textContent = `AQI ${Math.round(aqi)}`;
-    el.style.color = color;
+    if (aqi != null) {
+        const color = getAQIColor(aqi);
+        parts.push(`<span style="color:${color}">AQI ${Math.round(aqi)}</span>`);
+    }
+
+    if (humidity != null) {
+        const color = getHumidityColor(humidity);
+        parts.push(`<span style="color:${color}">${Math.round(humidity)}% RH</span>`);
+    }
+
+    if (windSpeed != null && windDir != null) {
+        const color = getWindColor(windSpeed);
+        const dir = getWindDirection(windDir);
+        const arrow = String.fromCharCode(8593); // ↑
+        const rotation = windDir + 180; // Point arrow in direction wind is going
+        parts.push(`<span style="color:${color}"><span class="cond-wind-icon" style="display:inline-block;transform:rotate(${rotation}deg)">${arrow}</span> ${dir} ${formatWindSpeed(windSpeed)}</span>`);
+    }
+
+    if (parts.length === 0) {
+        el.innerHTML = '';
+        return;
+    }
+
+    el.innerHTML = parts.join('<span class="cond-sep">&middot;</span>');
 }
 
 // US state abbreviation lookup for "city, state" search parsing
@@ -1975,7 +2023,7 @@ async function loadWeather() {
             currentLocation.timezone = weatherData.timezone;
         }
 
-        // Get current temperature and feels-like from hourly data
+        // Get current temperature, feels-like, humidity, and wind from hourly data
         const now = getLocationNow();
         let currentTemp = null;
         let feelsLike = null;
@@ -1985,15 +2033,21 @@ async function loadWeather() {
                 const idx = i > 0 ? i - 1 : 0;
                 currentTemp = formatTempValue(weatherData.hourly.temperature_2m[idx]);
                 feelsLike = formatTempValue(weatherData.hourly.apparent_temperature[idx]);
+                currentConditions.humidity = weatherData.hourly.relative_humidity_2m[idx];
+                currentConditions.windSpeed = weatherData.hourly.wind_speed_10m[idx];
+                currentConditions.windDir = weatherData.hourly.wind_direction_10m[idx];
                 break;
             }
         }
         updateLocationDisplay(currentTemp, feelsLike);
 
-        // Fetch and render AQI (non-blocking)
+        // Fetch AQI (non-blocking), then render full conditions bar
         fetchAQI(currentLocation.latitude, currentLocation.longitude)
-            .then(aqi => renderAQI(aqi))
-            .catch(() => renderAQI(null));
+            .then(aqi => { currentConditions.aqi = aqi; renderConditionsBar(); })
+            .catch(() => { currentConditions.aqi = null; renderConditionsBar(); });
+
+        // Render conditions bar immediately with humidity/wind (AQI will update when ready)
+        renderConditionsBar();
 
         renderDailyForecast(weatherData);
         renderHourlyForecast(weatherData);

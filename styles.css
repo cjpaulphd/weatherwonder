@@ -253,15 +253,28 @@ body {
     padding: 2px 16px 4px;
 }
 
-.aqi-display {
-    text-align: center;
-    font-size: 13px;
+.conditions-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
     font-weight: 600;
     padding: 2px 16px 6px;
 }
 
-.aqi-display:empty {
+.conditions-bar:empty {
     display: none;
+}
+
+.conditions-bar .cond-sep {
+    color: var(--text-secondary);
+    opacity: 0.4;
+}
+
+.conditions-bar .cond-wind-icon {
+    display: inline-block;
+    transform-origin: center;
 }
 
 /* Alert Container & Banner */
