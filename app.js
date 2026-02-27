@@ -112,6 +112,7 @@ function applyCIT2000(on) {
         });
     }
     updateCIT2000ToggleUI();
+    updateThemeColor(getEffectiveTheme());
 }
 
 function toggleCIT2000() {
@@ -533,7 +534,11 @@ function updateThemeToggleUI(theme) {
 
 function updateThemeColor(theme) {
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) {
+    if (!meta) return;
+    const cit = document.documentElement.classList.contains('cit2000-active');
+    if (cit) {
+        meta.setAttribute('content', theme === 'light' ? '#f0e0ff' : '#1a0a2e');
+    } else {
         meta.setAttribute('content', theme === 'light' ? '#f5f5f5' : '#1a1a1a');
     }
 }
