@@ -186,10 +186,8 @@ function saveFavorites(favorites) {
 
 function addFavorite(location) {
     const favorites = getFavorites();
-    // Check if already exists
-    const exists = favorites.some(f =>
-        f.latitude === location.latitude && f.longitude === location.longitude
-    );
+    // Check if already exists (fuzzy match to handle geocoding precision differences)
+    const exists = favorites.some(f => coordsMatch(f, location));
     if (!exists) {
         favorites.push({
             name: location.name,
@@ -212,11 +210,15 @@ function removeFavorite(latitude, longitude) {
     renderFavoritesList();
 }
 
+// Fuzzy coordinate match (~111m tolerance) to handle geocoding precision differences
+function coordsMatch(a, b) {
+    return Math.abs(a.latitude - b.latitude) < 0.001 &&
+           Math.abs(a.longitude - b.longitude) < 0.001;
+}
+
 function isFavorite(location) {
     const favorites = getFavorites();
-    return favorites.some(f =>
-        f.latitude === location.latitude && f.longitude === location.longitude
-    );
+    return favorites.some(f => coordsMatch(f, location));
 }
 
 function updateFavoriteButton() {
@@ -1051,14 +1053,15 @@ function showDisambiguation(results) {
     container.innerHTML = '<p class="disambiguation-title">Multiple locations found:</p>';
 
     results.forEach(result => {
+        const alreadyFav = isFavorite(result);
         const item = document.createElement('div');
-        item.className = 'disambiguation-item';
+        item.className = 'disambiguation-item' + (alreadyFav ? ' is-favorite' : '');
 
         let label = result.name;
         if (result.admin1) label += `, ${result.admin1}`;
         if (result.country) label += `, ${result.country}`;
 
-        item.textContent = label;
+        item.innerHTML = `<span>${label}</span>${alreadyFav ? '<span class="disambiguation-fav-star" title="Already in favorites">★</span>' : ''}`;
         item.addEventListener('click', () => {
             selectLocation(result);
             document.getElementById('location-modal').classList.add('hidden');
