@@ -186,39 +186,40 @@ function saveFavorites(favorites) {
 
 function addFavorite(location) {
     const favorites = getFavorites();
-    // Check if already exists (fuzzy match to handle geocoding precision differences)
-    const exists = favorites.some(f => coordsMatch(f, location));
-    if (!exists) {
-        favorites.push({
-            name: location.name,
-            latitude: location.latitude,
-            longitude: location.longitude
-        });
-        saveFavorites(favorites);
+    // Check if already exists (by name or coordinate proximity)
+    const exists = favorites.some(f => locationsMatch(f, location));
+    if (exists) {
+        showToast('Already in favorites');
+        return;
     }
-    updateFavoriteButton();
-    renderFavoritesList();
-}
-
-function removeFavorite(latitude, longitude) {
-    let favorites = getFavorites();
-    favorites = favorites.filter(f =>
-        !(f.latitude === latitude && f.longitude === longitude)
-    );
+    favorites.push({
+        name: location.name,
+        latitude: location.latitude,
+        longitude: location.longitude
+    });
     saveFavorites(favorites);
     updateFavoriteButton();
     renderFavoritesList();
 }
 
-// Fuzzy coordinate match (~111m tolerance) to handle geocoding precision differences
-function coordsMatch(a, b) {
-    return Math.abs(a.latitude - b.latitude) < 0.001 &&
-           Math.abs(a.longitude - b.longitude) < 0.001;
+function removeFavorite(location) {
+    let favorites = getFavorites();
+    favorites = favorites.filter(f => !locationsMatch(f, location));
+    saveFavorites(favorites);
+    updateFavoriteButton();
+    renderFavoritesList();
+}
+
+// Match locations by case-insensitive name or coordinate proximity (~1.1km)
+function locationsMatch(a, b) {
+    if (a.name && b.name && a.name.toLowerCase() === b.name.toLowerCase()) return true;
+    return Math.abs(a.latitude - b.latitude) < 0.01 &&
+           Math.abs(a.longitude - b.longitude) < 0.01;
 }
 
 function isFavorite(location) {
     const favorites = getFavorites();
-    return favorites.some(f => coordsMatch(f, location));
+    return favorites.some(f => locationsMatch(f, location));
 }
 
 function updateFavoriteButton() {
@@ -403,9 +404,12 @@ function renderFavoritesList() {
     list.querySelectorAll('.favorite-item-remove').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const lat = parseFloat(btn.dataset.lat);
-            const lon = parseFloat(btn.dataset.lon);
-            removeFavorite(lat, lon);
+            const item = btn.closest('.favorite-item');
+            removeFavorite({
+                name: item.dataset.name,
+                latitude: parseFloat(btn.dataset.lat),
+                longitude: parseFloat(btn.dataset.lon)
+            });
         });
     });
 
@@ -2759,7 +2763,7 @@ function initializeMenu() {
     favoriteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (isFavorite(currentLocation)) {
-            removeFavorite(currentLocation.latitude, currentLocation.longitude);
+            removeFavorite(currentLocation);
             showToast('Removed from favorites');
         } else {
             addFavorite(currentLocation);
