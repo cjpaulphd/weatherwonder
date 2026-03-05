@@ -296,6 +296,84 @@ function renderFavoritesList() {
         });
     });
 
+    // Touch drag-and-drop for mobile (iOS doesn't support HTML5 drag API)
+    let touchSrcIndex = null;
+    let touchClone = null;
+    let touchItemOffsetY = 0;
+
+    function onTouchMove(e) {
+        if (touchSrcIndex === null) return;
+        e.preventDefault(); // stops page/menu scroll while dragging
+        const touch = e.touches[0];
+        touchClone.style.top = (touch.clientY - touchItemOffsetY) + 'px';
+
+        // Temporarily hide clone so elementFromPoint sees what's underneath
+        touchClone.style.visibility = 'hidden';
+        const el = document.elementFromPoint(touch.clientX, touch.clientY);
+        touchClone.style.visibility = '';
+
+        items.forEach(i => i.classList.remove('drag-over'));
+        const target = el && el.closest('.favorite-item');
+        if (target && Array.from(items).includes(target)) {
+            target.classList.add('drag-over');
+        }
+    }
+
+    function onTouchEnd(e) {
+        if (touchSrcIndex === null) return;
+        const touch = e.changedTouches[0];
+
+        // Remove clone before elementFromPoint so we see the item underneath
+        if (touchClone) { touchClone.remove(); touchClone = null; }
+
+        const el = document.elementFromPoint(touch.clientX, touch.clientY);
+        const targetItem = el && el.closest('.favorite-item');
+        const targetIndex = targetItem ? Array.from(items).indexOf(targetItem) : -1;
+
+        items.forEach(i => i.classList.remove('dragging', 'drag-over'));
+
+        const srcIdx = touchSrcIndex;
+        touchSrcIndex = null;
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+
+        if (targetIndex !== -1 && targetIndex !== srcIdx) {
+            const favs = getFavorites();
+            const [moved] = favs.splice(srcIdx, 1);
+            favs.splice(targetIndex, 0, moved);
+            saveFavorites(favs);
+            renderFavoritesList();
+        }
+    }
+
+    items.forEach((item, index) => {
+        item.querySelector('.drag-handle').addEventListener('touchstart', (e) => {
+            touchSrcIndex = index;
+            item.classList.add('dragging');
+
+            const touch = e.touches[0];
+            const rect = item.getBoundingClientRect();
+            touchItemOffsetY = touch.clientY - rect.top;
+
+            touchClone = item.cloneNode(true);
+            Object.assign(touchClone.style, {
+                position: 'fixed',
+                left: rect.left + 'px',
+                top: rect.top + 'px',
+                width: rect.width + 'px',
+                opacity: '0.85',
+                pointerEvents: 'none',
+                zIndex: '9999',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                transition: 'none'
+            });
+            document.body.appendChild(touchClone);
+
+            document.addEventListener('touchmove', onTouchMove, { passive: false });
+            document.addEventListener('touchend', onTouchEnd);
+        }, { passive: true });
+    });
+
     // Add click handlers
     list.querySelectorAll('.favorite-item').forEach(item => {
         item.addEventListener('click', (e) => {
