@@ -201,11 +201,39 @@ body {
     background-color: var(--bg-card);
     border-radius: 8px;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: background-color 0.2s, opacity 0.2s;
 }
 
 .favorite-item:hover {
     background-color: var(--bg-primary);
+}
+
+.favorite-item.dragging {
+    opacity: 0.4;
+}
+
+.favorite-item.drag-over {
+    box-shadow: 0 -2px 0 0 #4a9eff;
+    background-color: var(--bg-primary);
+}
+
+.drag-handle {
+    color: var(--text-secondary);
+    cursor: grab;
+    padding: 0 8px 0 0;
+    font-size: 16px;
+    flex-shrink: 0;
+    user-select: none;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+}
+
+.drag-handle:hover {
+    opacity: 1;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
 }
 
 .favorite-item-name {
@@ -1482,6 +1510,19 @@ body {
 .disambiguation-item:hover {
     background-color: var(--bg-primary);
     color: var(--accent-blue);
+}
+
+.disambiguation-item.is-favorite {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.disambiguation-fav-star {
+    color: #ffc107;
+    font-size: 15px;
+    flex-shrink: 0;
+    margin-left: 8px;
 }
 
 /* Favorite Item Actions */

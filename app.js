@@ -186,10 +186,8 @@ function saveFavorites(favorites) {
 
 function addFavorite(location) {
     const favorites = getFavorites();
-    // Check if already exists
-    const exists = favorites.some(f =>
-        f.latitude === location.latitude && f.longitude === location.longitude
-    );
+    // Check if already exists (fuzzy match to handle geocoding precision differences)
+    const exists = favorites.some(f => coordsMatch(f, location));
     if (!exists) {
         favorites.push({
             name: location.name,
@@ -212,11 +210,15 @@ function removeFavorite(latitude, longitude) {
     renderFavoritesList();
 }
 
+// Fuzzy coordinate match (~111m tolerance) to handle geocoding precision differences
+function coordsMatch(a, b) {
+    return Math.abs(a.latitude - b.latitude) < 0.001 &&
+           Math.abs(a.longitude - b.longitude) < 0.001;
+}
+
 function isFavorite(location) {
     const favorites = getFavorites();
-    return favorites.some(f =>
-        f.latitude === location.latitude && f.longitude === location.longitude
-    );
+    return favorites.some(f => coordsMatch(f, location));
 }
 
 function updateFavoriteButton() {
@@ -244,7 +246,8 @@ function renderFavoritesList() {
     }
 
     list.innerHTML = favorites.map(fav => `
-        <div class="favorite-item" data-lat="${fav.latitude}" data-lon="${fav.longitude}" data-name="${fav.name}">
+        <div class="favorite-item" draggable="true" data-lat="${fav.latitude}" data-lon="${fav.longitude}" data-name="${fav.name}">
+            <span class="drag-handle" title="Drag to reorder">⠿</span>
             <span class="favorite-item-name">${fav.name}</span>
             <div class="favorite-item-actions">
                 <button class="favorite-item-rename" data-lat="${fav.latitude}" data-lon="${fav.longitude}" title="Rename">✏️</button>
@@ -253,10 +256,52 @@ function renderFavoritesList() {
         </div>
     `).join('');
 
+    // Drag-and-drop reordering
+    let dragSrcIndex = null;
+    const items = list.querySelectorAll('.favorite-item');
+
+    items.forEach((item, index) => {
+        item.addEventListener('dragstart', (e) => {
+            dragSrcIndex = index;
+            item.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+
+        item.addEventListener('dragend', () => {
+            item.classList.remove('dragging');
+            list.querySelectorAll('.favorite-item').forEach(i => i.classList.remove('drag-over'));
+        });
+
+        item.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            item.classList.add('drag-over');
+        });
+
+        item.addEventListener('dragleave', () => {
+            item.classList.remove('drag-over');
+        });
+
+        item.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            item.classList.remove('drag-over');
+            if (dragSrcIndex === null || dragSrcIndex === index) return;
+            const favs = getFavorites();
+            const [moved] = favs.splice(dragSrcIndex, 1);
+            favs.splice(index, 0, moved);
+            saveFavorites(favs);
+            dragSrcIndex = null;
+            renderFavoritesList();
+        });
+    });
+
     // Add click handlers
     list.querySelectorAll('.favorite-item').forEach(item => {
         item.addEventListener('click', (e) => {
-            if (e.target.classList.contains('favorite-item-remove') || e.target.classList.contains('favorite-item-rename')) return;
+            if (e.target.classList.contains('favorite-item-remove') ||
+                e.target.classList.contains('favorite-item-rename') ||
+                e.target.classList.contains('drag-handle')) return;
 
             const lat = parseFloat(item.dataset.lat);
             const lon = parseFloat(item.dataset.lon);
@@ -1008,14 +1053,15 @@ function showDisambiguation(results) {
     container.innerHTML = '<p class="disambiguation-title">Multiple locations found:</p>';
 
     results.forEach(result => {
+        const alreadyFav = isFavorite(result);
         const item = document.createElement('div');
-        item.className = 'disambiguation-item';
+        item.className = 'disambiguation-item' + (alreadyFav ? ' is-favorite' : '');
 
         let label = result.name;
         if (result.admin1) label += `, ${result.admin1}`;
         if (result.country) label += `, ${result.country}`;
 
-        item.textContent = label;
+        item.innerHTML = `<span>${label}</span>${alreadyFav ? '<span class="disambiguation-fav-star" title="Already in favorites">★</span>' : ''}`;
         item.addEventListener('click', () => {
             selectLocation(result);
             document.getElementById('location-modal').classList.add('hidden');
