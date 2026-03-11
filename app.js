@@ -553,6 +553,42 @@ function initializeTimeToggle() {
     }
 }
 
+// Locale detection for first-time users
+function extractCountry(primaryLocale, allLocales) {
+    for (const loc of [primaryLocale, ...allLocales]) {
+        const parts = loc.split('-');
+        if (parts.length >= 2) {
+            const candidate = parts[parts.length - 1].toUpperCase();
+            if (candidate.length === 2) return candidate;
+        }
+    }
+    return '';
+}
+
+function detectLocaleDefaults() {
+    try {
+        // Temperature unit: imperial only in US and a few small nations
+        if (localStorage.getItem(TEMP_UNIT_KEY) === null) {
+            const country = extractCountry(navigator.language || '', navigator.languages || []);
+            const imperialCountries = ['US', 'LR', 'MM', 'FM', 'MH', 'PW'];
+            localStorage.setItem(TEMP_UNIT_KEY, imperialCountries.includes(country) ? 'F' : 'C');
+        }
+
+        // Time format: use Intl hourCycle detection
+        if (localStorage.getItem(TIME_FORMAT_KEY) === null) {
+            let hourCycle = null;
+            try {
+                hourCycle = Intl.DateTimeFormat(undefined, { hour: 'numeric' })
+                    .resolvedOptions().hourCycle;
+            } catch (e) { /* Intl not available */ }
+            localStorage.setItem(TIME_FORMAT_KEY,
+                (hourCycle === 'h23' || hourCycle === 'h24') ? '24' : '12');
+        }
+    } catch (e) {
+        // localStorage unavailable; getters will use hardcoded defaults
+    }
+}
+
 // Helper to re-update location display temperature after unit change
 function reloadLocationTemp() {
     if (!weatherData) return;
@@ -3002,6 +3038,7 @@ if ('serviceWorker' in navigator) {
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
+    detectLocaleDefaults();
     const inits = [
         initializeTheme,
         initializeTempToggle,
