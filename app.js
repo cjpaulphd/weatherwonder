@@ -796,6 +796,19 @@ function isSnow(code) {
     return [71, 73, 75, 77, 85, 86].includes(code);
 }
 
+// Map a snow weather code to its nearest rain equivalent.
+// Used when temperature is above freezing but Open-Meteo still returns a snow code.
+const SNOW_TO_RAIN = { 71: 61, 73: 63, 75: 65, 77: 51, 85: 80, 86: 82 };
+
+// Return the weather code to use for icon display, substituting a rain code when
+// the weather code indicates snow but the temperature is above 2°C (35.6°F).
+function tempGuardedCode(code, tempCelsius) {
+    if (isSnow(code) && tempCelsius !== null && tempCelsius > 2) {
+        return SNOW_TO_RAIN[code] ?? 63;
+    }
+    return code;
+}
+
 // Format temperature (returns just the number in current unit)
 function formatTempValue(temp) {
     const unit = getTempUnit();
@@ -1165,7 +1178,7 @@ function clearDisambiguation() {
     }
 }
 
-// Get AM/PM weather codes from hourly data for a specific date
+// Get AM/PM weather codes (and temperatures) from hourly data for a specific date
 function getAmPmWeatherCodes(data, targetDate) {
     const hourly = data.hourly;
     const targetDay = new Date(targetDate);
@@ -1173,6 +1186,8 @@ function getAmPmWeatherCodes(data, targetDate) {
 
     let amCode = null;
     let pmCode = null;
+    let amTemp = null;
+    let pmTemp = null;
 
     for (let i = 0; i < hourly.time.length; i++) {
         const hourDate = new Date(hourly.time[i]);
@@ -1184,15 +1199,17 @@ function getAmPmWeatherCodes(data, targetDate) {
             // AM: around 9-10 AM
             if (hour === 9 || hour === 10) {
                 amCode = hourly.weather_code[i];
+                amTemp = hourly.temperature_2m[i];
             }
             // PM: around 5-6 PM
             if (hour === 17 || hour === 18) {
                 pmCode = hourly.weather_code[i];
+                pmTemp = hourly.temperature_2m[i];
             }
         }
     }
 
-    return { amCode, pmCode };
+    return { amCode, pmCode, amTemp, pmTemp };
 }
 
 // Render daily forecast cards - starting from today (current day)
@@ -1224,14 +1241,14 @@ function renderDailyForecast(data) {
         card.className = 'daily-card';
 
         const dailyWeatherCode = daily.weather_code[i];
-        const hasSnow = daily.snowfall_sum[i] > 0;
+        const hasSnow = daily.snowfall_sum[i] >= 1; // at least 1 cm to be called a snow day
         const hasPrecip = daily.precipitation_sum[i] > 0;
         const precipProb = daily.precipitation_probability_max[i];
         const windSpeed = daily.wind_speed_10m_max[i];
         const windDir = daily.wind_direction_10m_dominant[i];
 
         // Get AM/PM weather codes from hourly data
-        const { amCode, pmCode } = getAmPmWeatherCodes(data, date);
+        const { amCode, pmCode, amTemp, pmTemp } = getAmPmWeatherCodes(data, date);
 
         // Changed to min/max order
         const lowTemp = formatTempValue(daily.temperature_2m_min[i]);
@@ -1239,9 +1256,16 @@ function renderDailyForecast(data) {
 
         let precipClass = hasSnow ? 'snow' : '';
 
-        // Use AM/PM icons if available, otherwise fall back to daily icon
-        const amIcon = amCode !== null ? getWeatherIcon(amCode) : getWeatherIcon(dailyWeatherCode);
-        const pmIcon = pmCode !== null ? getWeatherIcon(pmCode, true) : getWeatherIcon(dailyWeatherCode, true);
+        // Use AM/PM icons if available, otherwise fall back to daily icon.
+        // Guard snow codes against the actual temperature at that hour: if it's
+        // above 2°C (35.6°F), substitute the nearest rain equivalent so that a
+        // brief overnight snow transition doesn't show a snowflake on a warm day.
+        const rawAmCode = amCode !== null ? amCode : dailyWeatherCode;
+        const rawPmCode = pmCode !== null ? pmCode : dailyWeatherCode;
+        const guardedAmCode = tempGuardedCode(rawAmCode, amTemp ?? daily.temperature_2m_min[i]);
+        const guardedPmCode = tempGuardedCode(rawPmCode, pmTemp ?? daily.temperature_2m_max[i]);
+        const amIcon = getWeatherIcon(guardedAmCode);
+        const pmIcon = getWeatherIcon(guardedPmCode, true);
 
         const kClass = getTempUnit() === 'K' ? ' kelvin-units' : '';
         card.innerHTML = `
