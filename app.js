@@ -1138,8 +1138,11 @@ async function geocodeLocation(query) {
     }
 
     // For zip codes or when Open-Meteo returns no results, try Nominatim
+    // US ZIP codes get countrycodes=us to avoid false matches from other countries
+    const nomParams = new URLSearchParams({ q: trimmed, format: 'json', limit: 5, addressdetails: 1 });
+    if (isZip) nomParams.set('countrycodes', 'us');
     const nomResponse = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(trimmed)}&format=json&limit=5&addressdetails=1`,
+        `https://nominatim.openstreetmap.org/search?${nomParams}`,
         { headers: { 'User-Agent': 'WeatherWonder (cjpaulphd)' } }
     );
     if (!nomResponse.ok) throw new Error('Failed to geocode location');
