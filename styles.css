@@ -1589,11 +1589,11 @@ body {
 }
 
 .precip-above {
-    color: #ef6c00;
+    color: #42a5f5;
 }
 
 .precip-below {
-    color: #42a5f5;
+    color: #e53935;
 }
 
 .precip-near {
