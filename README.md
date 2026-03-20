@@ -120,6 +120,10 @@ This site uses [GoatCounter](https://www.goatcounter.com/) for privacy-friendly,
 
 This project is licensed under the [MIT License](LICENSE).
 
+## Name Note
+
+An unrelated project called WeatherWonder was independently created in 2017 as a class project at SUNY New Paltz (weatherwonder.andrewhaaland.com). This project was developed separately and is not affiliated with or derived from that work. Both projects are non-commercial and were built in academic/personal contexts.
+
 ## Author
 
 **WeatherWonder by cjpaulphd**
