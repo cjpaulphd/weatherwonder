@@ -2181,9 +2181,10 @@ function renderPrecipHistory(data, histAvg) {
                 </div>
             `).join('')}
         </div>
-        <div class="precip-history-link">
-            <a href="https://cjpaulphd.github.io/hilary-sprout/" target="_blank" rel="noopener noreferrer">See detailed precipitation history on Hilary's Sprout</a>
-        </div>
+        <a href="https://cjpaulphd.github.io/hilary-sprout/" target="_blank" rel="noopener noreferrer" class="sprout-link">
+            <span class="sprout-icon">🌱</span>
+            <span>See detailed precipitation history on Hilary's Sprout</span>
+        </a>
     `;
 }
 
