@@ -1606,11 +1606,11 @@ body {
     justify-content: center;
     gap: 8px;
     padding: 10px 16px;
-    margin-top: 12px;
-    color: var(--text-secondary);
-    text-decoration: none;
-    border: 1px solid var(--border);
+    margin-top: 8px;
+    background-color: var(--bg-card);
     border-radius: 8px;
+    color: var(--accent-blue);
+    text-decoration: none;
     font-size: 13px;
     font-weight: 500;
     transition: background-color 0.2s;
