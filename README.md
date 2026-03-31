@@ -116,6 +116,10 @@ All favorite locations and preferences are stored locally in your browser via `l
 
 This site uses [GoatCounter](https://www.goatcounter.com/) for privacy-friendly, anonymous usage statistics. GoatCounter does not use cookies, does not collect personal or identifiable data, and is fully GDPR/CCPA compliant without requiring a consent banner. The statistics collected are limited to anonymous page views and aggregate counts (browser type, screen size, country from IP — the IP itself is not stored).
 
+## Related Projects
+
+- **[Hilary's Sprout](https://cjpaulphd.github.io/hilary-sprout/)** — A sister app providing detailed precipitation history and analysis. Linked from WeatherWonder's Precipitation History section.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
