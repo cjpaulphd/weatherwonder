@@ -2181,7 +2181,7 @@ function renderPrecipHistory(data, histAvg) {
                 </div>
             `).join('')}
         </div>
-        <a href="https://cjpaulphd.github.io/hilary-sprout/" target="_blank" rel="noopener noreferrer" class="sprout-link">
+        <a href="https://cjpaulphd.github.io/hilary-sprout/?lat=${currentLocation.latitude}&lon=${currentLocation.longitude}&name=${encodeURIComponent(currentLocation.name)}" target="_blank" rel="noopener noreferrer" class="sprout-link">
             <span class="sprout-icon">🌱</span>
             <span>See detailed precipitation history on Hilary's Sprout</span>
         </a>
