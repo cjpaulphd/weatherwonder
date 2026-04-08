@@ -2541,12 +2541,34 @@ async function nativeShare() {
         return;
     }
 
+    const shareData = {
+        title: `Weather Forecast - ${currentLocation.name}`,
+        text: `Check out the weather forecast for ${currentLocation.name} on WeatherWonder`,
+        url: window.location.href
+    };
+
+    // Try to include the OG image as a share file for richer previews
     try {
-        await navigator.share({
-            title: `Weather Forecast - ${currentLocation.name}`,
-            text: `Check out the weather forecast for ${currentLocation.name}`,
-            url: window.location.href
-        });
+        if (navigator.canShare && currentShareSection) {
+            const section = document.getElementById(currentShareSection);
+            if (section && typeof html2canvas === 'function') {
+                const screenshotBg = getEffectiveTheme() === 'light' ? '#f5f5f5' : '#1a1a1a';
+                const canvas = await html2canvas(section, { backgroundColor: screenshotBg, scale: 2 });
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                const file = new File([blob], `weatherwonder-${currentLocation.name.replace(/[^a-z0-9]/gi, '-')}.png`, { type: 'image/png' });
+                const dataWithFile = { ...shareData, files: [file] };
+                if (navigator.canShare(dataWithFile)) {
+                    await navigator.share(dataWithFile);
+                    return;
+                }
+            }
+        }
+    } catch (e) {
+        // Fall through to share without file
+    }
+
+    try {
+        await navigator.share(shareData);
     } catch (error) {
         if (error.name !== 'AbortError') {
             showToast('Failed to share');
@@ -2956,12 +2978,31 @@ function initializeShareAppModal() {
     if (nativeBtn) {
         if (navigator.share) {
             nativeBtn.addEventListener('click', async () => {
+                const shareData = {
+                    title: 'WeatherWonder',
+                    text: 'Check out WeatherWonder — a free, open-source weather dashboard with radar, precipitation history, and more!',
+                    url: appUrl
+                };
+
+                // Try to include the OG image for richer share previews
                 try {
-                    await navigator.share({
-                        title: 'WeatherWonder',
-                        text: 'Check out WeatherWonder — a free, open-source weather dashboard with radar, precipitation history, and more!',
-                        url: appUrl
-                    });
+                    if (navigator.canShare) {
+                        const response = await fetch('./og-image.png');
+                        const blob = await response.blob();
+                        const file = new File([blob], 'weatherwonder-preview.png', { type: 'image/png' });
+                        const dataWithFile = { ...shareData, files: [file] };
+                        if (navigator.canShare(dataWithFile)) {
+                            await navigator.share(dataWithFile);
+                            hide();
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    // Fall through to share without file
+                }
+
+                try {
+                    await navigator.share(shareData);
                     hide();
                 } catch (e) {
                     if (e.name !== 'AbortError') showToast('Failed to share');
