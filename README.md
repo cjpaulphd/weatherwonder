@@ -2,7 +2,7 @@
 
 A mobile-first weather dashboard that provides comprehensive forecasts, live radar, NWS alerts, and astronomical data — all in a sleek dark-themed interface. No API keys required.
 
-**Live Site:** [cjpaulphd.github.io/weatherwonder](https://cjpaulphd.github.io/weatherwonder/)
+**Live Site:** [weatherwonder.app](https://weatherwonder.app/)
 
 ## Features
 
@@ -74,7 +74,7 @@ This project is deployed via GitHub Pages from the `main` branch:
 
 1. Push changes to `main`
 2. In GitHub repo Settings > Pages, set source to "Deploy from a branch" > `main` > `/ (root)`
-3. Site is live at `https://<username>.github.io/weatherwonder/`
+3. Site is live at `https://weatherwonder.app/`
 
 ## Project Structure
 
