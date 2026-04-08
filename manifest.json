@@ -1,7 +1,7 @@
 {
   "name": "WeatherWonder",
   "short_name": "WeatherWonder",
-  "description": "Weather dashboard with forecasts, live radar, NWS alerts, and astronomical data",
+  "description": "Free weather dashboard with live radar, 7-day forecasts, NWS alerts, precipitation history, and sun & moon data.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#1a1a1a",
@@ -13,6 +13,35 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    },
+    {
+      "src": "og-image-square.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
-  ]
+  ],
+  "screenshots": [
+    {
+      "src": "og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "WeatherWonder - Your Complete Weather Dashboard"
+    },
+    {
+      "src": "og-image-square.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "WeatherWonder app icon"
+    }
+  ],
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "params": {
+      "text": "location"
+    }
+  }
 }
