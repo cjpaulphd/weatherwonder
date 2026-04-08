@@ -2929,7 +2929,7 @@ function initializeShareAppModal() {
     const modal = document.getElementById('share-app-modal');
     if (!btn || !modal) return;
 
-    const appUrl = 'https://cjpaulphd.github.io/weatherwonder/';
+    const appUrl = 'https://weatherwonder.app/';
     const closeBtn = document.getElementById('close-share-app-modal');
     const copyBtn = document.getElementById('copy-app-url');
     const nativeBtn = document.getElementById('share-app-native');

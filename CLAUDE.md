@@ -59,7 +59,7 @@ The footer includes: install button, "Share This App" button (opens modal with c
 
 ## Deployment
 
-Hosted on GitHub Pages from the `main` branch root. Push to `main` and the site updates automatically at `https://cjpaulphd.github.io/weatherwonder/`.
+Hosted on GitHub Pages from the `main` branch root with a custom domain. Push to `main` and the site updates automatically at `https://weatherwonder.app/`.
 
 ## Testing
 
