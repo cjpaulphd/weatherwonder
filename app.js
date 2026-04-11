@@ -546,7 +546,7 @@ function initializeTimeToggle() {
                 const lastUpdated = document.getElementById('last-updated');
                 if (lastUpdated && lastUpdated.dataset.timestamp) {
                     const ts = new Date(lastUpdated.dataset.timestamp);
-                    lastUpdated.textContent = `Updated ${formatTime(ts)}`;
+                    lastUpdated.textContent = formatUpdatedTimestamp(ts);
                 }
             }
         });
@@ -638,6 +638,48 @@ function formatHour(date, tz) {
     const suffix = h >= 12 ? 'p' : 'a';
     const hour12 = h % 12 || 12;
     return `${hour12}${suffix}`;
+}
+
+// Build the "Updated ..." timestamp label.
+// When the viewed location is in a different timezone from the user's device,
+// shows both times with abbreviations and the hour offset, e.g.
+//   "Updated 5:11 AM ET · 9:11 PM NZST (+16hr)"
+// When timezones match, shows just "Updated 5:11 AM".
+function formatUpdatedTimestamp(date) {
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const locationTz = getLocationTimezone();
+
+    const localTime = formatTime(date);
+
+    if (!locationTz || browserTz === locationTz) {
+        return `Updated ${localTime}`;
+    }
+
+    // Get short timezone abbreviations (e.g. "EST", "NZST")
+    const tzAbbr = (d, tz) => {
+        const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' }).formatToParts(d);
+        const p = parts.find(p => p.type === 'timeZoneName');
+        return p ? p.value : '';
+    };
+
+    const localAbbr = tzAbbr(date, browserTz);
+    const locationTime = formatTime(date, locationTz);
+    const locationAbbr = tzAbbr(date, locationTz);
+
+    // Compute offset difference in minutes between the two timezones
+    const utcMs = date.getTime();
+    const toOffsetMin = (tz) => {
+        const s = date.toLocaleString('en-US', { timeZone: tz });
+        return (new Date(s).getTime() - utcMs) / 60000;
+    };
+    const diffMin = toOffsetMin(locationTz) - toOffsetMin(browserTz);
+    const sign = diffMin >= 0 ? '+' : '\u2212';
+    const absMin = Math.abs(diffMin);
+    const hrs = Math.floor(absMin / 60);
+    const mins = absMin % 60;
+    const diffLabel = mins === 0 ? `${sign}${hrs}hr` : `${sign}${hrs}:${mins.toString().padStart(2, '0')}`;
+
+    return `Updated ${localTime} ${localAbbr} \u00B7 ${locationTime} ${locationAbbr} (${diffLabel})`;
 }
 
 // Theme management with localStorage
@@ -2277,7 +2319,7 @@ async function loadWeather() {
         if (lastUpdated) {
             const now2 = new Date();
             lastUpdated.dataset.timestamp = now2.toISOString();
-            lastUpdated.textContent = `Updated ${formatTime(now2)}`;
+            lastUpdated.textContent = formatUpdatedTimestamp(now2);
         }
 
         trackEvent('weather-loaded');
