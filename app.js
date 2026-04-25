@@ -1813,6 +1813,70 @@ function renderChart(data) {
     container.appendChild(legend);
 }
 
+// Cooperative gesture handling for the radar map: never hijack page scroll.
+// Desktop: Ctrl/Cmd + wheel zooms; plain wheel falls through to the page.
+// Touch: two-finger drag pans; one-finger drag lets the page scroll.
+// Idempotent: handlers always act on the current global `radarMap`, so this
+// only needs to run once even though the map is destroyed/recreated on
+// location changes.
+function setupRadarGestureHandling(mapEl) {
+    if (mapEl.dataset.gestureSetup === 'true') return;
+    mapEl.dataset.gestureSetup = 'true';
+
+    // Attach hint to the .radar-container parent so it survives Leaflet's
+    // container teardown when the map is rebuilt for a new location.
+    const hintHost = mapEl.parentElement || mapEl;
+    const hint = document.createElement('div');
+    hint.className = 'radar-gesture-hint';
+    hintHost.appendChild(hint);
+
+    let hintTimer = null;
+    const showHint = (msg) => {
+        hint.textContent = msg;
+        hint.classList.add('visible');
+        clearTimeout(hintTimer);
+        hintTimer = setTimeout(() => hint.classList.remove('visible'), 1400);
+    };
+
+    const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+    const zoomHint = isMac ? 'Hold ⌘ + scroll to zoom' : 'Hold Ctrl + scroll to zoom';
+
+    mapEl.addEventListener('wheel', (e) => {
+        if (!radarMap) return;
+        if (e.ctrlKey || e.metaKey) {
+            if (!radarMap.scrollWheelZoom.enabled()) radarMap.scrollWheelZoom.enable();
+        } else {
+            if (radarMap.scrollWheelZoom.enabled()) radarMap.scrollWheelZoom.disable();
+            showHint(zoomHint);
+        }
+    }, { passive: true });
+
+    let singleTouchHintShown = false;
+    mapEl.addEventListener('touchstart', (e) => {
+        if (!radarMap) return;
+        if (e.touches.length >= 2) {
+            if (!radarMap.dragging.enabled()) radarMap.dragging.enable();
+        } else {
+            if (radarMap.dragging.enabled()) radarMap.dragging.disable();
+            singleTouchHintShown = false;
+        }
+    }, { capture: true, passive: true });
+
+    mapEl.addEventListener('touchmove', (e) => {
+        if (e.touches.length < 2 && !singleTouchHintShown) {
+            singleTouchHintShown = true;
+            showHint('Use two fingers to move the map');
+        }
+    }, { passive: true });
+
+    mapEl.addEventListener('touchend', (e) => {
+        if (!radarMap) return;
+        if (e.touches.length === 0 && radarMap.dragging.enabled()) {
+            radarMap.dragging.disable();
+        }
+    }, { capture: true });
+}
+
 // Initialize and render radar map
 async function initializeRadar() {
     const mapContainer = document.getElementById('radar-map');
@@ -1827,8 +1891,13 @@ async function initializeRadar() {
                 center: [currentLocation.latitude, currentLocation.longitude],
                 zoom: 7, // Zoomed to show 50 mile radius with radar coverage
                 zoomControl: false,
-                attributionControl: true
+                attributionControl: true,
+                // Cooperative gestures: page scroll is never hijacked.
+                // Ctrl/Cmd + wheel to zoom on desktop; two-finger drag to pan on mobile.
+                scrollWheelZoom: false,
+                dragging: !L.Browser.mobile
             });
+            setupRadarGestureHandling(mapContainer);
 
             // Add tile layer matching current theme
             const tileUrl = getEffectiveTheme() === 'light'
