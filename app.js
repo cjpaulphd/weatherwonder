@@ -2125,7 +2125,12 @@ async function fetchPrecipHistory(lat, lon) {
         timezone: 'auto'
     });
 
-    const response = await fetch(`${API_BASE}?${params}`);
+    // Use the Historical Forecast API rather than the regular Forecast API. The
+    // regular one's past_days returns the current model's *reconstruction* of
+    // past hours, which for precipitation frequently shows near-zero on days
+    // that actually had rain. The historical-forecast endpoint archives the
+    // best-available forecast issued at the time, so totals match reality.
+    const response = await fetch(`https://historical-forecast-api.open-meteo.com/v1/forecast?${params}`);
     if (!response.ok) throw new Error('Failed to fetch precipitation history');
     return response.json();
 }
