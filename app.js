@@ -1726,6 +1726,27 @@ const gridLinesPlugin = {
 // Register the plugin
 Chart.register(gridLinesPlugin);
 
+// Custom tooltip positioner — anchors the tooltip in the corner diagonally
+// opposite the cursor's quadrant so the highlighted point is never covered.
+if (Chart.Tooltip && Chart.Tooltip.positioners) {
+    Chart.Tooltip.positioners.corner = function(elements, eventPosition) {
+        const chart = this.chart;
+        const area = chart.chartArea;
+        if (!area) return false;
+        const cx = (area.left + area.right) / 2;
+        const cy = (area.top + area.bottom) / 2;
+        const inset = 6;
+        const inLeft = eventPosition.x < cx;
+        const inTop = eventPosition.y < cy;
+        return {
+            x: inLeft ? area.right - inset : area.left + inset,
+            y: inTop ? area.bottom - inset : area.top + inset,
+            xAlign: inLeft ? 'right' : 'left',
+            yAlign: inTop ? 'bottom' : 'top'
+        };
+    };
+}
+
 // Get theme-aware chart colors (adapts to dark/light/CIT2000 modes)
 function getChartColors() {
     const styles = getComputedStyle(document.documentElement);
@@ -1898,9 +1919,9 @@ function renderChart(data) {
                     borderWidth: getEffectiveTheme() === 'light' ? 1 : 0,
                     padding: 12,
                     displayColors: true,
-                    position: 'nearest',
-                    yAlign: 'bottom',
-                    caretPadding: 20,
+                    position: 'corner',
+                    caretSize: 0,
+                    caretPadding: 0,
                     callbacks: {
                         title: function(context) {
                             const date = new Date(context[0].label);
