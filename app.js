@@ -1694,6 +1694,31 @@ const gridLinesPlugin = {
             });
         }
 
+        // "Now" marker — a thin vertical line separating past actuals from
+        // future forecast, plus a subtle tint behind the past hours.
+        const nowIndex = chart.data.nowIndex;
+        if (typeof nowIndex === 'number' && nowIndex > 0 && nowIndex < labels.length) {
+            const xScale = chart.scales.x;
+            const nowX = xScale.getPixelForValue(nowIndex - 0.5);
+
+            ctx.fillStyle = isLightTheme ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.03)';
+            ctx.fillRect(chartArea.left, chartArea.top, nowX - chartArea.left, chartArea.bottom - chartArea.top);
+
+            ctx.strokeStyle = isLightTheme ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.5)';
+            ctx.setLineDash([3, 3]);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(nowX, chartArea.top);
+            ctx.lineTo(nowX, chartArea.bottom);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+            ctx.fillStyle = isLightTheme ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.7)';
+            ctx.font = '9px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('now', nowX + 3, chartArea.top + 10);
+        }
+
         ctx.restore();
     }
 };
@@ -1774,6 +1799,24 @@ function renderChart(data) {
         isDayFlags.push(hourly.is_day[i]);
     }
 
+    // For hours that have already happened today, replace the modeled
+    // precipitation probability with a binary 0/100 based on the actual
+    // precipitation amount — it either rained or it didn't. Temperature and
+    // precip amount from the API already reflect reanalysis/observations
+    // for past hours, so no change needed there.
+    const locationNow = getLocationNow();
+    let nowIndex = -1;
+    for (let i = 0; i < labels.length; i++) {
+        if (labels[i] >= locationNow) {
+            nowIndex = i;
+            break;
+        }
+    }
+    if (nowIndex === -1) nowIndex = labels.length;
+    for (let i = 0; i < nowIndex; i++) {
+        precipProbs[i] = precipAmounts[i] > 0 ? 100 : 0;
+    }
+
     const minTemp = Math.min(...temps);
     const maxTemp = Math.max(...temps);
     const tempRange = maxTemp - minTemp;
@@ -1797,6 +1840,7 @@ function renderChart(data) {
         data: {
             labels: labels,
             isDayFlags: isDayFlags,
+            nowIndex: nowIndex,
             datasets: [
                 {
                     label: 'Temperature',
@@ -1861,18 +1905,26 @@ function renderChart(data) {
                         title: function(context) {
                             const date = new Date(context[0].label);
                             const use24 = getTimeFormat() === '24';
-                            return date.toLocaleString(use24 ? 'en-GB' : 'en-US', {
+                            const formatted = date.toLocaleString(use24 ? 'en-GB' : 'en-US', {
                                 weekday: 'short',
                                 month: 'short',
                                 day: 'numeric',
                                 hour: use24 ? '2-digit' : 'numeric',
                                 ...(use24 ? { minute: '2-digit' } : {})
                             });
+                            const isPast = date < getLocationNow();
+                            return isPast ? `${formatted} · observed` : formatted;
                         },
                         label: function(context) {
+                            const idx = context.dataIndex;
+                            const labelDate = context.chart.data.labels[idx];
+                            const isPast = labelDate instanceof Date && labelDate < getLocationNow();
                             if (context.datasetIndex === 0) {
                                 return `Temperature: ${Math.round(context.raw)}${getTempUnitLabel()}`;
                             } else if (context.datasetIndex === 1) {
+                                if (isPast) {
+                                    return context.raw >= 50 ? 'Rain: yes' : 'Rain: no';
+                                }
                                 return `Precip Chance: ${context.raw}%`;
                             } else {
                                 const inches = context.raw;
