@@ -553,6 +553,53 @@ function initializeTimeToggle() {
     }
 }
 
+// Chart day-range management with localStorage
+const CHART_DAYS_KEY = 'weatherwonder_chart_days';
+const CHART_DAYS_OPTIONS = [3, 5, 7, 10];
+
+function getChartDays() {
+    try {
+        const v = parseInt(localStorage.getItem(CHART_DAYS_KEY), 10);
+        return CHART_DAYS_OPTIONS.includes(v) ? v : 7;
+    } catch (e) {
+        return 7;
+    }
+}
+
+function saveChartDays(days) {
+    try {
+        localStorage.setItem(CHART_DAYS_KEY, String(days));
+    } catch (e) {
+        console.error('Could not save chart days:', e);
+    }
+}
+
+function updateChartRangeToggleUI() {
+    const current = getChartDays();
+    document.querySelectorAll('.chart-range-btn').forEach(btn => {
+        const days = parseInt(btn.dataset.days, 10);
+        btn.classList.toggle('active', days === current);
+        btn.setAttribute('aria-pressed', days === current ? 'true' : 'false');
+    });
+}
+
+function initializeChartRangeToggle() {
+    updateChartRangeToggleUI();
+    document.querySelectorAll('.chart-range-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const days = parseInt(btn.dataset.days, 10);
+            if (!CHART_DAYS_OPTIONS.includes(days)) return;
+            saveChartDays(days);
+            trackEvent('chart-range-' + days + 'd');
+            updateChartRangeToggleUI();
+            if (weatherData) {
+                renderDailyForecast(weatherData);
+                renderChart(weatherData);
+            }
+        });
+    });
+}
+
 // Locale detection for first-time users
 function extractCountry(primaryLocale, allLocales) {
     for (const loc of [primaryLocale, ...allLocales]) {
@@ -1024,7 +1071,7 @@ async function fetchWeatherData(lat, lon) {
         wind_speed_unit: 'mph',
         precipitation_unit: 'mm',
         timezone: 'auto',
-        forecast_days: 8
+        forecast_days: 11
     });
 
     const response = await fetch(`${API_BASE}?${params}`);
@@ -1297,6 +1344,9 @@ function getAmPmWeatherCodes(data, targetDate) {
 function renderDailyForecast(data) {
     const container = document.getElementById('daily-forecast');
     container.innerHTML = '';
+    const days = getChartDays();
+    container.dataset.days = String(days);
+    container.style.gridTemplateColumns = `repeat(${days}, 1fr)`;
 
     const daily = data.daily;
     const today = getMidnightToday();
@@ -1315,8 +1365,7 @@ function renderDailyForecast(data) {
         }
     }
 
-    // Render 7 days starting from today
-    for (let i = startIdx; i < daily.time.length && i < startIdx + 7; i++) {
+    for (let i = startIdx; i < daily.time.length && i < startIdx + days; i++) {
         const date = new Date(daily.time[i] + 'T00:00:00');
         const card = document.createElement('div');
         card.className = 'daily-card';
@@ -1572,6 +1621,45 @@ const gridLinesPlugin = {
             lastDay = day;
         });
 
+        // Hour-of-day markers — only when the visible range is short enough
+        // for the chart to have room for them. 3 days: every 6h. 5 days: noon only.
+        const days = (typeof getChartDays === 'function') ? getChartDays() : 7;
+        let hourTicks = null;
+        if (days <= 3) {
+            hourTicks = [6, 12, 18];
+        } else if (days <= 5) {
+            hourTicks = [12];
+        }
+
+        if (hourTicks) {
+            const use24 = (typeof getTimeFormat === 'function') && getTimeFormat() === '24';
+            const hourLabel = (h) => {
+                if (use24) return String(h).padStart(2, '0');
+                if (h === 0) return '12a';
+                if (h === 12) return 'noon';
+                return h < 12 ? `${h}a` : `${h - 12}p`;
+            };
+
+            ctx.strokeStyle = isLightTheme ? 'rgba(0, 0, 0, 0.07)' : 'rgba(255, 255, 255, 0.08)';
+            ctx.setLineDash([2, 4]);
+            ctx.lineWidth = 1;
+            ctx.fillStyle = isLightTheme ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.55)';
+            ctx.font = '9px sans-serif';
+            ctx.textAlign = 'center';
+
+            labels.forEach((label, index) => {
+                const date = new Date(label);
+                if (date.getMinutes() !== 0) return;
+                if (!hourTicks.includes(date.getHours())) return;
+                const x = chart.scales.x.getPixelForValue(index);
+                ctx.beginPath();
+                ctx.moveTo(x, chartArea.top);
+                ctx.lineTo(x, chartArea.bottom);
+                ctx.stroke();
+                ctx.fillText(hourLabel(date.getHours()), x, chartArea.bottom - 3);
+            });
+        }
+
         ctx.restore();
     }
 };
@@ -1633,7 +1721,7 @@ function renderChart(data) {
         }
     }
 
-    const hours = 168; // 7 days
+    const hours = getChartDays() * 24;
     const endIndex = Math.min(startIndex + hours, hourly.time.length);
 
     const labels = [];
@@ -3231,6 +3319,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeTheme,
         initializeTempToggle,
         initializeTimeToggle,
+        initializeChartRangeToggle,
         updateLocationDisplay,
         initializeModal,
         initializeShareModal,
