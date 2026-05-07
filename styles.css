@@ -904,6 +904,11 @@ body {
     color: var(--text-secondary);
 }
 
+/* Loading inside the daily-forecast grid must span the whole row */
+.daily-forecast-container > .loading {
+    grid-column: 1 / -1;
+}
+
 .loading::after {
     content: '';
     width: 28px;
