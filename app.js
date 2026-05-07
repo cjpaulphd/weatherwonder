@@ -1878,7 +1878,8 @@ function renderChart(data) {
 
     // Add legend below chart
     const container = document.querySelector('.chart-container');
-    let legend = container.querySelector('.chart-legend');
+    const parent = container.parentNode;
+    let legend = parent.querySelector(':scope > .chart-legend');
     if (legend) {
         legend.remove();
     }
@@ -1898,7 +1899,7 @@ function renderChart(data) {
             <span>Precip Amt</span>
         </div>
     `;
-    container.appendChild(legend);
+    container.insertAdjacentElement('afterend', legend);
 }
 
 // Cooperative gesture handling for the radar map: never hijack page scroll.
