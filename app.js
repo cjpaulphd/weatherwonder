@@ -950,11 +950,16 @@ function getTempUnitLabel() {
 }
 
 // Format precipitation amount (mm in metric, inches in imperial, microns in Kelvin mode)
-function formatPrecip(mm) {
+function formatPrecip(mm, compact = false) {
     const unit = getTempUnit();
     if (unit === 'K') {
         const microns = mm * 1000;
         if (microns < 100) return '';
+        if (compact) {
+            if (microns >= 1e6) return `${(microns / 1e6).toFixed(1)}M µm`;
+            if (microns >= 1e4) return `${Math.round(microns / 1e3)}K µm`;
+            if (microns >= 1e3) return `${(microns / 1e3).toFixed(1)}K µm`;
+        }
         return `${Math.round(microns).toLocaleString()} µm`;
     }
     if (unit === 'C') {
@@ -973,11 +978,16 @@ function getWindDirection(deg) {
 }
 
 // Format wind speed in current unit (API returns mph; convert to km/h in metric mode, µm/s in Kelvin mode)
-function formatWindSpeed(mph) {
+function formatWindSpeed(mph, compact = false) {
     const unit = getTempUnit();
     if (unit === 'K') {
         // 1 mph = 447,040 µm/s
         const microns = Math.round(mph * 447040);
+        if (compact) {
+            if (microns >= 1e6) return `${(microns / 1e6).toFixed(1)}M µm/s`;
+            if (microns >= 1e3) return `${Math.round(microns / 1e3)}K µm/s`;
+            return `${microns} µm/s`;
+        }
         return `${microns.toLocaleString()} µm/s`;
     }
     if (unit === 'C') {
@@ -1346,7 +1356,7 @@ function renderDailyForecast(data) {
     container.innerHTML = '';
     const days = getChartDays();
     container.dataset.days = String(days);
-    container.style.gridTemplateColumns = `repeat(${days}, 1fr)`;
+    container.style.gridTemplateColumns = `repeat(${days}, minmax(0, 1fr))`;
 
     const daily = data.daily;
     const today = getMidnightToday();
@@ -1368,7 +1378,7 @@ function renderDailyForecast(data) {
     for (let i = startIdx; i < daily.time.length && i < startIdx + days; i++) {
         const date = new Date(daily.time[i] + 'T00:00:00');
         const card = document.createElement('div');
-        card.className = 'daily-card';
+        card.className = 'daily-card' + (getTempUnit() === 'K' ? ' kelvin-temp' : '');
 
         const dailyWeatherCode = daily.weather_code[i];
         const hasSnow = daily.snowfall_sum[i] >= 1; // at least 1 cm to be called a snow day
@@ -1410,14 +1420,14 @@ function renderDailyForecast(data) {
                     <div class="day-icon" title="${getDayName(date)}">${dayIcon}</div>
                 </div>
                 <div class="temp-range">${lowTemp}/${highTemp}${getTempUnitLabel()}</div>
-                <div class="wind-info${kClass}"><span class="wind-arrow" style="transform:rotate(${windRotation}deg)">↑</span> ${formatWindSpeed(windSpeed)}</div>
+                <div class="wind-info${kClass}"><span class="wind-arrow" style="transform:rotate(${windRotation}deg)">↑</span> ${formatWindSpeed(windSpeed, true)}</div>
                 ${precipProb >= 10 ? `
                     <div class="precip-info ${precipClass}">
                         ${hasSnow ? '❄' : '💧'} ${precipProb}%
                     </div>
                 ` : ''}
                 ${hasPrecip ? `
-                    <div class="precip-amount${kClass}">${formatPrecip(daily.precipitation_sum[i])}</div>
+                    <div class="precip-amount${kClass}">${formatPrecip(daily.precipitation_sum[i], true)}</div>
                 ` : ''}
             `;
         } else {

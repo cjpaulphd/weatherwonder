@@ -628,6 +628,10 @@ body {
 .daily-forecast-container[data-days="10"] .daily-card .wind-info,
 .daily-forecast-container[data-days="10"] .daily-card .precip-amount {
     font-size: 8px;
+    /* Allow K-mode µm values to wrap onto a second line instead of truncating */
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
 }
 
 .daily-forecast-container[data-days="10"] .daily-card .precip-info {
@@ -644,6 +648,13 @@ body {
     display: inline-block;
     line-height: 1;
     color: var(--text-secondary);
+}
+
+/* In K mode the temp-range string is wider (e.g. "286/293K") — shrink to fit */
+.daily-forecast-container[data-days="10"] .daily-card.kelvin-temp .temp-range {
+    font-size: 8px;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 /* Chart Container */
