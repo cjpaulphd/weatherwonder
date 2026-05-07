@@ -1398,23 +1398,47 @@ function renderDailyForecast(data) {
         const pmIcon = getWeatherIcon(guardedPmCode, true);
 
         const kClass = getTempUnit() === 'K' ? ' kelvin-units' : '';
-        card.innerHTML = `
-            <div class="day-name">${getDayName(date, true)}</div>
-            <div class="weather-icons">
-                <div class="am-icon" title="Morning">${amIcon}</div>
-                <div class="pm-icon" title="Evening">${pmIcon}</div>
-            </div>
-            <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
-            <div class="wind-info${kClass}">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
-            ${precipProb >= 10 ? `
-                <div class="precip-info ${precipClass}">
-                    ${hasSnow ? '❄' : '💧'} ${precipProb}%
+        const compact = days >= 10;
+
+        if (compact) {
+            const dayCode = tempGuardedCode(dailyWeatherCode, daily.temperature_2m_max[i]);
+            const dayIcon = getWeatherIcon(dayCode, true);
+            const windRotation = windDir + 180;
+            card.innerHTML = `
+                <div class="day-name">${getDayName(date, true)}</div>
+                <div class="weather-icons">
+                    <div class="day-icon" title="${getDayName(date)}">${dayIcon}</div>
                 </div>
-            ` : ''}
-            ${hasPrecip ? `
-                <div class="precip-amount${kClass}">${formatPrecip(daily.precipitation_sum[i])}</div>
-            ` : ''}
-        `;
+                <div class="temp-range">${lowTemp}/${highTemp}${getTempUnitLabel()}</div>
+                <div class="wind-info${kClass}"><span class="wind-arrow" style="transform:rotate(${windRotation}deg)">↑</span> ${formatWindSpeed(windSpeed)}</div>
+                ${precipProb >= 10 ? `
+                    <div class="precip-info ${precipClass}">
+                        ${hasSnow ? '❄' : '💧'} ${precipProb}%
+                    </div>
+                ` : ''}
+                ${hasPrecip ? `
+                    <div class="precip-amount${kClass}">${formatPrecip(daily.precipitation_sum[i])}</div>
+                ` : ''}
+            `;
+        } else {
+            card.innerHTML = `
+                <div class="day-name">${getDayName(date, true)}</div>
+                <div class="weather-icons">
+                    <div class="am-icon" title="Morning">${amIcon}</div>
+                    <div class="pm-icon" title="Evening">${pmIcon}</div>
+                </div>
+                <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
+                <div class="wind-info${kClass}">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
+                ${precipProb >= 10 ? `
+                    <div class="precip-info ${precipClass}">
+                        ${hasSnow ? '❄' : '💧'} ${precipProb}%
+                    </div>
+                ` : ''}
+                ${hasPrecip ? `
+                    <div class="precip-amount${kClass}">${formatPrecip(daily.precipitation_sum[i])}</div>
+                ` : ''}
+            `;
+        }
 
         container.appendChild(card);
     }

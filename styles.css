@@ -635,8 +635,15 @@ body {
 }
 
 .daily-forecast-container[data-days="10"] .daily-card .weather-icons .am-icon,
-.daily-forecast-container[data-days="10"] .daily-card .weather-icons .pm-icon {
-    font-size: 12px;
+.daily-forecast-container[data-days="10"] .daily-card .weather-icons .pm-icon,
+.daily-forecast-container[data-days="10"] .daily-card .weather-icons .day-icon {
+    font-size: 18px;
+}
+
+.daily-forecast-container[data-days="10"] .daily-card .wind-arrow {
+    display: inline-block;
+    line-height: 1;
+    color: var(--text-secondary);
 }
 
 /* Chart Container */
