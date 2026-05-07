@@ -553,6 +553,52 @@ function initializeTimeToggle() {
     }
 }
 
+// Chart day-range management with localStorage
+const CHART_DAYS_KEY = 'weatherwonder_chart_days';
+const CHART_DAYS_OPTIONS = [3, 5, 7, 10];
+
+function getChartDays() {
+    try {
+        const v = parseInt(localStorage.getItem(CHART_DAYS_KEY), 10);
+        return CHART_DAYS_OPTIONS.includes(v) ? v : 7;
+    } catch (e) {
+        return 7;
+    }
+}
+
+function saveChartDays(days) {
+    try {
+        localStorage.setItem(CHART_DAYS_KEY, String(days));
+    } catch (e) {
+        console.error('Could not save chart days:', e);
+    }
+}
+
+function updateChartRangeToggleUI() {
+    const current = getChartDays();
+    document.querySelectorAll('.chart-range-btn').forEach(btn => {
+        const days = parseInt(btn.dataset.days, 10);
+        btn.classList.toggle('active', days === current);
+        btn.setAttribute('aria-pressed', days === current ? 'true' : 'false');
+    });
+}
+
+function initializeChartRangeToggle() {
+    updateChartRangeToggleUI();
+    document.querySelectorAll('.chart-range-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const days = parseInt(btn.dataset.days, 10);
+            if (!CHART_DAYS_OPTIONS.includes(days)) return;
+            saveChartDays(days);
+            trackEvent('chart-range-' + days + 'd');
+            updateChartRangeToggleUI();
+            if (weatherData) {
+                renderChart(weatherData);
+            }
+        });
+    });
+}
+
 // Locale detection for first-time users
 function extractCountry(primaryLocale, allLocales) {
     for (const loc of [primaryLocale, ...allLocales]) {
@@ -1024,7 +1070,7 @@ async function fetchWeatherData(lat, lon) {
         wind_speed_unit: 'mph',
         precipitation_unit: 'mm',
         timezone: 'auto',
-        forecast_days: 8
+        forecast_days: 11
     });
 
     const response = await fetch(`${API_BASE}?${params}`);
@@ -1633,7 +1679,7 @@ function renderChart(data) {
         }
     }
 
-    const hours = 168; // 7 days
+    const hours = getChartDays() * 24;
     const endIndex = Math.min(startIndex + hours, hourly.time.length);
 
     const labels = [];
@@ -3231,6 +3277,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeTheme,
         initializeTempToggle,
         initializeTimeToggle,
+        initializeChartRangeToggle,
         updateLocationDisplay,
         initializeModal,
         initializeShareModal,
