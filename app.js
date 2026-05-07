@@ -593,6 +593,7 @@ function initializeChartRangeToggle() {
             trackEvent('chart-range-' + days + 'd');
             updateChartRangeToggleUI();
             if (weatherData) {
+                renderDailyForecast(weatherData);
                 renderChart(weatherData);
             }
         });
@@ -1343,6 +1344,9 @@ function getAmPmWeatherCodes(data, targetDate) {
 function renderDailyForecast(data) {
     const container = document.getElementById('daily-forecast');
     container.innerHTML = '';
+    const days = getChartDays();
+    container.dataset.days = String(days);
+    container.style.gridTemplateColumns = `repeat(${days}, 1fr)`;
 
     const daily = data.daily;
     const today = getMidnightToday();
@@ -1361,8 +1365,7 @@ function renderDailyForecast(data) {
         }
     }
 
-    // Render 7 days starting from today
-    for (let i = startIdx; i < daily.time.length && i < startIdx + 7; i++) {
+    for (let i = startIdx; i < daily.time.length && i < startIdx + days; i++) {
         const date = new Date(daily.time[i] + 'T00:00:00');
         const card = document.createElement('div');
         card.className = 'daily-card';
@@ -1617,6 +1620,45 @@ const gridLinesPlugin = {
             }
             lastDay = day;
         });
+
+        // Hour-of-day markers — only when the visible range is short enough
+        // for the chart to have room for them. 3 days: every 6h. 5 days: noon only.
+        const days = (typeof getChartDays === 'function') ? getChartDays() : 7;
+        let hourTicks = null;
+        if (days <= 3) {
+            hourTicks = [6, 12, 18];
+        } else if (days <= 5) {
+            hourTicks = [12];
+        }
+
+        if (hourTicks) {
+            const use24 = (typeof getTimeFormat === 'function') && getTimeFormat() === '24';
+            const hourLabel = (h) => {
+                if (use24) return String(h).padStart(2, '0');
+                if (h === 0) return '12a';
+                if (h === 12) return 'noon';
+                return h < 12 ? `${h}a` : `${h - 12}p`;
+            };
+
+            ctx.strokeStyle = isLightTheme ? 'rgba(0, 0, 0, 0.07)' : 'rgba(255, 255, 255, 0.08)';
+            ctx.setLineDash([2, 4]);
+            ctx.lineWidth = 1;
+            ctx.fillStyle = isLightTheme ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.55)';
+            ctx.font = '9px sans-serif';
+            ctx.textAlign = 'center';
+
+            labels.forEach((label, index) => {
+                const date = new Date(label);
+                if (date.getMinutes() !== 0) return;
+                if (!hourTicks.includes(date.getHours())) return;
+                const x = chart.scales.x.getPixelForValue(index);
+                ctx.beginPath();
+                ctx.moveTo(x, chartArea.top);
+                ctx.lineTo(x, chartArea.bottom);
+                ctx.stroke();
+                ctx.fillText(hourLabel(date.getHours()), x, chartArea.bottom - 3);
+            });
+        }
 
         ctx.restore();
     }

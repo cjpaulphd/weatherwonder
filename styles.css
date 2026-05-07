@@ -611,6 +611,34 @@ body {
     white-space: nowrap;
 }
 
+/* Narrow layout for 10-day view */
+.daily-forecast-container[data-days="10"] .daily-card {
+    padding: 4px 1px;
+}
+
+.daily-forecast-container[data-days="10"] .daily-card .day-name {
+    font-size: 9px;
+    letter-spacing: -0.2px;
+}
+
+.daily-forecast-container[data-days="10"] .daily-card .temp-range {
+    font-size: 10px;
+}
+
+.daily-forecast-container[data-days="10"] .daily-card .wind-info,
+.daily-forecast-container[data-days="10"] .daily-card .precip-amount {
+    font-size: 8px;
+}
+
+.daily-forecast-container[data-days="10"] .daily-card .precip-info {
+    font-size: 9px;
+}
+
+.daily-forecast-container[data-days="10"] .daily-card .weather-icons .am-icon,
+.daily-forecast-container[data-days="10"] .daily-card .weather-icons .pm-icon {
+    font-size: 12px;
+}
+
 /* Chart Container */
 .chart-container {
     position: relative;
