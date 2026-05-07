@@ -1416,6 +1416,9 @@ function renderDailyForecast(data) {
                         ${hasSnow ? '❄' : '💧'} ${precipProb}%
                     </div>
                 ` : ''}
+                ${hasPrecip ? `
+                    <div class="precip-amount${kClass}">${formatPrecip(daily.precipitation_sum[i])}</div>
+                ` : ''}
             `;
         } else {
             card.innerHTML = `
