@@ -554,28 +554,21 @@ function initializeTimeToggle() {
     }
 }
 
-// Tide line management with localStorage. The toggle is only shown for
-// coastal locations (where the Open-Meteo Marine API returns tide data).
-const TIDE_LINE_KEY = 'weatherwonder_tide_line';
+// Tide line management. The toggle is only shown for coastal locations (where
+// the Open-Meteo Marine API returns tide data). State is session-only and
+// always starts off — the tide line is opt-in on each load, not persisted.
+let tideLineOn = false;
 
 // Holds the most recent marine/tide response for the current location, or
 // null when the location is inland (no tide data available).
 let tideData = null;
 
 function isTideLineOn() {
-    try {
-        return localStorage.getItem(TIDE_LINE_KEY) === 'on';
-    } catch (e) {
-        return false;
-    }
+    return tideLineOn;
 }
 
 function saveTideLine(on) {
-    try {
-        localStorage.setItem(TIDE_LINE_KEY, on ? 'on' : 'off');
-    } catch (e) {
-        console.error('Could not save tide line setting:', e);
-    }
+    tideLineOn = !!on;
 }
 
 // Is the current location coastal? True when the marine API returned usable
