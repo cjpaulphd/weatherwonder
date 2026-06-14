@@ -586,6 +586,32 @@ function isCoastalLocation() {
         tideData.hourly.sea_level_height_msl.some(v => v != null));
 }
 
+// Find today's high/low tide events from the hourly marine data, in
+// chronological order. Returns [] for inland locations. Detects local maxima
+// (high) and minima (low) in the sea-level series, then keeps those falling on
+// the location's current calendar day. Each `date` is parsed from the API's
+// local wall-clock string (no UTC offset), so its hour digits are already
+// correct for the location — format it WITHOUT a timezone.
+function getTodayTideExtremes() {
+    if (!isCoastalLocation()) return [];
+    const time = tideData.hourly.time;
+    const h = tideData.hourly.sea_level_height_msl;
+    const ln = getLocationNow();
+    const pad = n => String(n).padStart(2, '0');
+    const todayPrefix = `${ln.getFullYear()}-${pad(ln.getMonth() + 1)}-${pad(ln.getDate())}`;
+    const events = [];
+    for (let i = 1; i < h.length - 1; i++) {
+        const prev = h[i - 1], cur = h[i], next = h[i + 1];
+        if (prev == null || cur == null || next == null) continue;
+        let type = null;
+        if (cur > prev && cur >= next) type = 'High';
+        else if (cur < prev && cur <= next) type = 'Low';
+        if (!type || !time[i].startsWith(todayPrefix)) continue;
+        events.push({ type, date: new Date(time[i]), heightFt: cur * 3.28084 });
+    }
+    return events;
+}
+
 function updateTideToggleUI() {
     const btn = document.getElementById('tide-toggle');
     if (!btn) return;
@@ -611,6 +637,36 @@ function initializeTideToggle() {
             }
         });
     }
+}
+
+// Chart line visibility — each forecast-chart line can be toggled on/off from
+// its legend entry. State persists in localStorage and applies across every
+// day-range view. Tide is handled separately via isTideLineOn().
+const CHART_LINES_KEY = 'weatherwonder_chart_lines';
+const CHART_LINE_DEFAULTS = { temp: true, precipProb: true, precipAmount: true };
+
+function getChartLineVisibility() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(CHART_LINES_KEY) || '{}');
+        return { ...CHART_LINE_DEFAULTS, ...stored };
+    } catch (e) {
+        return { ...CHART_LINE_DEFAULTS };
+    }
+}
+
+function isChartLineVisible(key) {
+    return getChartLineVisibility()[key] !== false;
+}
+
+function toggleChartLine(key) {
+    const vis = getChartLineVisibility();
+    vis[key] = !isChartLineVisible(key);
+    try {
+        localStorage.setItem(CHART_LINES_KEY, JSON.stringify(vis));
+    } catch (e) {
+        console.error('Could not save chart line visibility:', e);
+    }
+    return vis[key];
 }
 
 // Chart day-range management with localStorage
@@ -1665,7 +1721,8 @@ const gridLinesPlugin = {
         // Get dynamic theme-aware grid colors
         const gridColors = getChartColors();
 
-        // Draw temperature grid lines (every 10°F) - pink/red color
+        // Draw temperature grid lines (every 10°F) - pink/red color.
+        // Skipped when the temperature line is toggled off via its legend.
         const tempMin = Math.floor(yTempScale.min / 10) * 10;
         const tempMax = Math.ceil(yTempScale.max / 10) * 10;
 
@@ -1673,7 +1730,7 @@ const gridLinesPlugin = {
         ctx.lineWidth = 1;
         ctx.setLineDash([5, 5]);
 
-        for (let temp = tempMin; temp <= tempMax; temp += 10) {
+        for (let temp = tempMin; isChartLineVisible('temp') && temp <= tempMax; temp += 10) {
             const y = yTempScale.getPixelForValue(temp);
             if (y >= chartArea.top && y <= chartArea.bottom) {
                 ctx.beginPath();
@@ -1690,13 +1747,14 @@ const gridLinesPlugin = {
             }
         }
 
-        // Draw precipitation amount grid lines (every 0.10") - green color
+        // Draw precipitation amount grid lines (every 0.10") - green color.
+        // Skipped when the precip-amount line is toggled off via its legend.
         const precipMax = Math.ceil(yPrecipScale.max * 10) / 10;
 
         ctx.strokeStyle = gridColors.precipGridLine;
         ctx.setLineDash([3, 3]);
 
-        for (let precip = 0.1; precip <= precipMax; precip += 0.1) {
+        for (let precip = 0.1; isChartLineVisible('precipAmount') && precip <= precipMax; precip += 0.1) {
             const y = yPrecipScale.getPixelForValue(precip);
             if (y >= chartArea.top && y <= chartArea.bottom) {
                 ctx.beginPath();
@@ -1974,7 +2032,7 @@ function renderChart(data) {
             isDayFlags: isDayFlags,
             nowIndex: nowIndex,
             datasets: [
-                {
+                ...(isChartLineVisible('temp') ? [{
                     label: 'Temperature',
                     data: temps,
                     borderColor: colors.tempBorder,
@@ -1984,8 +2042,8 @@ function renderChart(data) {
                     pointRadius: 0,
                     pointHoverRadius: 4,
                     yAxisID: 'y-temp'
-                },
-                {
+                }] : []),
+                ...(isChartLineVisible('precipProb') ? [{
                     label: 'Precipitation Probability',
                     data: precipProbs,
                     borderColor: colors.precipProbBorder,
@@ -1996,8 +2054,8 @@ function renderChart(data) {
                     pointHoverRadius: 4,
                     fill: true,
                     yAxisID: 'y-precip-prob'
-                },
-                {
+                }] : []),
+                ...(isChartLineVisible('precipAmount') ? [{
                     label: 'Precipitation Amount',
                     data: precipAmounts,
                     borderColor: colors.precipAmountBorder,
@@ -2008,7 +2066,7 @@ function renderChart(data) {
                     pointHoverRadius: 4,
                     fill: true,
                     yAxisID: 'y-precip-amount'
-                },
+                }] : []),
                 ...(showTide ? [{
                     label: 'Tide',
                     data: tideHeights,
@@ -2127,25 +2185,42 @@ function renderChart(data) {
     }
     legend = document.createElement('div');
     legend.className = 'chart-legend';
-    legend.innerHTML = `
-        <div class="legend-item">
-            <span class="legend-color temp"></span>
-            <span>Temp</span>
-        </div>
-        <div class="legend-item">
-            <span class="legend-color precip-prob"></span>
-            <span>Precip %</span>
-        </div>
-        <div class="legend-item">
-            <span class="legend-color precip-amount"></span>
-            <span>Precip Amt</span>
-        </div>
-        ${showTide ? `
-        <div class="legend-item">
-            <span class="legend-color tide"></span>
-            <span>Tide</span>
-        </div>` : ''}
-    `;
+
+    // Each legend entry is a toggle button that shows/hides its line. The
+    // on/off state persists in localStorage, so it carries across every
+    // day-range view and reload. Tide reuses the footer's isTideLineOn() flag
+    // and is only offered for coastal locations.
+    const items = [
+        { key: 'temp', cls: 'temp', label: 'Temp', on: isChartLineVisible('temp') },
+        { key: 'precipProb', cls: 'precip-prob', label: 'Precip %', on: isChartLineVisible('precipProb') },
+        { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') }
+    ];
+    if (isCoastalLocation()) {
+        items.push({ key: 'tide', cls: 'tide', label: 'Tide', on: isTideLineOn() });
+    }
+    legend.innerHTML = items.map(it => `
+        <button type="button" class="legend-item${it.on ? '' : ' off'}" data-line="${it.key}" aria-pressed="${it.on}">
+            <span class="legend-color ${it.cls}"></span>
+            <span>${it.label}</span>
+        </button>
+    `).join('');
+
+    legend.querySelectorAll('.legend-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const key = btn.dataset.line;
+            if (key === 'tide') {
+                const next = !isTideLineOn();
+                saveTideLine(next);
+                trackEvent('tide-' + (next ? 'on' : 'off'));
+                updateTideToggleUI();
+            } else {
+                const next = toggleChartLine(key);
+                trackEvent('chart-line-' + key + '-' + (next ? 'on' : 'off'));
+            }
+            if (weatherData) renderChart(weatherData);
+        });
+    });
+
     container.insertAdjacentElement('afterend', legend);
 }
 
@@ -2376,46 +2451,55 @@ function renderAstroData() {
         }
     }
 
+    // Build the Twilight & Sun rows, interleaving today's high/low tides (for
+    // coastal locations) in chronological order. Sun events are real instants,
+    // so sort by minutes-of-day in the location's timezone; tide dates are
+    // wall-clock strings, so use their local hour/minute directly. Invalid
+    // (e.g. polar) sun times sort to the end.
+    const tz = getLocationTimezone();
+    const sunMinutes = (d) => {
+        if (!d || isNaN(d.getTime())) return Infinity;
+        const parts = {};
+        new Intl.DateTimeFormat('en-GB', { timeZone: tz || undefined, hour: '2-digit', minute: '2-digit', hour12: false })
+            .formatToParts(d).forEach(p => { if (p.type === 'hour' || p.type === 'minute') parts[p.type] = parseInt(p.value, 10); });
+        return ((parts.hour % 24) || 0) * 60 + (parts.minute || 0);
+    };
+
+    const sunRows = [
+        { label: 'Astronomical Dawn', value: formatAstroTime(sunTimes.nightEnd), sortMin: sunMinutes(sunTimes.nightEnd) },
+        { label: 'Nautical Dawn', value: formatAstroTime(sunTimes.nauticalDawn), sortMin: sunMinutes(sunTimes.nauticalDawn) },
+        { label: 'Civil Dawn', value: formatAstroTime(sunTimes.dawn), sortMin: sunMinutes(sunTimes.dawn) },
+        { label: '☀️ Sunrise', value: formatAstroTime(sunTimes.sunrise), sortMin: sunMinutes(sunTimes.sunrise), highlight: true },
+        { label: 'Solar Noon', value: formatAstroTime(sunTimes.solarNoon), sortMin: sunMinutes(sunTimes.solarNoon) },
+        { label: '🌅 Sunset', value: formatAstroTime(sunTimes.sunset), sortMin: sunMinutes(sunTimes.sunset), highlight: true },
+        { label: 'Civil Dusk', value: formatAstroTime(sunTimes.dusk), sortMin: sunMinutes(sunTimes.dusk) },
+        { label: 'Nautical Dusk', value: formatAstroTime(sunTimes.nauticalDusk), sortMin: sunMinutes(sunTimes.nauticalDusk) },
+        { label: 'Astronomical Dusk', value: formatAstroTime(sunTimes.night), sortMin: sunMinutes(sunTimes.night) }
+    ];
+
+    getTodayTideExtremes().forEach(t => {
+        sunRows.push({
+            label: `${t.type === 'High' ? '🌊' : '🏝️'} ${t.type} Tide`,
+            value: formatTime(t.date),
+            sortMin: t.date.getHours() * 60 + t.date.getMinutes(),
+            highlight: true,
+            tide: true
+        });
+    });
+
+    sunRows.sort((a, b) => a.sortMin - b.sortMin);
+
+    const sunRowsHtml = sunRows.map(r => `
+                <div class="astro-row${r.highlight ? ' highlight' : ''}${r.tide ? ' tide' : ''}">
+                    <span class="astro-label">${r.label}</span>
+                    <span class="astro-value">${r.value}</span>
+                </div>`).join('');
+
     container.innerHTML = `
         <div class="astro-group">
             <h4 class="astro-group-title">Twilight &amp; Sun</h4>
             <div class="astro-grid">
-                <div class="astro-row">
-                    <span class="astro-label">Astronomical Dawn</span>
-                    <span class="astro-value">${formatAstroTime(sunTimes.nightEnd)}</span>
-                </div>
-                <div class="astro-row">
-                    <span class="astro-label">Nautical Dawn</span>
-                    <span class="astro-value">${formatAstroTime(sunTimes.nauticalDawn)}</span>
-                </div>
-                <div class="astro-row">
-                    <span class="astro-label">Civil Dawn</span>
-                    <span class="astro-value">${formatAstroTime(sunTimes.dawn)}</span>
-                </div>
-                <div class="astro-row highlight">
-                    <span class="astro-label">☀️ Sunrise</span>
-                    <span class="astro-value">${formatAstroTime(sunTimes.sunrise)}</span>
-                </div>
-                <div class="astro-row">
-                    <span class="astro-label">Solar Noon</span>
-                    <span class="astro-value">${formatAstroTime(sunTimes.solarNoon)}</span>
-                </div>
-                <div class="astro-row highlight">
-                    <span class="astro-label">🌅 Sunset</span>
-                    <span class="astro-value">${formatAstroTime(sunTimes.sunset)}</span>
-                </div>
-                <div class="astro-row">
-                    <span class="astro-label">Civil Dusk</span>
-                    <span class="astro-value">${formatAstroTime(sunTimes.dusk)}</span>
-                </div>
-                <div class="astro-row">
-                    <span class="astro-label">Nautical Dusk</span>
-                    <span class="astro-value">${formatAstroTime(sunTimes.nauticalDusk)}</span>
-                </div>
-                <div class="astro-row">
-                    <span class="astro-label">Astronomical Dusk</span>
-                    <span class="astro-value">${formatAstroTime(sunTimes.night)}</span>
-                </div>
+                ${sunRowsHtml}
                 <div class="astro-row highlight">
                     <span class="astro-label">Day Length</span>
                     <span class="astro-value">${dayLengthStr}</span>
@@ -2708,8 +2792,10 @@ async function loadWeather() {
             .then(data => {
                 tideData = data;
                 updateTideToggleUI();
-                if (weatherData && isCoastalLocation() && isTideLineOn()) {
-                    renderChart(weatherData);
+                if (isCoastalLocation()) {
+                    // Reveal the tide legend toggle and the high/low tide rows.
+                    if (weatherData) renderChart(weatherData);
+                    renderAstroData();
                 }
             })
             .catch(() => { tideData = null; updateTideToggleUI(); });
