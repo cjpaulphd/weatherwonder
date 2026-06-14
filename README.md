@@ -10,7 +10,7 @@ A mobile-first weather dashboard that provides comprehensive forecasts, live rad
 - **7-Day Daily Forecast** — AM/PM weather icons, high/low temperatures, dominant wind direction + max speed, precipitation probability and amounts
 - **48-Hour Hourly Forecast** — Temperature, feels-like/windchill, compass wind direction + speed (e.g. NNW 12), precipitation breakdown
 - **Interactive Chart** — Multi-axis line chart showing temperature, precipitation probability, and precipitation amounts with colored grid lines and day separators. Each line can be shown/hidden by tapping its legend entry; the choice persists across day-range views
-- **Tide Line** *(coastal locations)* — Optional hourly tide overlay on the forecast chart, sourced from the Open-Meteo Marine API. Toggled from the footer or the chart legend (default off); only offered where tide data is available. Today's high/low tide times are also interleaved into the Twilight & Sun table
+- **Tide Line** *(coastal locations)* — Optional hourly tide overlay on the forecast chart. Toggled from the footer or the chart legend (default off); only offered where tide data is available. Today's high/low tide times are also interleaved into the Twilight & Sun table. US locations use accurate NOAA CO-OPS station predictions (nearest station within ~40 km); elsewhere it falls back to the Open-Meteo global marine model
 - **Precipitation History** — 24h through 3-month totals with comparison to 10-year historical averages
 
 ### Radar & Alerts
@@ -44,7 +44,8 @@ All APIs are free and require no API keys:
 | Source | Usage |
 |--------|-------|
 | [Open-Meteo](https://open-meteo.com/) | Weather forecasts (hourly + daily), temperature, precipitation, wind |
-| [Open-Meteo Marine](https://open-meteo.com/en/docs/marine-weather-api) | Hourly tide / sea-level heights for coastal locations |
+| [NOAA CO-OPS Tides & Currents](https://api.tidesandcurrents.noaa.gov/api/prod/) | High/low + hourly tide predictions for US coastal locations |
+| [Open-Meteo Marine](https://open-meteo.com/en/docs/marine-weather-api) | Tide / sea-level heights for coastal locations (fallback outside the US) |
 | [RainViewer](https://www.rainviewer.com/api.html) | Real-time Doppler radar imagery |
 | [NWS API](https://www.weather.gov/documentation/services-web-api) | Active weather alerts, watches, and warnings (US locations) |
 | [SunCalc](https://github.com/mourner/suncalc) | Sun/moon positions, twilight times, moon phases |
@@ -103,7 +104,8 @@ weatherwonder/
 ## API Endpoints
 
 - **Weather:** `https://api.open-meteo.com/v1/forecast`
-- **Tides (Marine):** `https://marine-api.open-meteo.com/v1/marine`
+- **Tides (NOAA, US):** `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter` (stations via `.../mdapi/prod/webapi/stations.json`)
+- **Tides (Marine fallback):** `https://marine-api.open-meteo.com/v1/marine`
 - **Geocoding:** `https://geocoding-api.open-meteo.com/v1/search`
 - **Reverse Geocoding:** `https://nominatim.openstreetmap.org/reverse`
 - **Radar:** `https://api.rainviewer.com/public/weather-maps.json`

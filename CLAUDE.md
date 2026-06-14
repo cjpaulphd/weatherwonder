@@ -28,6 +28,8 @@ WeatherWonder is a client-side weather dashboard deployed on GitHub Pages. It's 
 - **Open-Meteo** (`api.open-meteo.com`) — hourly + daily forecast, temperature in Celsius (converted to Fahrenheit client-side)
 - **RainViewer** (`api.rainviewer.com`) — radar tile imagery
 - **NWS** (`api.weather.gov`) — active weather alerts; requires `User-Agent` header
+- **NOAA CO-OPS Tides** (`api.tidesandcurrents.noaa.gov`) — US tide predictions (hi/lo + hourly) from the nearest station; preferred tide source
+- **Open-Meteo Marine** (`marine-api.open-meteo.com`) — global tide/sea-level model; fallback when no NOAA station is nearby
 - **SunCalc** (JS library) — astronomical calculations, moon phases
 - **Nominatim** (`nominatim.openstreetmap.org`) — reverse geocoding for GPS
 

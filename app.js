@@ -6,6 +6,11 @@ const GEOCODING_API = 'https://geocoding-api.open-meteo.com/v1/search';
 const RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
 const AQI_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 const MARINE_API = 'https://marine-api.open-meteo.com/v1/marine';
+// NOAA CO-OPS tide predictions (US stations). Used in preference to the
+// Open-Meteo global model where a station is close enough; otherwise we fall
+// back to Open-Meteo. Station list is large but static, so it's cached.
+const NOAA_TIDE_DATAGETTER = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
+const NOAA_TIDE_STATIONS = 'https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions';
 
 // Default location (Durham, NC) - overridden by last used location if available
 const DEFAULT_LOCATION = {
@@ -559,8 +564,12 @@ function initializeTimeToggle() {
 // always starts off — the tide line is opt-in on each load, not persisted.
 let tideLineOn = false;
 
-// Holds the most recent marine/tide response for the current location, or
-// null when the location is inland (no tide data available).
+// Holds the normalized tide data for the current location, or null when the
+// location is inland / has no tide data. Shape:
+//   { times: string[],      // "YYYY-MM-DDTHH:mm" local wall-clock
+//     heightsFt: number[],  // tide height in feet
+//     extremes: [{ type, date, heightFt }] | null,  // exact hi/lo (NOAA only)
+//     source: 'noaa' | 'open-meteo', stationName?: string }
 let tideData = null;
 
 function isTideLineOn() {
@@ -571,27 +580,33 @@ function saveTideLine(on) {
     tideLineOn = !!on;
 }
 
-// Is the current location coastal? True when the marine API returned usable
-// tide heights for it.
+// Is the current location coastal? True when we have usable tide heights.
 function isCoastalLocation() {
-    return !!(tideData && tideData.hourly &&
-        Array.isArray(tideData.hourly.sea_level_height_msl) &&
-        tideData.hourly.sea_level_height_msl.some(v => v != null));
+    return !!(tideData && Array.isArray(tideData.heightsFt) &&
+        tideData.heightsFt.some(v => v != null));
 }
 
-// Find today's high/low tide events from the hourly marine data, in
-// chronological order. Returns [] for inland locations. Detects local maxima
-// (high) and minima (low) in the sea-level series, then keeps those falling on
-// the location's current calendar day. Each `date` is parsed from the API's
-// local wall-clock string (no UTC offset), so its hour digits are already
-// correct for the location — format it WITHOUT a timezone.
+// Find today's high/low tide events, in chronological order. Returns [] for
+// inland locations. NOAA provides exact hi/lo predictions, so those are used
+// directly; for the Open-Meteo fallback the series is only sampled hourly, so
+// we detect local maxima/minima and fit a parabola through the three samples
+// around each extreme to recover a sub-hour time (and the true peak height).
+// Times are local wall-clock (no UTC offset), so format them WITHOUT a tz.
 function getTodayTideExtremes() {
     if (!isCoastalLocation()) return [];
-    const time = tideData.hourly.time;
-    const h = tideData.hourly.sea_level_height_msl;
     const ln = getLocationNow();
     const pad = n => String(n).padStart(2, '0');
-    const todayPrefix = `${ln.getFullYear()}-${pad(ln.getMonth() + 1)}-${pad(ln.getDate())}`;
+    const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const today = `${ln.getFullYear()}-${pad(ln.getMonth() + 1)}-${pad(ln.getDate())}`;
+
+    // Exact extremes from NOAA — just keep today's.
+    if (tideData.extremes) {
+        return tideData.extremes.filter(e => dayKey(e.date) === today);
+    }
+
+    // Otherwise derive them from the hourly series.
+    const time = tideData.times;
+    const h = tideData.heightsFt;
     const events = [];
     for (let i = 1; i < h.length - 1; i++) {
         const prev = h[i - 1], cur = h[i], next = h[i + 1];
@@ -599,8 +614,23 @@ function getTodayTideExtremes() {
         let type = null;
         if (cur > prev && cur >= next) type = 'High';
         else if (cur < prev && cur <= next) type = 'Low';
-        if (!type || !time[i].startsWith(todayPrefix)) continue;
-        events.push({ type, date: new Date(time[i]), heightFt: cur * 3.28084 });
+        if (!type) continue;
+
+        // Parabolic interpolation: y = a·x² + b·x + c through x = -1, 0, +1.
+        // Vertex offset (in hours from `cur`) and the value there.
+        const denom = prev - 2 * cur + next;
+        let offsetHours = 0;
+        let peakVal = cur;
+        if (denom !== 0) {
+            offsetHours = Math.max(-0.5, Math.min(0.5, 0.5 * (prev - next) / denom));
+            peakVal = cur - 0.25 * (prev - next) * offsetHours;
+        }
+
+        const date = new Date(time[i]);
+        date.setMinutes(date.getMinutes() + Math.round(offsetHours * 60));
+
+        if (dayKey(date) !== today) continue;
+        events.push({ type, date, heightFt: peakVal });
     }
     return events;
 }
@@ -1213,10 +1243,112 @@ async function fetchAQI(lat, lon) {
     return data.current.us_aqi;
 }
 
-// Fetch hourly tide heights from Open-Meteo's Marine API. Returns the parsed
-// response for coastal points, or null for inland points (the API responds
-// with an error or all-null values when no marine data exists there).
+// Fetch tide data for a location, normalized to { times, heightsFt, extremes,
+// source }. Prefers NOAA CO-OPS station predictions (accurate, US-only) and
+// falls back to Open-Meteo's global marine model elsewhere or on any failure.
+// Returns null for inland locations with no tide data.
 async function fetchTideData(lat, lon) {
+    try {
+        const noaa = await fetchNoaaTideData(lat, lon);
+        if (noaa) return noaa;
+    } catch (e) {
+        // NOAA unavailable (network/CORS/etc.) — fall back to Open-Meteo.
+    }
+    return fetchOpenMeteoTideData(lat, lon);
+}
+
+// Great-circle distance between two lat/lon points, in kilometres.
+function haversineKm(lat1, lon1, lat2, lon2) {
+    const toRad = d => d * Math.PI / 180;
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// NOAA's tide-prediction station list, cached in localStorage (it's large but
+// effectively static). Falls back to a session cache and an empty list.
+let noaaStationsCache = null;
+const NOAA_STATIONS_CACHE_KEY = 'weatherwonder_noaa_stations';
+const NOAA_STATIONS_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+async function getNoaaTideStations() {
+    if (noaaStationsCache) return noaaStationsCache;
+    try {
+        const cached = JSON.parse(localStorage.getItem(NOAA_STATIONS_CACHE_KEY) || 'null');
+        if (cached && Date.now() - cached.ts < NOAA_STATIONS_TTL && Array.isArray(cached.stations)) {
+            noaaStationsCache = cached.stations;
+            return noaaStationsCache;
+        }
+    } catch (e) { /* ignore cache read errors */ }
+
+    const response = await fetch(NOAA_TIDE_STATIONS);
+    if (!response.ok) throw new Error('Failed to fetch NOAA stations');
+    const data = await response.json();
+    noaaStationsCache = (data.stations || []).map(s => ({
+        id: s.id, name: s.name, lat: s.lat, lng: s.lng
+    }));
+    try {
+        localStorage.setItem(NOAA_STATIONS_CACHE_KEY, JSON.stringify({ ts: Date.now(), stations: noaaStationsCache }));
+    } catch (e) { /* storage full / unavailable — session cache still set */ }
+    return noaaStationsCache;
+}
+
+// Find the nearest NOAA tide station within ~40 km, or null.
+async function findNearestNoaaStation(lat, lon) {
+    const stations = await getNoaaTideStations();
+    let best = null, bestKm = Infinity;
+    for (const s of stations) {
+        if (s.lat == null || s.lng == null) continue;
+        const km = haversineKm(lat, lon, s.lat, s.lng);
+        if (km < bestKm) { bestKm = km; best = s; }
+    }
+    return best && bestKm <= 40 ? best : null;
+}
+
+// Fetch tide predictions from NOAA for the nearest station. Returns the
+// normalized tide object, or null when no station is close enough.
+async function fetchNoaaTideData(lat, lon) {
+    const station = await findNearestNoaaStation(lat, lon);
+    if (!station) return null;
+
+    const ln = getLocationNow();
+    const pad = n => String(n).padStart(2, '0');
+    const begin = `${ln.getFullYear()}${pad(ln.getMonth() + 1)}${pad(ln.getDate())}`;
+    const endDate = new Date(ln);
+    endDate.setDate(endDate.getDate() + 10);
+    const end = `${endDate.getFullYear()}${pad(endDate.getMonth() + 1)}${pad(endDate.getDate())}`;
+
+    const common = `&datum=MLLW&units=english&time_zone=lst_ldt&format=json&application=weatherwonder.app&station=${station.id}`;
+    // Hourly series powers the chart curve; hi/lo powers the table.
+    const seriesUrl = `${NOAA_TIDE_DATAGETTER}?product=predictions&interval=h&begin_date=${begin}&end_date=${end}${common}`;
+    const hiloUrl = `${NOAA_TIDE_DATAGETTER}?product=predictions&interval=hilo&begin_date=${begin}&end_date=${end}${common}`;
+
+    const [seriesResp, hiloResp] = await Promise.all([fetch(seriesUrl), fetch(hiloUrl)]);
+    if (!seriesResp.ok || !hiloResp.ok) return null;
+    const series = await seriesResp.json();
+    const hilo = await hiloResp.json();
+    if (!series.predictions || !series.predictions.length) return null;
+
+    // NOAA "t" is local station wall-clock "YYYY-MM-DD HH:mm" (no offset).
+    const toIso = t => t.replace(' ', 'T');
+    const times = series.predictions.map(p => toIso(p.t));
+    const heightsFt = series.predictions.map(p => parseFloat(p.v));
+    const extremes = (hilo.predictions || []).map(p => ({
+        type: p.type === 'H' ? 'High' : 'Low',
+        date: new Date(toIso(p.t)),
+        heightFt: parseFloat(p.v)
+    }));
+
+    return { times, heightsFt, extremes, source: 'noaa', stationName: station.name };
+}
+
+// Fetch hourly tide heights from Open-Meteo's Marine API (global model).
+// Returns the normalized tide object, or null for inland points (the API
+// responds with an error or all-null values when no marine data exists there).
+async function fetchOpenMeteoTideData(lat, lon) {
     const params = new URLSearchParams({
         latitude: lat,
         longitude: lon,
@@ -1227,8 +1359,12 @@ async function fetchTideData(lat, lon) {
     const response = await fetch(`${MARINE_API}?${params}`);
     if (!response.ok) return null;
     const data = await response.json();
-    if (data.error) return null;
-    return data;
+    if (data.error || !data.hourly) return null;
+    const times = data.hourly.time;
+    // sea_level_height_msl is in metres relative to mean sea level → feet.
+    const heightsFt = data.hourly.sea_level_height_msl.map(m => m == null ? null : m * 3.28084);
+    if (!heightsFt.some(v => v != null)) return null;
+    return { times, heightsFt, extremes: null, source: 'open-meteo' };
 }
 
 // Get EPA color for AQI value
@@ -1936,15 +2072,14 @@ function renderChart(data) {
     const endIndex = Math.min(startIndex + hours, hourly.time.length);
 
     // Tide line is only drawn for coastal locations when the toggle is on.
-    // Marine API times match the weather API's hourly times (same timezone),
-    // so look tide heights up by time string and convert metres → feet.
+    // Tide times are hourly local wall-clock strings that line up with the
+    // weather API's hourly times, so look heights up by time string (feet).
     const showTide = isTideLineOn() && isCoastalLocation();
     let tideByTime = null;
     if (showTide) {
         tideByTime = {};
-        const th = tideData.hourly;
-        for (let i = 0; i < th.time.length; i++) {
-            tideByTime[th.time[i]] = th.sea_level_height_msl[i];
+        for (let i = 0; i < tideData.times.length; i++) {
+            tideByTime[tideData.times[i]] = tideData.heightsFt[i];
         }
     }
 
@@ -1964,8 +2099,8 @@ function renderChart(data) {
         precipAmounts.push(hourly.precipitation[i] / 25.4);
         isDayFlags.push(hourly.is_day[i]);
         if (showTide) {
-            const m = tideByTime[hourly.time[i]];
-            tideHeights.push(m == null ? null : m * 3.28084);
+            const ft = tideByTime[hourly.time[i]];
+            tideHeights.push(ft == null ? null : ft);
         }
     }
 
