@@ -581,16 +581,19 @@ function isCoastalLocation() {
 
 // Find today's high/low tide events from the hourly marine data, in
 // chronological order. Returns [] for inland locations. Detects local maxima
-// (high) and minima (low) in the sea-level series, then keeps those falling on
-// the location's current calendar day. Each `date` is parsed from the API's
-// local wall-clock string (no UTC offset), so its hour digits are already
-// correct for the location — format it WITHOUT a timezone.
+// (high) and minima (low) in the sea-level series. Because the series is only
+// sampled hourly, a raw extreme would always land on the hour; we fit a
+// parabola through the three surrounding samples and take its vertex to
+// recover a sub-hour time (and the true peak height). Each `date` is built
+// from the API's local wall-clock string (no UTC offset), so its hour digits
+// are already correct for the location — format it WITHOUT a timezone.
 function getTodayTideExtremes() {
     if (!isCoastalLocation()) return [];
     const time = tideData.hourly.time;
     const h = tideData.hourly.sea_level_height_msl;
     const ln = getLocationNow();
     const pad = n => String(n).padStart(2, '0');
+    const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const todayPrefix = `${ln.getFullYear()}-${pad(ln.getMonth() + 1)}-${pad(ln.getDate())}`;
     const events = [];
     for (let i = 1; i < h.length - 1; i++) {
@@ -599,8 +602,24 @@ function getTodayTideExtremes() {
         let type = null;
         if (cur > prev && cur >= next) type = 'High';
         else if (cur < prev && cur <= next) type = 'Low';
-        if (!type || !time[i].startsWith(todayPrefix)) continue;
-        events.push({ type, date: new Date(time[i]), heightFt: cur * 3.28084 });
+        if (!type) continue;
+
+        // Parabolic interpolation: y = a·x² + b·x + c through x = -1, 0, +1.
+        // Vertex offset (in hours from `cur`) and the value there.
+        const denom = prev - 2 * cur + next;
+        let offsetHours = 0;
+        let peakVal = cur;
+        if (denom !== 0) {
+            offsetHours = Math.max(-0.5, Math.min(0.5, 0.5 * (prev - next) / denom));
+            peakVal = cur - 0.25 * (prev - next) * offsetHours;
+        }
+
+        const date = new Date(time[i]);
+        date.setMinutes(date.getMinutes() + Math.round(offsetHours * 60));
+
+        // Keep extrema whose interpolated time lands on the location's today.
+        if (dayKey(date) !== todayPrefix) continue;
+        events.push({ type, date, heightFt: peakVal * 3.28084 });
     }
     return events;
 }
