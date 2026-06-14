@@ -5,6 +5,7 @@ const API_BASE = 'https://api.open-meteo.com/v1/forecast';
 const GEOCODING_API = 'https://geocoding-api.open-meteo.com/v1/search';
 const RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
 const AQI_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
+const MARINE_API = 'https://marine-api.open-meteo.com/v1/marine';
 
 // Default location (Durham, NC) - overridden by last used location if available
 const DEFAULT_LOCATION = {
@@ -548,6 +549,65 @@ function initializeTimeToggle() {
                     const ts = new Date(lastUpdated.dataset.timestamp);
                     lastUpdated.textContent = formatUpdatedTimestamp(ts);
                 }
+            }
+        });
+    }
+}
+
+// Tide line management with localStorage. The toggle is only shown for
+// coastal locations (where the Open-Meteo Marine API returns tide data).
+const TIDE_LINE_KEY = 'weatherwonder_tide_line';
+
+// Holds the most recent marine/tide response for the current location, or
+// null when the location is inland (no tide data available).
+let tideData = null;
+
+function isTideLineOn() {
+    try {
+        return localStorage.getItem(TIDE_LINE_KEY) === 'on';
+    } catch (e) {
+        return false;
+    }
+}
+
+function saveTideLine(on) {
+    try {
+        localStorage.setItem(TIDE_LINE_KEY, on ? 'on' : 'off');
+    } catch (e) {
+        console.error('Could not save tide line setting:', e);
+    }
+}
+
+// Is the current location coastal? True when the marine API returned usable
+// tide heights for it.
+function isCoastalLocation() {
+    return !!(tideData && tideData.hourly &&
+        Array.isArray(tideData.hourly.sea_level_height_msl) &&
+        tideData.hourly.sea_level_height_msl.some(v => v != null));
+}
+
+function updateTideToggleUI() {
+    const btn = document.getElementById('tide-toggle');
+    if (!btn) return;
+    const coastal = isCoastalLocation();
+    // Only offer the toggle where there's actually tide data to show.
+    btn.classList.toggle('hidden', !coastal);
+    const on = coastal && isTideLineOn();
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+
+function initializeTideToggle() {
+    updateTideToggleUI();
+    const btn = document.getElementById('tide-toggle');
+    if (btn) {
+        btn.addEventListener('click', () => {
+            const next = !isTideLineOn();
+            saveTideLine(next);
+            trackEvent('tide-' + (next ? 'on' : 'off'));
+            updateTideToggleUI();
+            if (weatherData) {
+                renderChart(weatherData);
             }
         });
     }
@@ -1102,6 +1162,24 @@ async function fetchAQI(lat, lon) {
     if (!response.ok) throw new Error('Failed to fetch AQI');
     const data = await response.json();
     return data.current.us_aqi;
+}
+
+// Fetch hourly tide heights from Open-Meteo's Marine API. Returns the parsed
+// response for coastal points, or null for inland points (the API responds
+// with an error or all-null values when no marine data exists there).
+async function fetchTideData(lat, lon) {
+    const params = new URLSearchParams({
+        latitude: lat,
+        longitude: lon,
+        hourly: 'sea_level_height_msl',
+        timezone: 'auto',
+        forecast_days: 11
+    });
+    const response = await fetch(`${MARINE_API}?${params}`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.error) return null;
+    return data;
 }
 
 // Get EPA color for AQI value
@@ -1753,6 +1831,7 @@ function getChartColors() {
     const tempRed = styles.getPropertyValue('--temp-red').trim();
     const precipBlue = styles.getPropertyValue('--precip-blue').trim();
     const precipGreen = styles.getPropertyValue('--precip-green').trim();
+    const tidePurple = styles.getPropertyValue('--tide-purple').trim();
 
     // Parse hex color to rgba with alpha
     function hexToRgba(hex, alpha) {
@@ -1777,6 +1856,7 @@ function getChartColors() {
         precipProbBg: hexToRgba(precipBlue, 0.1),
         precipAmountBorder: precipGreen,
         precipAmountBg: hexToRgba(precipGreen, 0.3),
+        tideBorder: tidePurple,
         tempGridLine: hexToRgba(tempRed, 0.3),
         tempGridLabel: hexToRgba(tempRed, 0.7),
         precipGridLine: hexToRgba(precipGreen, 0.3),
@@ -1804,10 +1884,24 @@ function renderChart(data) {
     const hours = getChartDays() * 24;
     const endIndex = Math.min(startIndex + hours, hourly.time.length);
 
+    // Tide line is only drawn for coastal locations when the toggle is on.
+    // Marine API times match the weather API's hourly times (same timezone),
+    // so look tide heights up by time string and convert metres → feet.
+    const showTide = isTideLineOn() && isCoastalLocation();
+    let tideByTime = null;
+    if (showTide) {
+        tideByTime = {};
+        const th = tideData.hourly;
+        for (let i = 0; i < th.time.length; i++) {
+            tideByTime[th.time[i]] = th.sea_level_height_msl[i];
+        }
+    }
+
     const labels = [];
     const temps = [];
     const precipProbs = [];
     const precipAmounts = [];
+    const tideHeights = [];
     const isDayFlags = [];
 
     for (let i = startIndex; i < endIndex; i++) {
@@ -1818,6 +1912,10 @@ function renderChart(data) {
         precipProbs.push(hourly.precipitation_probability[i]);
         precipAmounts.push(hourly.precipitation[i] / 25.4);
         isDayFlags.push(hourly.is_day[i]);
+        if (showTide) {
+            const m = tideByTime[hourly.time[i]];
+            tideHeights.push(m == null ? null : m * 3.28084);
+        }
     }
 
     // For hours that have already happened today, replace the modeled
@@ -1849,6 +1947,19 @@ function renderChart(data) {
     const maxPrecipAmount = Math.max(0.1, ...precipAmounts);
     // Round up to nearest 0.1 for cleaner grid
     const precipScaleMax = Math.ceil(maxPrecipAmount * 1.2 * 10) / 10;
+
+    // Tide axis scale (feet), padded so the curve doesn't touch the edges.
+    let tideScaleMin = 0, tideScaleMax = 1;
+    if (showTide) {
+        const tideVals = tideHeights.filter(v => v != null);
+        if (tideVals.length) {
+            const minTide = Math.min(...tideVals);
+            const maxTide = Math.max(...tideVals);
+            const pad = Math.max((maxTide - minTide) * 0.15, 0.5);
+            tideScaleMin = minTide - pad;
+            tideScaleMax = maxTide + pad;
+        }
+    }
 
     if (forecastChart) {
         forecastChart.destroy();
@@ -1897,7 +2008,20 @@ function renderChart(data) {
                     pointHoverRadius: 4,
                     fill: true,
                     yAxisID: 'y-precip-amount'
-                }
+                },
+                ...(showTide ? [{
+                    label: 'Tide',
+                    data: tideHeights,
+                    borderColor: colors.tideBorder,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 4],
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    spanGaps: true,
+                    yAxisID: 'y-tide'
+                }] : [])
             ]
         },
         options: {
@@ -1940,13 +2064,18 @@ function renderChart(data) {
                             const idx = context.dataIndex;
                             const labelDate = context.chart.data.labels[idx];
                             const isPast = labelDate instanceof Date && labelDate < getLocationNow();
-                            if (context.datasetIndex === 0) {
+                            const axis = context.dataset.yAxisID;
+                            if (axis === 'y-temp') {
                                 return `Temperature: ${Math.round(context.raw)}${getTempUnitLabel()}`;
-                            } else if (context.datasetIndex === 1) {
+                            } else if (axis === 'y-precip-prob') {
                                 if (isPast) {
                                     return context.raw >= 50 ? 'Rain: yes' : 'Rain: no';
                                 }
                                 return `Precip Chance: ${context.raw}%`;
+                            } else if (axis === 'y-tide') {
+                                if (context.raw == null) return null;
+                                const sign = context.raw >= 0 ? '+' : '';
+                                return `Tide: ${sign}${context.raw.toFixed(1)} ft`;
                             } else {
                                 const inches = context.raw;
                                 if (inches < 0.01) return 'Precip Amount: 0.00"';
@@ -1978,6 +2107,12 @@ function renderChart(data) {
                     position: 'right',
                     min: 0,
                     max: precipScaleMax
+                },
+                'y-tide': {
+                    display: false,
+                    position: 'right',
+                    min: tideScaleMin,
+                    max: tideScaleMax
                 }
             }
         }
@@ -2005,6 +2140,11 @@ function renderChart(data) {
             <span class="legend-color precip-amount"></span>
             <span>Precip Amt</span>
         </div>
+        ${showTide ? `
+        <div class="legend-item">
+            <span class="legend-color tide"></span>
+            <span>Tide</span>
+        </div>` : ''}
     `;
     container.insertAdjacentElement('afterend', legend);
 }
@@ -2557,6 +2697,22 @@ async function loadWeather() {
         fetchAQI(currentLocation.latitude, currentLocation.longitude)
             .then(aqi => { currentConditions.aqi = aqi; renderConditionsBar(); })
             .catch(() => { currentConditions.aqi = null; renderConditionsBar(); });
+
+        // Fetch tide data (non-blocking). Reset first so a previous coastal
+        // location's data and toggle don't leak into an inland one. When data
+        // arrives for a coastal location, reveal the toggle and redraw the
+        // chart so the tide line appears if it's enabled.
+        tideData = null;
+        updateTideToggleUI();
+        fetchTideData(currentLocation.latitude, currentLocation.longitude)
+            .then(data => {
+                tideData = data;
+                updateTideToggleUI();
+                if (weatherData && isCoastalLocation() && isTideLineOn()) {
+                    renderChart(weatherData);
+                }
+            })
+            .catch(() => { tideData = null; updateTideToggleUI(); });
 
         // Render conditions bar immediately with humidity/wind (AQI will update when ready)
         renderConditionsBar();
@@ -3427,6 +3583,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeTheme,
         initializeTempToggle,
         initializeTimeToggle,
+        initializeTideToggle,
         initializeChartRangeToggle,
         updateLocationDisplay,
         initializeModal,

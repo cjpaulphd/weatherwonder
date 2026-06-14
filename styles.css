@@ -16,6 +16,7 @@
     --precip-blue: #4fc3f7;
     --precip-green: #66bb6a;
     --temp-red: #ef9a9a;
+    --tide-purple: #b39ddb;
     --snow-color: #e91e63;
     --rain-color: #2196f3;
 }
@@ -31,6 +32,7 @@
     --precip-blue: #0288d1;
     --precip-green: #388e3c;
     --temp-red: #c62828;
+    --tide-purple: #7e57c2;
     --snow-color: #c2185b;
     --rain-color: #1565c0;
 }
@@ -1034,6 +1036,10 @@ body {
     background-color: var(--precip-green);
 }
 
+.legend-color.tide {
+    background-color: var(--tide-purple);
+}
+
 /* Chart day-range toggle */
 .chart-range-toggle {
     display: flex;
@@ -1413,6 +1419,16 @@ body {
 .theme-toggle-icon {
     font-size: 16px;
     line-height: 1;
+}
+
+/* Tide line toggle — only shown for coastal locations (see app.js) */
+.tide-toggle.hidden {
+    display: none;
+}
+
+.tide-toggle.active {
+    color: var(--tide-purple);
+    border-color: var(--tide-purple);
 }
 
 .share-app-btn {
@@ -1834,6 +1850,7 @@ body {
     --precip-blue: #00ffff;
     --precip-green: #00ff88;
     --temp-red: #ff6699;
+    --tide-purple: #cc66ff;
     --snow-color: #ff00ff;
     --rain-color: #00ccff;
 }
@@ -1850,6 +1867,7 @@ body {
     --precip-blue: #0099bb;
     --precip-green: #008855;
     --temp-red: #cc3366;
+    --tide-purple: #9933cc;
     --snow-color: #cc00cc;
     --rain-color: #0088cc;
 }
