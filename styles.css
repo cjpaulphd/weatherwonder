@@ -1012,10 +1012,35 @@ body {
     color: var(--text-secondary);
 }
 
+/* Legend entries double as show/hide toggle buttons for each chart line. */
 .legend-item {
     display: flex;
     align-items: center;
     gap: 4px;
+    padding: 4px 8px;
+    margin: 0;
+    background: none;
+    border: none;
+    border-radius: 12px;
+    color: inherit;
+    font: inherit;
+    font-size: 10px;
+    cursor: pointer;
+    transition: opacity 0.15s, background-color 0.15s;
+}
+
+.legend-item:hover {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.legend-item.off {
+    opacity: 0.4;
+    text-decoration: line-through;
+}
+
+.legend-item.off .legend-color {
+    opacity: 0.5;
 }
 
 .legend-color {
@@ -1342,6 +1367,15 @@ body {
 .astro-row.highlight .astro-label {
     color: var(--text-primary);
     font-weight: 500;
+}
+
+/* High/low tide rows in the Twilight & Sun table (coastal locations) */
+.astro-row.tide {
+    background-color: rgba(126, 87, 194, 0.1);
+}
+
+.astro-row.tide .astro-value {
+    color: var(--tide-purple);
 }
 
 .astro-value {

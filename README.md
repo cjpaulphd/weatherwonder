@@ -9,8 +9,8 @@ A mobile-first weather dashboard that provides comprehensive forecasts, live rad
 ### Forecast
 - **7-Day Daily Forecast** — AM/PM weather icons, high/low temperatures, dominant wind direction + max speed, precipitation probability and amounts
 - **48-Hour Hourly Forecast** — Temperature, feels-like/windchill, compass wind direction + speed (e.g. NNW 12), precipitation breakdown
-- **Interactive Chart** — Multi-axis line chart showing temperature, precipitation probability, and precipitation amounts with colored grid lines and day separators
-- **Tide Line** *(coastal locations)* — Optional hourly tide overlay on the forecast chart, sourced from the Open-Meteo Marine API. Toggled from the footer (default off); the button only appears where tide data is available
+- **Interactive Chart** — Multi-axis line chart showing temperature, precipitation probability, and precipitation amounts with colored grid lines and day separators. Each line can be shown/hidden by tapping its legend entry; the choice persists across day-range views
+- **Tide Line** *(coastal locations)* — Optional hourly tide overlay on the forecast chart, sourced from the Open-Meteo Marine API. Toggled from the footer or the chart legend (default off); only offered where tide data is available. Today's high/low tide times are also interleaved into the Twilight & Sun table
 - **Precipitation History** — 24h through 3-month totals with comparison to 10-year historical averages
 
 ### Radar & Alerts
