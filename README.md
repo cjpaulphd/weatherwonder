@@ -9,8 +9,8 @@ A mobile-first weather dashboard that provides comprehensive forecasts, live rad
 ### Forecast
 - **7-Day Daily Forecast** — AM/PM weather icons, high/low temperatures, dominant wind direction + max speed, precipitation probability and amounts
 - **48-Hour Hourly Forecast** — Temperature, feels-like/windchill, compass wind direction + speed (e.g. NNW 12), precipitation breakdown
-- **Interactive Chart** — Multi-axis line chart showing temperature, precipitation probability, precipitation amounts, and average wind speed, with colored grid lines and day separators. Each line can be shown/hidden by tapping its legend entry (wind is off by default); the choice persists across day-range views
-- **Tide Line** *(coastal locations)* — Optional hourly tide overlay on the forecast chart. Toggled from the footer button or the chart legend (default off); only offered where tide data is available. The same toggle adds/removes today's high/low tide times in the Sun, Moon, and Tide table. US locations use accurate NOAA CO-OPS station predictions (nearest station within ~40 km); elsewhere it falls back to the Open-Meteo global marine model
+- **Interactive Chart** — Multi-axis line chart showing temperature, precipitation probability, precipitation amounts, and average wind speed, with colored grid lines, per-axis units, and day separators. Each line can be shown/hidden by tapping its legend entry (wind is off by default); the choice persists across day-range views
+- **Tide Line** *(coastal locations)* — Optional hourly tide overlay on the forecast chart. Toggled from the footer button or the chart legend (default off); only offered where tide data is available. The same toggle adds/removes high/low tides in the Sun, Moon, and Tide table and tide heights in the hourly cards, and flips the section header's "Tide" wording. Heights follow the °F/°C unit toggle (feet/metres). US locations use accurate NOAA CO-OPS station predictions (nearest station within ~40 km); elsewhere it falls back to the Open-Meteo global marine model
 - **Precipitation History** — 24h through 3-month totals with comparison to 10-year historical averages
 
 ### Radar & Alerts
@@ -19,6 +19,7 @@ A mobile-first weather dashboard that provides comprehensive forecasts, live rad
 - **RadarScope Link** — Quick link to open the RadarScope app for advanced radar viewing
 
 ### Astronomical Data
+A single **Sun, Moon, and Tide** table, with all timed events (twilight, sunrise/sunset, moonrise/moonset, and — when Tides is on — high/low tides) interleaved in chronological order.
 - **Twilight Times** — Astronomical, nautical, and civil dawn/dusk
 - **Sun** — Sunrise, solar noon, sunset, day length with daily change comparison
 - **Moon** — Moonrise, moonset, phase name with emoji, illumination percentage

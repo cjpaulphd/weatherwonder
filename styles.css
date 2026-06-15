@@ -758,6 +758,13 @@ body {
     margin-top: 2px;
 }
 
+.hourly-card .hourly-tide {
+    font-size: 11px;
+    color: var(--tide-purple);
+    margin-top: 2px;
+    white-space: nowrap;
+}
+
 /* Modal */
 .modal {
     position: fixed;

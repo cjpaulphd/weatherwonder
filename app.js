@@ -89,8 +89,9 @@ function applyCIT2000(on) {
         'daily-section': { normal: 'DAILY FORECAST', fun: 'DAILY PAHOOOOTIE FORECAST' },
         'hourly-section': { normal: 'HOURLY FORECAST', fun: 'HOURLY VIBE CHECK' },
         'radar-section': { normal: 'DOPPLER RADAR (50 mi)', fun: 'BLEEPS / SWEEPS / CREEPS' },
-        'precip-history-section': { normal: 'PRECIPITATION HISTORY', fun: 'SKY JUICE HISTORY' },
-        'astro-section': { normal: 'SUN, MOON, AND TIDE', fun: 'SKY ORB WAVES' }
+        'precip-history-section': { normal: 'PRECIPITATION HISTORY', fun: 'SKY JUICE HISTORY' }
+        // 'astro-section' is handled by updateAstroHeader() so the header can
+        // also reflect whether tides are currently shown.
     };
     if (on) {
         document.documentElement.classList.add('cit2000-active');
@@ -118,7 +119,24 @@ function applyCIT2000(on) {
         });
     }
     updateCIT2000ToggleUI();
+    updateAstroHeader();
     updateThemeColor(getEffectiveTheme());
+}
+
+// Set the astro section header. It reflects both CIT2000 mode and whether
+// tides are currently shown — the "Tide"/"Waves" word toggles with the tide
+// buttons (footer + chart legend).
+function updateAstroHeader() {
+    const section = document.getElementById('astro-section');
+    if (!section) return;
+    const h2 = section.querySelector('.section-header h2');
+    if (!h2) return;
+    const tide = isTideLineOn();
+    if (isCIT2000()) {
+        h2.textContent = tide ? 'SKY ORB WAVES' : 'SKY ORBS';
+    } else {
+        h2.textContent = tide ? 'SUN, MOON, AND TIDE' : 'SUN AND MOON';
+    }
 }
 
 function toggleCIT2000() {
@@ -637,6 +655,8 @@ function getTodayTideExtremes() {
 
 function updateTideToggleUI() {
     const btn = document.getElementById('tide-toggle');
+    // Keep the section header's "Tide"/"Waves" word in sync with the toggle.
+    updateAstroHeader();
     if (!btn) return;
     const coastal = isCoastalLocation();
     // Only offer the toggle where there's actually tide data to show.
@@ -657,6 +677,7 @@ function initializeTideToggle() {
             updateTideToggleUI();
             if (weatherData) {
                 renderChart(weatherData);
+                renderHourlyForecast(weatherData);
             }
             // Tides also appear/disappear in the Sun, Moon, and Tide table.
             renderAstroData();
@@ -1110,6 +1131,25 @@ function formatPrecip(mm, compact = false) {
     const inches = mm / 25.4;
     if (inches < 0.01) return '';
     return `${inches.toFixed(2)}"`;
+}
+
+// Format a tide height (stored internally in feet) per the active unit toggle,
+// matching the temperature/precip units: F → feet, C → metres, K → microns.
+function formatTideHeight(ft, compact = false) {
+    const unit = getTempUnit();
+    if (unit === 'K') {
+        const microns = ft * 304800; // 1 ft = 304,800 µm
+        const abs = Math.abs(microns);
+        if (compact) {
+            if (abs >= 1e6) return `${(microns / 1e6).toFixed(1)}M µm`;
+            if (abs >= 1e3) return `${Math.round(microns / 1e3)}K µm`;
+        }
+        return `${Math.round(microns).toLocaleString()} µm`;
+    }
+    if (unit === 'C') {
+        return `${(ft * 0.3048).toFixed(2)} m`;
+    }
+    return `${ft.toFixed(1)} ft`;
 }
 
 // Convert wind direction degrees to compass abbreviation
@@ -1727,6 +1767,17 @@ function renderHourlyForecast(data) {
     const hourly = data.hourly;
     const now = getLocationNow();
 
+    // Tide height per hour, shown in the cards only when the Tides toggle is on
+    // (same on/off state as the chart tide line and the table rows).
+    const showTide = isTideLineOn() && isCoastalLocation();
+    let tideByTime = null;
+    if (showTide) {
+        tideByTime = {};
+        for (let i = 0; i < tideData.times.length; i++) {
+            tideByTime[tideData.times[i]] = tideData.heightsFt[i];
+        }
+    }
+
     let startIndex = 0;
     for (let i = 0; i < hourly.time.length; i++) {
         const hourDate = new Date(hourly.time[i]);
@@ -1761,6 +1812,7 @@ function renderHourlyForecast(data) {
         const windDir = hourly.wind_direction_10m[i];
         const temp = formatTempValue(hourly.temperature_2m[i]);
         const apparentTemp = formatTempValue(hourly.apparent_temperature[i]);
+        const tideFt = showTide ? tideByTime[hourly.time[i]] : null;
 
         let precipClass = hasSnow ? 'snow' : '';
 
@@ -1785,6 +1837,9 @@ function renderHourlyForecast(data) {
             ` : ''}
             ${precip > 0 ? `
                 <div class="precip-amount${hkClass}">${formatPrecip(precip)}</div>
+            ` : ''}
+            ${tideFt != null ? `
+                <div class="hourly-tide">🌊 ${formatTideHeight(tideFt, true)}</div>
             ` : ''}
         `;
 
@@ -1899,6 +1954,40 @@ const gridLinesPlugin = {
                 ctx.textAlign = 'right';
                 ctx.fillText(`${precip.toFixed(1)}"`, chartArea.right - 2, y - 2);
             }
+        }
+
+        // Wind (left) and tide (right) axis units. These lines have their own
+        // scales, so rather than add more full-width gridlines we draw a few
+        // short edge ticks labelled with units. Labels sit below each tick so
+        // they don't collide with the temp/precip labels (which sit above).
+        const drawUnitAxis = (scale, side, color, fmt) => {
+            if (!scale || typeof scale.min !== 'number') return;
+            const vals = [scale.min, (scale.min + scale.max) / 2, scale.max];
+            ctx.setLineDash([]);
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.font = '9px sans-serif';
+            ctx.lineWidth = 1;
+            const isLeft = side === 'left';
+            ctx.textAlign = isLeft ? 'left' : 'right';
+            const xEdge = isLeft ? chartArea.left : chartArea.right;
+            const xTick = isLeft ? chartArea.left + 6 : chartArea.right - 6;
+            const xText = isLeft ? chartArea.left + 8 : chartArea.right - 8;
+            vals.forEach(v => {
+                const y = scale.getPixelForValue(v);
+                if (y < chartArea.top || y > chartArea.bottom) return;
+                ctx.beginPath();
+                ctx.moveTo(xEdge, y);
+                ctx.lineTo(xTick, y);
+                ctx.stroke();
+                ctx.fillText(fmt(v), xText, Math.min(chartArea.bottom - 1, y + 10));
+            });
+        };
+        if (isChartLineVisible('wind')) {
+            drawUnitAxis(chart.scales['y-wind'], 'left', gridColors.windBorder, v => formatWindSpeed(v, true));
+        }
+        if (isTideLineOn() && isCoastalLocation()) {
+            drawUnitAxis(chart.scales['y-tide'], 'right', gridColors.tideBorder, v => formatTideHeight(v, true));
         }
 
         // Draw day separators
@@ -2283,7 +2372,7 @@ function renderChart(data) {
                             } else if (axis === 'y-tide') {
                                 if (context.raw == null) return null;
                                 const sign = context.raw >= 0 ? '+' : '';
-                                return `Tide: ${sign}${context.raw.toFixed(1)} ft`;
+                                return `Tide: ${sign}${formatTideHeight(context.raw, true)}`;
                             } else if (axis === 'y-wind') {
                                 return `Wind: ${formatWindSpeed(context.raw)}`;
                             } else {
@@ -2372,8 +2461,9 @@ function renderChart(data) {
                 saveTideLine(next);
                 trackEvent('tide-' + (next ? 'on' : 'off'));
                 updateTideToggleUI();
-                // Keep the Sun, Moon, and Tide table in sync with the toggle.
+                // Keep the table and hourly cards in sync with the toggle.
                 renderAstroData();
+                if (weatherData) renderHourlyForecast(weatherData);
             } else {
                 const next = toggleChartLine(key);
                 trackEvent('chart-line-' + key + '-' + (next ? 'on' : 'off'));
@@ -2626,7 +2716,7 @@ function renderAstroData() {
         return ((parts.hour % 24) || 0) * 60 + (parts.minute || 0);
     };
 
-    const sunRows = [
+    const rows = [
         { label: 'Astronomical Dawn', value: formatAstroTime(sunTimes.nightEnd), sortMin: sunMinutes(sunTimes.nightEnd) },
         { label: 'Nautical Dawn', value: formatAstroTime(sunTimes.nauticalDawn), sortMin: sunMinutes(sunTimes.nauticalDawn) },
         { label: 'Civil Dawn', value: formatAstroTime(sunTimes.dawn), sortMin: sunMinutes(sunTimes.dawn) },
@@ -2635,14 +2725,17 @@ function renderAstroData() {
         { label: '🌅 Sunset', value: formatAstroTime(sunTimes.sunset), sortMin: sunMinutes(sunTimes.sunset), highlight: true },
         { label: 'Civil Dusk', value: formatAstroTime(sunTimes.dusk), sortMin: sunMinutes(sunTimes.dusk) },
         { label: 'Nautical Dusk', value: formatAstroTime(sunTimes.nauticalDusk), sortMin: sunMinutes(sunTimes.nauticalDusk) },
-        { label: 'Astronomical Dusk', value: formatAstroTime(sunTimes.night), sortMin: sunMinutes(sunTimes.night) }
+        { label: 'Astronomical Dusk', value: formatAstroTime(sunTimes.night), sortMin: sunMinutes(sunTimes.night) },
+        // Moonrise/Moonset interleave chronologically with the sun & tide events.
+        { label: '🌙 Moonrise', value: moonTimes.rise ? formatAstroTime(moonTimes.rise) : 'No rise today', sortMin: sunMinutes(moonTimes.rise), moon: true, moonrise: true },
+        { label: '🌙 Moonset', value: moonTimes.set ? formatAstroTime(moonTimes.set) : 'No set today', sortMin: sunMinutes(moonTimes.set), moon: true }
     ];
 
     // High/low tide rows are shown only when the Tides toggle is on (footer
     // button / chart legend), so the toggle adds or removes them from the table.
     if (isTideLineOn()) {
         getTodayTideExtremes().forEach(t => {
-            sunRows.push({
+            rows.push({
                 label: `${t.type === 'High' ? '🌊' : '🏝️'} ${t.type} Tide`,
                 value: formatTime(t.date),
                 sortMin: t.date.getHours() * 60 + t.date.getMinutes(),
@@ -2652,19 +2745,26 @@ function renderAstroData() {
         });
     }
 
-    sunRows.sort((a, b) => a.sortMin - b.sortMin);
+    rows.sort((a, b) => a.sortMin - b.sortMin);
 
-    const sunRowsHtml = sunRows.map(r => `
-                <div class="astro-row${r.highlight ? ' highlight' : ''}${r.tide ? ' tide' : ''}">
+    // Phase and Illumination have no time of day; place them right after the
+    // Moonrise row.
+    const phaseRow = { label: `${moonPhase.emoji} Phase`, value: moonPhase.name, highlight: true, moon: true };
+    const illumRow = { label: 'Illumination', value: `${illuminationPct}%`, moon: true };
+    const mrIdx = rows.findIndex(r => r.moonrise);
+    if (mrIdx >= 0) rows.splice(mrIdx + 1, 0, phaseRow, illumRow);
+    else rows.push(phaseRow, illumRow);
+
+    const rowsHtml = rows.map(r => `
+                <div class="astro-row${r.highlight ? ' highlight' : ''}${r.tide ? ' tide' : ''}${r.moon ? ' moon' : ''}">
                     <span class="astro-label">${r.label}</span>
                     <span class="astro-value">${r.value}</span>
                 </div>`).join('');
 
     container.innerHTML = `
         <div class="astro-group">
-            <h4 class="astro-group-title">Twilight &amp; Sun</h4>
             <div class="astro-grid">
-                ${sunRowsHtml}
+                ${rowsHtml}
                 <div class="astro-row highlight">
                     <span class="astro-label">Day Length</span>
                     <span class="astro-value">${dayLengthStr}</span>
@@ -2673,27 +2773,6 @@ function renderAstroData() {
                     <span class="astro-label"></span>
                     <span class="astro-value astro-change">${dayChangeStr}</span>
                 </div>` : ''}
-            </div>
-        </div>
-        <div class="astro-group">
-            <h4 class="astro-group-title">Moon</h4>
-            <div class="astro-grid">
-                <div class="astro-row">
-                    <span class="astro-label">Moonrise</span>
-                    <span class="astro-value">${moonTimes.rise ? formatAstroTime(moonTimes.rise) : 'No rise today'}</span>
-                </div>
-                <div class="astro-row">
-                    <span class="astro-label">Moonset</span>
-                    <span class="astro-value">${moonTimes.set ? formatAstroTime(moonTimes.set) : 'No set today'}</span>
-                </div>
-                <div class="astro-row highlight">
-                    <span class="astro-label">${moonPhase.emoji} Phase</span>
-                    <span class="astro-value">${moonPhase.name}</span>
-                </div>
-                <div class="astro-row">
-                    <span class="astro-label">Illumination</span>
-                    <span class="astro-value">${illuminationPct}%</span>
-                </div>
             </div>
         </div>
     `;
@@ -2959,7 +3038,10 @@ async function loadWeather() {
                 updateTideToggleUI();
                 if (isCoastalLocation()) {
                     // Reveal the tide legend toggle and the high/low tide rows.
-                    if (weatherData) renderChart(weatherData);
+                    if (weatherData) {
+                        renderChart(weatherData);
+                        renderHourlyForecast(weatherData);
+                    }
                     renderAstroData();
                 }
             })
