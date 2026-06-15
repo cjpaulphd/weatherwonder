@@ -717,7 +717,16 @@ function toggleChartLine(key) {
 
 // Chart day-range management with localStorage
 const CHART_DAYS_KEY = 'weatherwonder_chart_days';
-const CHART_DAYS_OPTIONS = [3, 5, 7, 10];
+const CHART_DAYS_OPTIONS = [1, 3, 5, 7, 10];
+
+// How far the visible chart window is shifted from its default position
+// (midnight today), in hours. Negative = panned into the past so the user can
+// "go back and review" observed weather; 0 = the default today-forward view.
+// Session-only — every load starts at the present.
+let chartWindowOffsetHours = 0;
+// Window geometry from the most recent renderChart(), used by the scrubber.
+let chartBaseIndex = 0;
+let chartMaxStart = 0;
 
 function getChartDays() {
     try {
@@ -1240,6 +1249,7 @@ async function fetchWeatherData(lat, lon) {
             'temperature_2m',
             'apparent_temperature',
             'relative_humidity_2m',
+            'dew_point_2m',
             'precipitation_probability',
             'precipitation',
             'snowfall',
@@ -1262,6 +1272,9 @@ async function fetchWeatherData(lat, lon) {
         wind_speed_unit: 'mph',
         precipitation_unit: 'mm',
         timezone: 'auto',
+        // 7 past days of (observed) hourly data power the chart's "prior week"
+        // navigation; 11 forecast days cover today + the 10-day outlook.
+        past_days: 7,
         forecast_days: 11
     });
 
@@ -1427,6 +1440,17 @@ function getHumidityColor(humidity) {
     return '#4fc3f7';                       // Very humid - blue
 }
 
+// Get color for dew point (comfort), based on the dew point in °F regardless
+// of the display unit. Below ~55°F feels dry/pleasant; above ~70°F is oppressive.
+function getDewpointColor(dewpointC) {
+    const f = (dewpointC * 9 / 5) + 32;
+    if (f < 55) return '#00e400';   // Dry / pleasant - green
+    if (f < 60) return '#9ccc65';   // Comfortable - light green
+    if (f < 65) return '#e6d700';   // Slightly humid - yellow
+    if (f < 70) return '#ff9800';   // Humid - orange
+    return '#ff5252';               // Oppressive - red
+}
+
 // Get color for wind speed (mph)
 function getWindColor(mph) {
     if (mph <= 5) return 'var(--text-secondary)';  // Calm - muted
@@ -1437,14 +1461,14 @@ function getWindColor(mph) {
 }
 
 // Store current conditions for re-rendering on unit change
-let currentConditions = { aqi: null, humidity: null, windSpeed: null, windDir: null };
+let currentConditions = { aqi: null, humidity: null, dewpoint: null, windSpeed: null, windDir: null };
 
 // Render conditions bar (AQI, humidity, wind) on a single compact line
 function renderConditionsBar() {
     const el = document.getElementById('conditions-bar');
     if (!el) return;
 
-    const { aqi, humidity, windSpeed, windDir } = currentConditions;
+    const { aqi, humidity, dewpoint, windSpeed, windDir } = currentConditions;
     const parts = [];
 
     if (aqi != null) {
@@ -1455,6 +1479,11 @@ function renderConditionsBar() {
     if (humidity != null) {
         const color = getHumidityColor(humidity);
         parts.push(`<span style="color:${color}">${Math.round(humidity)}% RH</span>`);
+    }
+
+    if (dewpoint != null) {
+        const color = getDewpointColor(dewpoint);
+        parts.push(`<span style="color:${color}">DP ${formatTempValue(dewpoint)}${getTempUnitLabel()}</span>`);
     }
 
     if (windSpeed != null && windDir != null) {
@@ -1845,6 +1874,15 @@ function renderHourlyForecast(data) {
 
         container.appendChild(card);
     }
+
+    // Seed the section-header day indicator immediately so it shows the current
+    // day/date without waiting for the user to scroll. The scroll handler keeps
+    // it updated thereafter.
+    const dayIndicator = document.getElementById('hourly-day-indicator');
+    if (dayIndicator) {
+        const firstLabel = container.querySelector('.day-label');
+        dayIndicator.textContent = firstLabel ? firstLabel.textContent : '';
+    }
 }
 
 // Custom plugin to draw grid lines and day/night bands
@@ -2151,18 +2189,30 @@ function renderChart(data) {
 
     const midnight = getMidnightToday();
 
-    // Find index for midnight of current day
-    let startIndex = 0;
+    // Find the hourly index for midnight of the current day — the chart's
+    // default ("Now") window starts here.
+    let baseIndex = 0;
     for (let i = 0; i < hourly.time.length; i++) {
         const hourDate = new Date(hourly.time[i]);
         if (hourDate >= midnight) {
-            startIndex = i;
+            baseIndex = i;
             break;
         }
     }
 
     const hours = getChartDays() * 24;
+    // Apply the scrubber/prior-week pan offset, clamped so the window always
+    // stays within the available data (7 past days … 10 forecast days).
+    const maxStart = Math.max(0, hourly.time.length - hours);
+    let startIndex = baseIndex + Math.round(chartWindowOffsetHours);
+    startIndex = Math.max(0, Math.min(startIndex, maxStart));
+    // Reflect any clamping back into the offset so the slider/buttons stay in sync.
+    chartWindowOffsetHours = startIndex - baseIndex;
     const endIndex = Math.min(startIndex + hours, hourly.time.length);
+
+    // Stash window geometry for the scrubber controls.
+    chartBaseIndex = baseIndex;
+    chartMaxStart = maxStart;
 
     // Tide line is only drawn for coastal locations when the toggle is on.
     // Tide times are hourly local wall-clock strings that line up with the
@@ -2324,6 +2374,10 @@ function renderChart(data) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            // The chart is recreated on every interaction (unit/theme toggles,
+            // and especially the time scrubber); skip entry animation so
+            // dragging the scrubber stays smooth.
+            animation: false,
             interaction: {
                 mode: 'index',
                 intersect: false
@@ -2473,6 +2527,82 @@ function renderChart(data) {
     });
 
     container.insertAdjacentElement('afterend', legend);
+
+    updateChartScrubberUI();
+}
+
+// Sync the time-scrubber slider and prior/next-week buttons with the chart's
+// current window position. Called at the end of every renderChart().
+function updateChartScrubberUI() {
+    const slider = document.getElementById('chart-scrubber-slider');
+    const prevBtn = document.getElementById('chart-prev-week');
+    const nextBtn = document.getElementById('chart-next-week');
+    const nowBtn = document.getElementById('chart-now-btn');
+
+    const startIndex = chartBaseIndex + chartWindowOffsetHours;
+    if (slider) {
+        slider.min = '0';
+        slider.max = String(chartMaxStart);
+        slider.value = String(Math.max(0, Math.min(startIndex, chartMaxStart)));
+        slider.disabled = chartMaxStart <= 0;
+    }
+    if (prevBtn) prevBtn.disabled = startIndex <= 0;
+    if (nextBtn) nextBtn.disabled = startIndex >= chartMaxStart;
+    if (nowBtn) {
+        // "Now" only matters once the view has been panned away from today.
+        nowBtn.disabled = chartWindowOffsetHours === 0;
+        nowBtn.classList.toggle('active', chartWindowOffsetHours !== 0);
+    }
+}
+
+// Wire up the chart time-scrubber slider and navigation buttons. Re-rendering
+// the chart is throttled to one redraw per animation frame so dragging the
+// slider stays smooth.
+function initializeChartScrubber() {
+    const slider = document.getElementById('chart-scrubber-slider');
+    const prevBtn = document.getElementById('chart-prev-week');
+    const nextBtn = document.getElementById('chart-next-week');
+    const nowBtn = document.getElementById('chart-now-btn');
+
+    let rafPending = false;
+    const rerender = () => {
+        if (rafPending) return;
+        rafPending = true;
+        requestAnimationFrame(() => {
+            rafPending = false;
+            if (weatherData) renderChart(weatherData);
+        });
+    };
+
+    if (slider) {
+        slider.addEventListener('input', () => {
+            const start = parseInt(slider.value, 10);
+            if (Number.isNaN(start)) return;
+            chartWindowOffsetHours = start - chartBaseIndex;
+            rerender();
+        });
+    }
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            chartWindowOffsetHours -= 7 * 24;
+            trackEvent('chart-prev-week');
+            if (weatherData) renderChart(weatherData);
+        });
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            chartWindowOffsetHours += 7 * 24;
+            trackEvent('chart-next-week');
+            if (weatherData) renderChart(weatherData);
+        });
+    }
+    if (nowBtn) {
+        nowBtn.addEventListener('click', () => {
+            chartWindowOffsetHours = 0;
+            trackEvent('chart-now');
+            if (weatherData) renderChart(weatherData);
+        });
+    }
 }
 
 // Cooperative gesture handling for the radar map: never hijack page scroll.
@@ -2694,11 +2824,15 @@ function renderAstroData() {
         if (yesterdaySun.sunrise && yesterdaySun.sunset && !isNaN(yesterdaySun.sunrise.getTime()) && !isNaN(yesterdaySun.sunset.getTime())) {
             const yesterdayLengthMs = yesterdaySun.sunset - yesterdaySun.sunrise;
             const diffMs = dayLengthMs - yesterdayLengthMs;
-            const diffMins = Math.round(Math.abs(diffMs) / 60000);
-            if (diffMins > 0) {
-                const diffSecs = Math.round(Math.abs(diffMs) / 1000) % 60;
-                dayChangeStr = `${diffMs >= 0 ? '+' : '-'}${diffMins}m ${diffSecs}s vs yesterday`;
-            }
+            // Show the change down to the second so it stays visible even near
+            // the solstices, when the day-to-day difference is under a minute.
+            const sign = diffMs >= 0 ? '+' : '−';
+            const absSecs = Math.round(Math.abs(diffMs) / 1000);
+            const dMins = Math.floor(absSecs / 60);
+            const dSecs = absSecs % 60;
+            dayChangeStr = dMins > 0
+                ? `${sign}${dMins}m ${dSecs}s vs yesterday`
+                : `${sign}${dSecs}s vs yesterday`;
         }
     }
 
@@ -2725,11 +2859,37 @@ function renderAstroData() {
         { label: '🌅 Sunset', value: formatAstroTime(sunTimes.sunset), sortMin: sunMinutes(sunTimes.sunset), highlight: true },
         { label: 'Civil Dusk', value: formatAstroTime(sunTimes.dusk), sortMin: sunMinutes(sunTimes.dusk) },
         { label: 'Nautical Dusk', value: formatAstroTime(sunTimes.nauticalDusk), sortMin: sunMinutes(sunTimes.nauticalDusk) },
-        { label: 'Astronomical Dusk', value: formatAstroTime(sunTimes.night), sortMin: sunMinutes(sunTimes.night) },
-        // Moonrise/Moonset interleave chronologically with the sun & tide events.
-        { label: '🌙 Moonrise', value: moonTimes.rise ? formatAstroTime(moonTimes.rise) : 'No rise today', sortMin: sunMinutes(moonTimes.rise), moon: true, moonrise: true },
-        { label: '🌙 Moonset', value: moonTimes.set ? formatAstroTime(moonTimes.set) : 'No set today', sortMin: sunMinutes(moonTimes.set), moon: true }
+        { label: 'Astronomical Dusk', value: formatAstroTime(sunTimes.night), sortMin: sunMinutes(sunTimes.night) }
     ];
+
+    // Condense the moon's phase + illumination into the Moonrise row (or, when
+    // there's no moonrise today, the Moonset row) rather than giving them their
+    // own rows. Moonrise/Moonset still interleave chronologically with the sun
+    // & tide events.
+    const hasRise = moonTimes.rise && !isNaN(moonTimes.rise.getTime());
+    const hasSet = moonTimes.set && !isNaN(moonTimes.set.getTime());
+    const moonInfo = `${moonPhase.emoji} ${moonPhase.name} · ${illuminationPct}%`;
+    const infoOnRise = hasRise;
+    const infoOnSet = !hasRise && hasSet;
+
+    rows.push({
+        label: '🌙 Moonrise',
+        value: hasRise ? `${formatAstroTime(moonTimes.rise)} · ${moonInfo}` : 'No rise today',
+        sortMin: sunMinutes(moonTimes.rise),
+        moon: true, moonrise: true, highlight: infoOnRise
+    });
+    rows.push({
+        label: '🌙 Moonset',
+        value: infoOnSet ? `${formatAstroTime(moonTimes.set)} · ${moonInfo}`
+            : (hasSet ? formatAstroTime(moonTimes.set) : 'No set today'),
+        sortMin: sunMinutes(moonTimes.set),
+        moon: true, highlight: infoOnSet
+    });
+    // Rare polar case: neither a moonrise nor moonset today — keep the phase
+    // visible on its own row so the info is never lost.
+    if (!hasRise && !hasSet) {
+        rows.push({ label: `${moonPhase.emoji} Moon`, value: moonInfo, moon: true });
+    }
 
     // High/low tide rows are shown only when the Tides toggle is on (footer
     // button / chart legend), so the toggle adds or removes them from the table.
@@ -2746,14 +2906,6 @@ function renderAstroData() {
     }
 
     rows.sort((a, b) => a.sortMin - b.sortMin);
-
-    // Phase and Illumination have no time of day; place them right after the
-    // Moonrise row.
-    const phaseRow = { label: `${moonPhase.emoji} Phase`, value: moonPhase.name, highlight: true, moon: true };
-    const illumRow = { label: 'Illumination', value: `${illuminationPct}%`, moon: true };
-    const mrIdx = rows.findIndex(r => r.moonrise);
-    if (mrIdx >= 0) rows.splice(mrIdx + 1, 0, phaseRow, illumRow);
-    else rows.push(phaseRow, illumRow);
 
     const rowsHtml = rows.map(r => `
                 <div class="astro-row${r.highlight ? ' highlight' : ''}${r.tide ? ' tide' : ''}${r.moon ? ' moon' : ''}">
@@ -2993,6 +3145,9 @@ async function loadWeather() {
         // Save as last used location
         saveLastLocation(currentLocation);
 
+        // Each load starts at the present, not a previously panned window.
+        chartWindowOffsetHours = 0;
+
         document.getElementById('daily-forecast').innerHTML = '<div class="loading">Loading forecast</div>';
         document.getElementById('hourly-forecast').innerHTML = '';
 
@@ -3014,6 +3169,7 @@ async function loadWeather() {
                 currentTemp = formatTempValue(weatherData.hourly.temperature_2m[idx]);
                 feelsLike = formatTempValue(weatherData.hourly.apparent_temperature[idx]);
                 currentConditions.humidity = weatherData.hourly.relative_humidity_2m[idx];
+                currentConditions.dewpoint = weatherData.hourly.dew_point_2m[idx];
                 currentConditions.windSpeed = weatherData.hourly.wind_speed_10m[idx];
                 currentConditions.windDir = weatherData.hourly.wind_direction_10m[idx];
                 break;
@@ -3177,7 +3333,16 @@ async function checkWeatherAlerts(data) {
         let hasWinterWeather = false;
         let hasThunderstorm = false;
 
-        for (let i = 0; i < Math.min(24, hourly.weather_code.length); i++) {
+        // Scan the next 24 hours starting at the current hour. The hourly array
+        // now begins 7 days in the past (past_days), so anchor to "now" rather
+        // than index 0.
+        const fnow = getLocationNow();
+        let fStart = 0;
+        for (let i = 0; i < hourly.time.length; i++) {
+            if (new Date(hourly.time[i]) >= fnow) { fStart = i; break; }
+        }
+
+        for (let i = fStart; i < Math.min(fStart + 24, hourly.weather_code.length); i++) {
             const code = hourly.weather_code[i];
             if ([71, 73, 75, 77, 85, 86, 66, 67].includes(code)) {
                 hasWinterWeather = true;
@@ -3918,6 +4083,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeTimeToggle,
         initializeTideToggle,
         initializeChartRangeToggle,
+        initializeChartScrubber,
         updateLocationDisplay,
         initializeModal,
         initializeShareModal,

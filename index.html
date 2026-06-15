@@ -170,10 +170,17 @@
                 <canvas id="forecast-chart"></canvas>
             </div>
             <div class="chart-range-toggle" role="group" aria-label="Chart range">
+                <button class="chart-range-btn" data-days="1" aria-pressed="false">1D</button>
                 <button class="chart-range-btn" data-days="3" aria-pressed="false">3D</button>
                 <button class="chart-range-btn" data-days="5" aria-pressed="false">5D</button>
                 <button class="chart-range-btn" data-days="7" aria-pressed="true">7D</button>
                 <button class="chart-range-btn" data-days="10" aria-pressed="false">10D</button>
+            </div>
+            <div class="chart-scrubber" role="group" aria-label="Chart time navigation">
+                <button id="chart-prev-week" class="chart-nav-btn" type="button" aria-label="Jump back one week" title="Prior week">◀ Wk</button>
+                <input id="chart-scrubber-slider" class="chart-scrubber-slider" type="range" min="0" max="0" value="0" step="1" aria-label="Scrub forecast through time">
+                <button id="chart-next-week" class="chart-nav-btn" type="button" aria-label="Jump forward one week" title="Next week">Wk ▶</button>
+                <button id="chart-now-btn" class="chart-nav-btn chart-now-btn" type="button" aria-label="Return to now" title="Back to now">Now</button>
             </div>
         </section>
 
@@ -288,7 +295,6 @@
                 &middot; <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>
                 &middot; <a href="https://www.weather.gov/" target="_blank" rel="noopener">NWS</a>
                 &middot; <a href="https://github.com/mourner/suncalc" target="_blank" rel="noopener">SunCalc</a>
-                &middot; <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo AQI</a>
                 &middot; <a href="https://tidesandcurrents.noaa.gov/" target="_blank" rel="noopener">NOAA Tides</a>
             </div>
             <div class="footer-license">
