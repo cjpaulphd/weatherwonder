@@ -90,7 +90,7 @@ function applyCIT2000(on) {
         'hourly-section': { normal: 'HOURLY FORECAST', fun: 'HOURLY VIBE CHECK' },
         'radar-section': { normal: 'DOPPLER RADAR (50 mi)', fun: 'BLEEPS / SWEEPS / CREEPS' },
         'precip-history-section': { normal: 'PRECIPITATION HISTORY', fun: 'SKY JUICE HISTORY' },
-        'astro-section': { normal: 'SUN & MOON', fun: 'SPACE ORBS' }
+        'astro-section': { normal: 'SUN, MOON, AND TIDE', fun: 'SKY ORB WAVES' }
     };
     if (on) {
         document.documentElement.classList.add('cit2000-active');
@@ -658,6 +658,8 @@ function initializeTideToggle() {
             if (weatherData) {
                 renderChart(weatherData);
             }
+            // Tides also appear/disappear in the Sun, Moon, and Tide table.
+            renderAstroData();
         });
     }
 }
@@ -666,7 +668,7 @@ function initializeTideToggle() {
 // its legend entry. State persists in localStorage and applies across every
 // day-range view. Tide is handled separately via isTideLineOn().
 const CHART_LINES_KEY = 'weatherwonder_chart_lines';
-const CHART_LINE_DEFAULTS = { temp: true, precipProb: true, precipAmount: true };
+const CHART_LINE_DEFAULTS = { temp: true, precipProb: true, precipAmount: true, wind: false };
 
 function getChartLineVisibility() {
     try {
@@ -2019,6 +2021,7 @@ function getChartColors() {
     const precipBlue = styles.getPropertyValue('--precip-blue').trim();
     const precipGreen = styles.getPropertyValue('--precip-green').trim();
     const tidePurple = styles.getPropertyValue('--tide-purple').trim();
+    const windOrange = styles.getPropertyValue('--wind-orange').trim();
 
     // Parse hex color to rgba with alpha
     function hexToRgba(hex, alpha) {
@@ -2044,6 +2047,7 @@ function getChartColors() {
         precipAmountBorder: precipGreen,
         precipAmountBg: hexToRgba(precipGreen, 0.3),
         tideBorder: tidePurple,
+        windBorder: windOrange,
         tempGridLine: hexToRgba(tempRed, 0.3),
         tempGridLabel: hexToRgba(tempRed, 0.7),
         precipGridLine: hexToRgba(precipGreen, 0.3),
@@ -2088,6 +2092,7 @@ function renderChart(data) {
     const precipProbs = [];
     const precipAmounts = [];
     const tideHeights = [];
+    const windSpeeds = [];
     const isDayFlags = [];
 
     for (let i = startIndex; i < endIndex; i++) {
@@ -2097,6 +2102,8 @@ function renderChart(data) {
         temps.push(tu === 'K' ? hourly.temperature_2m[i] + 273.15 : (tu === 'C' ? hourly.temperature_2m[i] : (hourly.temperature_2m[i] * 9/5) + 32));
         precipProbs.push(hourly.precipitation_probability[i]);
         precipAmounts.push(hourly.precipitation[i] / 25.4);
+        // Wind speed is stored in mph; the tooltip converts for display.
+        windSpeeds.push(hourly.wind_speed_10m[i]);
         isDayFlags.push(hourly.is_day[i]);
         if (showTide) {
             const ft = tideByTime[hourly.time[i]];
@@ -2147,6 +2154,10 @@ function renderChart(data) {
         }
     }
 
+    // Wind axis scale (mph), from 0 up to a padded max.
+    const maxWind = Math.max(5, ...windSpeeds.filter(v => v != null));
+    const windScaleMax = Math.ceil(maxWind * 1.2 / 5) * 5;
+
     if (forecastChart) {
         forecastChart.destroy();
     }
@@ -2194,6 +2205,17 @@ function renderChart(data) {
                     pointHoverRadius: 4,
                     fill: true,
                     yAxisID: 'y-precip-amount'
+                }] : []),
+                ...(isChartLineVisible('wind') ? [{
+                    label: 'Wind',
+                    data: windSpeeds,
+                    borderColor: colors.windBorder,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    yAxisID: 'y-wind'
                 }] : []),
                 ...(showTide ? [{
                     label: 'Tide',
@@ -2262,6 +2284,8 @@ function renderChart(data) {
                                 if (context.raw == null) return null;
                                 const sign = context.raw >= 0 ? '+' : '';
                                 return `Tide: ${sign}${context.raw.toFixed(1)} ft`;
+                            } else if (axis === 'y-wind') {
+                                return `Wind: ${formatWindSpeed(context.raw)}`;
                             } else {
                                 const inches = context.raw;
                                 if (inches < 0.01) return 'Precip Amount: 0.00"';
@@ -2299,6 +2323,12 @@ function renderChart(data) {
                     position: 'right',
                     min: tideScaleMin,
                     max: tideScaleMax
+                },
+                'y-wind': {
+                    display: false,
+                    position: 'right',
+                    min: 0,
+                    max: windScaleMax
                 }
             }
         }
@@ -2321,7 +2351,8 @@ function renderChart(data) {
     const items = [
         { key: 'temp', cls: 'temp', label: 'Temp', on: isChartLineVisible('temp') },
         { key: 'precipProb', cls: 'precip-prob', label: 'Precip %', on: isChartLineVisible('precipProb') },
-        { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') }
+        { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') },
+        { key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') }
     ];
     if (isCoastalLocation()) {
         items.push({ key: 'tide', cls: 'tide', label: 'Tide', on: isTideLineOn() });
@@ -2341,6 +2372,8 @@ function renderChart(data) {
                 saveTideLine(next);
                 trackEvent('tide-' + (next ? 'on' : 'off'));
                 updateTideToggleUI();
+                // Keep the Sun, Moon, and Tide table in sync with the toggle.
+                renderAstroData();
             } else {
                 const next = toggleChartLine(key);
                 trackEvent('chart-line-' + key + '-' + (next ? 'on' : 'off'));
@@ -2605,15 +2638,19 @@ function renderAstroData() {
         { label: 'Astronomical Dusk', value: formatAstroTime(sunTimes.night), sortMin: sunMinutes(sunTimes.night) }
     ];
 
-    getTodayTideExtremes().forEach(t => {
-        sunRows.push({
-            label: `${t.type === 'High' ? '🌊' : '🏝️'} ${t.type} Tide`,
-            value: formatTime(t.date),
-            sortMin: t.date.getHours() * 60 + t.date.getMinutes(),
-            highlight: true,
-            tide: true
+    // High/low tide rows are shown only when the Tides toggle is on (footer
+    // button / chart legend), so the toggle adds or removes them from the table.
+    if (isTideLineOn()) {
+        getTodayTideExtremes().forEach(t => {
+            sunRows.push({
+                label: `${t.type === 'High' ? '🌊' : '🏝️'} ${t.type} Tide`,
+                value: formatTime(t.date),
+                sortMin: t.date.getHours() * 60 + t.date.getMinutes(),
+                highlight: true,
+                tide: true
+            });
         });
-    });
+    }
 
     sunRows.sort((a, b) => a.sortMin - b.sortMin);
 

@@ -17,6 +17,7 @@
     --precip-green: #66bb6a;
     --temp-red: #ef9a9a;
     --tide-purple: #b39ddb;
+    --wind-orange: #ffb74d;
     --snow-color: #e91e63;
     --rain-color: #2196f3;
 }
@@ -33,6 +34,7 @@
     --precip-green: #388e3c;
     --temp-red: #c62828;
     --tide-purple: #7e57c2;
+    --wind-orange: #ef6c00;
     --snow-color: #c2185b;
     --rain-color: #1565c0;
 }
@@ -1006,7 +1008,8 @@ body {
 .chart-legend {
     display: flex;
     justify-content: center;
-    gap: 16px;
+    flex-wrap: wrap;
+    gap: 8px 12px;
     padding: 8px 0;
     font-size: 10px;
     color: var(--text-secondary);
@@ -1063,6 +1066,10 @@ body {
 
 .legend-color.tide {
     background-color: var(--tide-purple);
+}
+
+.legend-color.wind {
+    background-color: var(--wind-orange);
 }
 
 /* Chart day-range toggle */
@@ -1885,6 +1892,7 @@ body {
     --precip-green: #00ff88;
     --temp-red: #ff6699;
     --tide-purple: #cc66ff;
+    --wind-orange: #ff9933;
     --snow-color: #ff00ff;
     --rain-color: #00ccff;
 }
@@ -1902,6 +1910,7 @@ body {
     --precip-green: #008855;
     --temp-red: #cc3366;
     --tide-purple: #9933cc;
+    --wind-orange: #cc6600;
     --snow-color: #cc00cc;
     --rain-color: #0088cc;
 }
