@@ -715,6 +715,24 @@ function toggleChartLine(key) {
     return vis[key];
 }
 
+// On the busier 5/7/10-day views the wind and tide lines are auto-hidden to
+// keep the chart readable, regardless of their individual toggles. The toggles
+// themselves are untouched, so the lines come back on the 1/3-day views.
+function isChartDecluttered() {
+    return getChartDays() >= 5;
+}
+
+// Whether the wind line should actually be drawn (toggle on AND not decluttered).
+function isWindLineActive() {
+    return isChartLineVisible('wind') && !isChartDecluttered();
+}
+
+// Whether the tide line should actually be drawn on the chart (toggle on,
+// coastal, AND not decluttered).
+function isChartTideActive() {
+    return isTideLineOn() && isCoastalLocation() && !isChartDecluttered();
+}
+
 // Chart day-range management with localStorage
 const CHART_DAYS_KEY = 'weatherwonder_chart_days';
 const CHART_DAYS_OPTIONS = [1, 3, 5, 7, 10];
@@ -2030,10 +2048,10 @@ const gridLinesPlugin = {
                 ctx.fillText(fmt(v), xText, Math.min(chartArea.bottom - 1, y + 10));
             });
         };
-        if (isChartLineVisible('wind')) {
+        if (isWindLineActive()) {
             drawUnitAxis(chart.scales['y-wind'], 'left', gridColors.windBorder, v => formatWindSpeed(v, true));
         }
-        if (isTideLineOn() && isCoastalLocation()) {
+        if (isChartTideActive()) {
             drawUnitAxis(chart.scales['y-tide'], 'right', gridColors.tideBorder, v => formatTideHeight(v, true));
         }
 
@@ -2211,10 +2229,11 @@ function renderChart(data) {
     const hours = getChartDays() * 24;
     const endIndex = Math.min(startIndex + hours, hourly.time.length);
 
-    // Tide line is only drawn for coastal locations when the toggle is on.
-    // Tide times are hourly local wall-clock strings that line up with the
-    // weather API's hourly times, so look heights up by time string (feet).
-    const showTide = isTideLineOn() && isCoastalLocation();
+    // Tide line is drawn for coastal locations when the toggle is on, except on
+    // the decluttered 5/7/10-day views. Tide times are hourly local wall-clock
+    // strings that line up with the weather API's hourly times, so look heights
+    // up by time string (feet).
+    const showTide = isChartTideActive();
     let tideByTime = null;
     if (showTide) {
         tideByTime = {};
@@ -2342,7 +2361,7 @@ function renderChart(data) {
                     fill: true,
                     yAxisID: 'y-precip-amount'
                 }] : []),
-                ...(isChartLineVisible('wind') ? [{
+                ...(isWindLineActive() ? [{
                     label: 'Wind',
                     data: windSpeeds,
                     borderColor: colors.windBorder,
@@ -2483,15 +2502,18 @@ function renderChart(data) {
     // Each legend entry is a toggle button that shows/hides its line. The
     // on/off state persists in localStorage, so it carries across every
     // day-range view and reload. Tide reuses the footer's isTideLineOn() flag
-    // and is only offered for coastal locations.
+    // and is only offered for coastal locations. Wind and tide are dropped from
+    // the legend on the decluttered 5/7/10-day views, where they're auto-hidden.
     const items = [
         { key: 'temp', cls: 'temp', label: 'Temp', on: isChartLineVisible('temp') },
         { key: 'precipProb', cls: 'precip-prob', label: 'Precip %', on: isChartLineVisible('precipProb') },
-        { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') },
-        { key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') }
+        { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') }
     ];
-    if (isCoastalLocation()) {
-        items.push({ key: 'tide', cls: 'tide', label: 'Tide', on: isTideLineOn() });
+    if (!isChartDecluttered()) {
+        items.push({ key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') });
+        if (isCoastalLocation()) {
+            items.push({ key: 'tide', cls: 'tide', label: 'Tide', on: isTideLineOn() });
+        }
     }
     legend.innerHTML = items.map(it => `
         <button type="button" class="legend-item${it.on ? '' : ' off'}" data-line="${it.key}" aria-pressed="${it.on}">
