@@ -1476,14 +1476,18 @@ function renderConditionsBar() {
         parts.push(`<span style="color:${color}">AQI ${Math.round(aqi)}</span>`);
     }
 
+    // RH and DP describe the same thing — atmospheric moisture / comfort — so
+    // they share one color scale, keyed off the dew point (the better comfort
+    // indicator). RH falls back to its own scale only when DP is unavailable.
+    const comfortColor = dewpoint != null ? getDewpointColor(dewpoint) : null;
+
     if (humidity != null) {
-        const color = getHumidityColor(humidity);
+        const color = comfortColor || getHumidityColor(humidity);
         parts.push(`<span style="color:${color}">${Math.round(humidity)}% RH</span>`);
     }
 
     if (dewpoint != null) {
-        const color = getDewpointColor(dewpoint);
-        parts.push(`<span style="color:${color}">DP ${formatTempValue(dewpoint)}${getTempUnitLabel()}</span>`);
+        parts.push(`<span style="color:${comfortColor}">DP ${formatTempValue(dewpoint)}${getTempUnitLabel()}</span>`);
     }
 
     if (windSpeed != null && windDir != null) {
@@ -2206,7 +2210,7 @@ function renderChart(data) {
     const maxStart = Math.max(0, hourly.time.length - hours);
     let startIndex = baseIndex + Math.round(chartWindowOffsetHours);
     startIndex = Math.max(0, Math.min(startIndex, maxStart));
-    // Reflect any clamping back into the offset so the slider/buttons stay in sync.
+    // Reflect any clamping back into the offset so the nav buttons stay in sync.
     chartWindowOffsetHours = startIndex - baseIndex;
     const endIndex = Math.min(startIndex + hours, hourly.time.length);
 
@@ -2531,21 +2535,14 @@ function renderChart(data) {
     updateChartScrubberUI();
 }
 
-// Sync the time-scrubber slider and prior/next-week buttons with the chart's
-// current window position. Called at the end of every renderChart().
+// Sync the prior/next-week and Now buttons with the chart's current window
+// position. Called at the end of every renderChart().
 function updateChartScrubberUI() {
-    const slider = document.getElementById('chart-scrubber-slider');
     const prevBtn = document.getElementById('chart-prev-week');
     const nextBtn = document.getElementById('chart-next-week');
     const nowBtn = document.getElementById('chart-now-btn');
 
     const startIndex = chartBaseIndex + chartWindowOffsetHours;
-    if (slider) {
-        slider.min = '0';
-        slider.max = String(chartMaxStart);
-        slider.value = String(Math.max(0, Math.min(startIndex, chartMaxStart)));
-        slider.disabled = chartMaxStart <= 0;
-    }
     if (prevBtn) prevBtn.disabled = startIndex <= 0;
     if (nextBtn) nextBtn.disabled = startIndex >= chartMaxStart;
     if (nowBtn) {
@@ -2555,33 +2552,12 @@ function updateChartScrubberUI() {
     }
 }
 
-// Wire up the chart time-scrubber slider and navigation buttons. Re-rendering
-// the chart is throttled to one redraw per animation frame so dragging the
-// slider stays smooth.
+// Wire up the chart prior/next-week and Now navigation buttons.
 function initializeChartScrubber() {
-    const slider = document.getElementById('chart-scrubber-slider');
     const prevBtn = document.getElementById('chart-prev-week');
     const nextBtn = document.getElementById('chart-next-week');
     const nowBtn = document.getElementById('chart-now-btn');
 
-    let rafPending = false;
-    const rerender = () => {
-        if (rafPending) return;
-        rafPending = true;
-        requestAnimationFrame(() => {
-            rafPending = false;
-            if (weatherData) renderChart(weatherData);
-        });
-    };
-
-    if (slider) {
-        slider.addEventListener('input', () => {
-            const start = parseInt(slider.value, 10);
-            if (Number.isNaN(start)) return;
-            chartWindowOffsetHours = start - chartBaseIndex;
-            rerender();
-        });
-    }
     if (prevBtn) {
         prevBtn.addEventListener('click', () => {
             chartWindowOffsetHours -= 7 * 24;

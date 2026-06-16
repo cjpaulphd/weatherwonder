@@ -1112,10 +1112,11 @@ body {
     border-color: var(--accent-blue);
 }
 
-/* Chart time scrubber (prior/next week + drag-to-scrub through time) */
+/* Chart time navigation (prior week / now / next week) */
 .chart-scrubber {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     padding: 8px 16px 0;
 }
@@ -1148,42 +1149,6 @@ body {
 .chart-nav-btn:disabled {
     opacity: 0.35;
     cursor: default;
-}
-
-.chart-scrubber-slider {
-    flex: 1 1 auto;
-    min-width: 0;
-    height: 4px;
-    -webkit-appearance: none;
-    appearance: none;
-    background: var(--bg-secondary);
-    border-radius: 2px;
-    cursor: pointer;
-}
-
-.chart-scrubber-slider:disabled {
-    opacity: 0.4;
-    cursor: default;
-}
-
-.chart-scrubber-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: var(--accent-blue);
-    border: 2px solid var(--bg-card);
-    cursor: pointer;
-}
-
-.chart-scrubber-slider::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: var(--accent-blue);
-    border: 2px solid var(--bg-card);
-    cursor: pointer;
 }
 
 /* Responsive */
