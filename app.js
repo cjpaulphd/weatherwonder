@@ -715,22 +715,16 @@ function toggleChartLine(key) {
     return vis[key];
 }
 
-// On the busier 5/7/10-day views the wind and tide lines are auto-hidden to
-// keep the chart readable, regardless of their individual toggles. The toggles
-// themselves are untouched, so the lines come back on the 1/3-day views.
-function isChartDecluttered() {
-    return getChartDays() >= 5;
-}
-
-// Whether the wind line should actually be drawn (toggle on AND not decluttered).
-function isWindLineActive() {
-    return isChartLineVisible('wind') && !isChartDecluttered();
-}
-
-// Whether the tide line should actually be drawn on the chart (toggle on,
-// coastal, AND not decluttered).
-function isChartTideActive() {
-    return isTideLineOn() && isCoastalLocation() && !isChartDecluttered();
+// Set a chart line's visibility to an explicit value (used to default wind off
+// when switching into a longer-range view).
+function setChartLineVisible(key, on) {
+    const vis = getChartLineVisibility();
+    vis[key] = !!on;
+    try {
+        localStorage.setItem(CHART_LINES_KEY, JSON.stringify(vis));
+    } catch (e) {
+        console.error('Could not save chart line visibility:', e);
+    }
 }
 
 // Chart day-range management with localStorage
@@ -769,9 +763,22 @@ function initializeChartRangeToggle() {
         btn.addEventListener('click', () => {
             const days = parseInt(btn.dataset.days, 10);
             if (!CHART_DAYS_OPTIONS.includes(days)) return;
+            const prevDays = getChartDays();
             saveChartDays(days);
             trackEvent('chart-range-' + days + 'd');
             updateChartRangeToggleUI();
+            // Moving from a short (1/3-day) view into a longer (5/7/10-day) one
+            // defaults the wind and tide lines off to keep the busier chart
+            // readable — the user can still re-enable them from the legend.
+            if (prevDays < 5 && days >= 5) {
+                setChartLineVisible('wind', false);
+                if (isTideLineOn()) {
+                    saveTideLine(false);
+                    updateTideToggleUI();
+                    renderAstroData();
+                    if (weatherData) renderHourlyForecast(weatherData);
+                }
+            }
             if (weatherData) {
                 renderDailyForecast(weatherData);
                 renderChart(weatherData);
@@ -2048,10 +2055,10 @@ const gridLinesPlugin = {
                 ctx.fillText(fmt(v), xText, Math.min(chartArea.bottom - 1, y + 10));
             });
         };
-        if (isWindLineActive()) {
+        if (isChartLineVisible('wind')) {
             drawUnitAxis(chart.scales['y-wind'], 'left', gridColors.windBorder, v => formatWindSpeed(v, true));
         }
-        if (isChartTideActive()) {
+        if (isTideLineOn() && isCoastalLocation()) {
             drawUnitAxis(chart.scales['y-tide'], 'right', gridColors.tideBorder, v => formatTideHeight(v, true));
         }
 
@@ -2229,11 +2236,10 @@ function renderChart(data) {
     const hours = getChartDays() * 24;
     const endIndex = Math.min(startIndex + hours, hourly.time.length);
 
-    // Tide line is drawn for coastal locations when the toggle is on, except on
-    // the decluttered 5/7/10-day views. Tide times are hourly local wall-clock
-    // strings that line up with the weather API's hourly times, so look heights
-    // up by time string (feet).
-    const showTide = isChartTideActive();
+    // Tide line is only drawn for coastal locations when the toggle is on.
+    // Tide times are hourly local wall-clock strings that line up with the
+    // weather API's hourly times, so look heights up by time string (feet).
+    const showTide = isTideLineOn() && isCoastalLocation();
     let tideByTime = null;
     if (showTide) {
         tideByTime = {};
@@ -2361,7 +2367,7 @@ function renderChart(data) {
                     fill: true,
                     yAxisID: 'y-precip-amount'
                 }] : []),
-                ...(isWindLineActive() ? [{
+                ...(isChartLineVisible('wind') ? [{
                     label: 'Wind',
                     data: windSpeeds,
                     borderColor: colors.windBorder,
@@ -2502,18 +2508,16 @@ function renderChart(data) {
     // Each legend entry is a toggle button that shows/hides its line. The
     // on/off state persists in localStorage, so it carries across every
     // day-range view and reload. Tide reuses the footer's isTideLineOn() flag
-    // and is only offered for coastal locations. Wind and tide are dropped from
-    // the legend on the decluttered 5/7/10-day views, where they're auto-hidden.
+    // and is only offered for coastal locations. Wind and tide stay selectable
+    // on every view, but default off when switching into a 5/7/10-day view.
     const items = [
         { key: 'temp', cls: 'temp', label: 'Temp', on: isChartLineVisible('temp') },
         { key: 'precipProb', cls: 'precip-prob', label: 'Precip %', on: isChartLineVisible('precipProb') },
-        { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') }
+        { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') },
+        { key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') }
     ];
-    if (!isChartDecluttered()) {
-        items.push({ key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') });
-        if (isCoastalLocation()) {
-            items.push({ key: 'tide', cls: 'tide', label: 'Tide', on: isTideLineOn() });
-        }
+    if (isCoastalLocation()) {
+        items.push({ key: 'tide', cls: 'tide', label: 'Tide', on: isTideLineOn() });
     }
     legend.innerHTML = items.map(it => `
         <button type="button" class="legend-item${it.on ? '' : ' off'}" data-line="${it.key}" aria-pressed="${it.on}">
