@@ -765,6 +765,14 @@ body {
     white-space: nowrap;
 }
 
+/* Optional rows are always emitted; when a card has no value for one it gets a
+   hidden placeholder (with an &nbsp;) so it still occupies its line and the
+   same fields stay aligned across all daily/hourly cards. */
+.daily-card .placeholder,
+.hourly-card .placeholder {
+    visibility: hidden;
+}
+
 /* Modal */
 .modal {
     position: fixed;
@@ -1112,45 +1120,6 @@ body {
     border-color: var(--accent-blue);
 }
 
-/* Chart time navigation (prior week / now / next week) */
-.chart-scrubber {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 8px 16px 0;
-}
-
-.chart-nav-btn {
-    flex: 0 0 auto;
-    background-color: var(--bg-card);
-    color: var(--text-secondary);
-    border: 1px solid var(--bg-secondary);
-    border-radius: 14px;
-    padding: 4px 9px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background-color 0.2s, color 0.2s, border-color 0.2s, opacity 0.2s;
-}
-
-.chart-nav-btn:hover:not(:disabled) {
-    color: var(--text-primary);
-    background-color: var(--bg-secondary);
-}
-
-.chart-nav-btn.active {
-    color: var(--text-primary);
-    border-color: var(--accent-blue);
-}
-
-.chart-nav-btn:disabled {
-    opacity: 0.35;
-    cursor: default;
-}
-
 /* Responsive */
 @media (min-width: 481px) {
     .app-container {
@@ -1437,11 +1406,15 @@ body {
     color: var(--text-primary);
 }
 
-/* The Moonrise/Moonset row carries the condensed phase + illumination, so let
-   its value wrap and stay right-aligned on narrow screens. */
+/* The Moonrise/Moonset row carries the condensed phase + illumination as a
+   parenthetical in its label; let it wrap and keep the time pinned right. */
+.astro-row.moon .astro-label {
+    padding-right: 8px;
+}
+
 .astro-row.moon .astro-value {
-    text-align: right;
-    padding-left: 8px;
+    white-space: nowrap;
+    flex: 0 0 auto;
 }
 
 .astro-value.astro-change {

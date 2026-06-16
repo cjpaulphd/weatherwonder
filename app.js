@@ -715,18 +715,21 @@ function toggleChartLine(key) {
     return vis[key];
 }
 
+// Set a chart line's visibility to an explicit value (used to default wind off
+// when switching into a longer-range view).
+function setChartLineVisible(key, on) {
+    const vis = getChartLineVisibility();
+    vis[key] = !!on;
+    try {
+        localStorage.setItem(CHART_LINES_KEY, JSON.stringify(vis));
+    } catch (e) {
+        console.error('Could not save chart line visibility:', e);
+    }
+}
+
 // Chart day-range management with localStorage
 const CHART_DAYS_KEY = 'weatherwonder_chart_days';
 const CHART_DAYS_OPTIONS = [1, 3, 5, 7, 10];
-
-// How far the visible chart window is shifted from its default position
-// (midnight today), in hours. Negative = panned into the past so the user can
-// "go back and review" observed weather; 0 = the default today-forward view.
-// Session-only — every load starts at the present.
-let chartWindowOffsetHours = 0;
-// Window geometry from the most recent renderChart(), used by the scrubber.
-let chartBaseIndex = 0;
-let chartMaxStart = 0;
 
 function getChartDays() {
     try {
@@ -760,9 +763,22 @@ function initializeChartRangeToggle() {
         btn.addEventListener('click', () => {
             const days = parseInt(btn.dataset.days, 10);
             if (!CHART_DAYS_OPTIONS.includes(days)) return;
+            const prevDays = getChartDays();
             saveChartDays(days);
             trackEvent('chart-range-' + days + 'd');
             updateChartRangeToggleUI();
+            // Moving from a short (1/3-day) view into a longer (5/7/10-day) one
+            // defaults the wind and tide lines off to keep the busier chart
+            // readable — the user can still re-enable them from the legend.
+            if (prevDays < 5 && days >= 5) {
+                setChartLineVisible('wind', false);
+                if (isTideLineOn()) {
+                    saveTideLine(false);
+                    updateTideToggleUI();
+                    renderAstroData();
+                    if (weatherData) renderHourlyForecast(weatherData);
+                }
+            }
             if (weatherData) {
                 renderDailyForecast(weatherData);
                 renderChart(weatherData);
@@ -1272,9 +1288,6 @@ async function fetchWeatherData(lat, lon) {
         wind_speed_unit: 'mph',
         precipitation_unit: 'mm',
         timezone: 'auto',
-        // 7 past days of (observed) hourly data power the chart's "prior week"
-        // navigation; 11 forecast days cover today + the 10-day outlook.
-        past_days: 7,
         forecast_days: 11
     });
 
@@ -1748,6 +1761,17 @@ function renderDailyForecast(data) {
         const kClass = getTempUnit() === 'K' ? ' kelvin-units' : '';
         const compact = days >= 10;
 
+        // Always emit the precip rows (empty placeholder when there's no value)
+        // so every card has the same rows on the same lines and the data reads
+        // straight across the cards.
+        const precipInfoHtml = precipProb >= 10
+            ? `<div class="precip-info ${precipClass}">${hasSnow ? '❄' : '💧'} ${precipProb}%</div>`
+            : `<div class="precip-info placeholder">&nbsp;</div>`;
+        const precipAmtStr = hasPrecip ? formatPrecip(daily.precipitation_sum[i], compact) : '';
+        const precipAmountHtml = precipAmtStr
+            ? `<div class="precip-amount${kClass}">${precipAmtStr}</div>`
+            : `<div class="precip-amount placeholder">&nbsp;</div>`;
+
         if (compact) {
             const dayCode = tempGuardedCode(dailyWeatherCode, daily.temperature_2m_max[i]);
             const dayIcon = getWeatherIcon(dayCode, true);
@@ -1759,14 +1783,8 @@ function renderDailyForecast(data) {
                 </div>
                 <div class="temp-range">${lowTemp}/${highTemp}${getTempUnitLabel()}</div>
                 <div class="wind-info${kClass}"><span class="wind-arrow" style="transform:rotate(${windRotation}deg)">↑</span> ${formatWindSpeed(windSpeed, true)}</div>
-                ${precipProb >= 10 ? `
-                    <div class="precip-info ${precipClass}">
-                        ${hasSnow ? '❄' : '💧'} ${precipProb}%
-                    </div>
-                ` : ''}
-                ${hasPrecip ? `
-                    <div class="precip-amount${kClass}">${formatPrecip(daily.precipitation_sum[i], true)}</div>
-                ` : ''}
+                ${precipInfoHtml}
+                ${precipAmountHtml}
             `;
         } else {
             card.innerHTML = `
@@ -1777,14 +1795,8 @@ function renderDailyForecast(data) {
                 </div>
                 <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
                 <div class="wind-info${kClass}">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
-                ${precipProb >= 10 ? `
-                    <div class="precip-info ${precipClass}">
-                        ${hasSnow ? '❄' : '💧'} ${precipProb}%
-                    </div>
-                ` : ''}
-                ${hasPrecip ? `
-                    <div class="precip-amount${kClass}">${formatPrecip(daily.precipitation_sum[i])}</div>
-                ` : ''}
+                ${precipInfoHtml}
+                ${precipAmountHtml}
             `;
         }
 
@@ -1830,10 +1842,14 @@ function renderHourlyForecast(data) {
         card.className = 'hourly-card';
 
         const dayStr = date.toDateString();
-        let dayLabel = '';
+        // Every card reserves the day-banner slot so the rows below line up
+        // across cards; only the first card of each day fills it.
+        let dayLabelHtml;
         if (dayStr !== currentDay) {
             currentDay = dayStr;
-            dayLabel = `<div class="day-label">${getDayName(date, true)}</div>`;
+            dayLabelHtml = `<div class="day-label">${getDayName(date, true)}</div>`;
+        } else {
+            dayLabelHtml = `<div class="day-label placeholder">&nbsp;</div>`;
         }
 
         const weatherCode = hourly.weather_code[i];
@@ -1854,26 +1870,40 @@ function renderHourlyForecast(data) {
 
         const feelsLabel = isCIT2000() ? 'Vibes' : 'Feels';
         const hkClass = getTempUnit() === 'K' ? ' kelvin-units' : '';
+
+        // Each optional row is always emitted (empty placeholder when it has no
+        // value) so the same fields sit on the same line across every card.
+        const windchillHtml = showWindchill
+            ? `<div class="windchill">${feelsLabel} ${apparentTemp}${getTempUnitLabel()}</div>`
+            : `<div class="windchill placeholder">&nbsp;</div>`;
+        const precipChanceHtml = precipProb >= 10
+            ? `<div class="precip-chance ${precipClass}">${hasSnow ? '❄' : '💧'} ${precipProb}%</div>`
+            : `<div class="precip-chance placeholder">&nbsp;</div>`;
+        const precipStr = precip > 0 ? formatPrecip(precip) : '';
+        const precipAmountHtml = precipStr
+            ? `<div class="precip-amount${hkClass}">${precipStr}</div>`
+            : `<div class="precip-amount placeholder">&nbsp;</div>`;
+        // The tide row only exists when the Tides toggle is on; then it reserves
+        // a slot on every card so the tide values line up.
+        let tideHtml = '';
+        if (showTide) {
+            tideHtml = tideFt != null
+                ? `<div class="hourly-tide">🌊 ${formatTideHeight(tideFt, true)}</div>`
+                : `<div class="hourly-tide placeholder">&nbsp;</div>`;
+        }
+
         card.innerHTML = `
-            ${dayLabel}
+            ${dayLabelHtml}
             <div class="hour">${formatHour(date)}</div>
             <div class="weather-icon">${getWeatherIcon(weatherCode, isNight)}</div>
             <div class="temp">${temp}${getTempUnitLabel()}</div>
-            ${showWindchill ? `<div class="windchill">${feelsLabel} ${apparentTemp}${getTempUnitLabel()}</div>` : ''}
+            ${windchillHtml}
             <div class="wind${hkClass}">
                 ${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}
             </div>
-            ${precipProb >= 10 ? `
-                <div class="precip-chance ${precipClass}">
-                    ${hasSnow ? '❄' : '💧'} ${precipProb}%
-                </div>
-            ` : ''}
-            ${precip > 0 ? `
-                <div class="precip-amount${hkClass}">${formatPrecip(precip)}</div>
-            ` : ''}
-            ${tideFt != null ? `
-                <div class="hourly-tide">🌊 ${formatTideHeight(tideFt, true)}</div>
-            ` : ''}
+            ${precipChanceHtml}
+            ${precipAmountHtml}
+            ${tideHtml}
         `;
 
         container.appendChild(card);
@@ -1884,7 +1914,7 @@ function renderHourlyForecast(data) {
     // it updated thereafter.
     const dayIndicator = document.getElementById('hourly-day-indicator');
     if (dayIndicator) {
-        const firstLabel = container.querySelector('.day-label');
+        const firstLabel = container.querySelector('.day-label:not(.placeholder)');
         dayIndicator.textContent = firstLabel ? firstLabel.textContent : '';
     }
 }
@@ -2193,30 +2223,18 @@ function renderChart(data) {
 
     const midnight = getMidnightToday();
 
-    // Find the hourly index for midnight of the current day — the chart's
-    // default ("Now") window starts here.
-    let baseIndex = 0;
+    // Find index for midnight of current day
+    let startIndex = 0;
     for (let i = 0; i < hourly.time.length; i++) {
         const hourDate = new Date(hourly.time[i]);
         if (hourDate >= midnight) {
-            baseIndex = i;
+            startIndex = i;
             break;
         }
     }
 
     const hours = getChartDays() * 24;
-    // Apply the scrubber/prior-week pan offset, clamped so the window always
-    // stays within the available data (7 past days … 10 forecast days).
-    const maxStart = Math.max(0, hourly.time.length - hours);
-    let startIndex = baseIndex + Math.round(chartWindowOffsetHours);
-    startIndex = Math.max(0, Math.min(startIndex, maxStart));
-    // Reflect any clamping back into the offset so the nav buttons stay in sync.
-    chartWindowOffsetHours = startIndex - baseIndex;
     const endIndex = Math.min(startIndex + hours, hourly.time.length);
-
-    // Stash window geometry for the scrubber controls.
-    chartBaseIndex = baseIndex;
-    chartMaxStart = maxStart;
 
     // Tide line is only drawn for coastal locations when the toggle is on.
     // Tide times are hourly local wall-clock strings that line up with the
@@ -2378,10 +2396,6 @@ function renderChart(data) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            // The chart is recreated on every interaction (unit/theme toggles,
-            // and especially the time scrubber); skip entry animation so
-            // dragging the scrubber stays smooth.
-            animation: false,
             interaction: {
                 mode: 'index',
                 intersect: false
@@ -2494,7 +2508,8 @@ function renderChart(data) {
     // Each legend entry is a toggle button that shows/hides its line. The
     // on/off state persists in localStorage, so it carries across every
     // day-range view and reload. Tide reuses the footer's isTideLineOn() flag
-    // and is only offered for coastal locations.
+    // and is only offered for coastal locations. Wind and tide stay selectable
+    // on every view, but default off when switching into a 5/7/10-day view.
     const items = [
         { key: 'temp', cls: 'temp', label: 'Temp', on: isChartLineVisible('temp') },
         { key: 'precipProb', cls: 'precip-prob', label: 'Precip %', on: isChartLineVisible('precipProb') },
@@ -2531,54 +2546,6 @@ function renderChart(data) {
     });
 
     container.insertAdjacentElement('afterend', legend);
-
-    updateChartScrubberUI();
-}
-
-// Sync the prior/next-week and Now buttons with the chart's current window
-// position. Called at the end of every renderChart().
-function updateChartScrubberUI() {
-    const prevBtn = document.getElementById('chart-prev-week');
-    const nextBtn = document.getElementById('chart-next-week');
-    const nowBtn = document.getElementById('chart-now-btn');
-
-    const startIndex = chartBaseIndex + chartWindowOffsetHours;
-    if (prevBtn) prevBtn.disabled = startIndex <= 0;
-    if (nextBtn) nextBtn.disabled = startIndex >= chartMaxStart;
-    if (nowBtn) {
-        // "Now" only matters once the view has been panned away from today.
-        nowBtn.disabled = chartWindowOffsetHours === 0;
-        nowBtn.classList.toggle('active', chartWindowOffsetHours !== 0);
-    }
-}
-
-// Wire up the chart prior/next-week and Now navigation buttons.
-function initializeChartScrubber() {
-    const prevBtn = document.getElementById('chart-prev-week');
-    const nextBtn = document.getElementById('chart-next-week');
-    const nowBtn = document.getElementById('chart-now-btn');
-
-    if (prevBtn) {
-        prevBtn.addEventListener('click', () => {
-            chartWindowOffsetHours -= 7 * 24;
-            trackEvent('chart-prev-week');
-            if (weatherData) renderChart(weatherData);
-        });
-    }
-    if (nextBtn) {
-        nextBtn.addEventListener('click', () => {
-            chartWindowOffsetHours += 7 * 24;
-            trackEvent('chart-next-week');
-            if (weatherData) renderChart(weatherData);
-        });
-    }
-    if (nowBtn) {
-        nowBtn.addEventListener('click', () => {
-            chartWindowOffsetHours = 0;
-            trackEvent('chart-now');
-            if (weatherData) renderChart(weatherData);
-        });
-    }
 }
 
 // Cooperative gesture handling for the radar map: never hijack page scroll.
@@ -2838,33 +2805,33 @@ function renderAstroData() {
         { label: 'Astronomical Dusk', value: formatAstroTime(sunTimes.night), sortMin: sunMinutes(sunTimes.night) }
     ];
 
-    // Condense the moon's phase + illumination into the Moonrise row (or, when
-    // there's no moonrise today, the Moonset row) rather than giving them their
-    // own rows. Moonrise/Moonset still interleave chronologically with the sun
+    // Condense the moon's phase + illumination into the Moonrise row label as a
+    // left-justified parenthetical, keeping the moonrise time in the right
+    // column. When there's no moonrise today, attach it to the Moonset row
+    // instead. Moonrise/Moonset still interleave chronologically with the sun
     // & tide events.
     const hasRise = moonTimes.rise && !isNaN(moonTimes.rise.getTime());
     const hasSet = moonTimes.set && !isNaN(moonTimes.set.getTime());
-    const moonInfo = `${moonPhase.emoji} ${moonPhase.name} · ${illuminationPct}%`;
+    const moonInfo = `${moonPhase.emoji} ${moonPhase.name} ${illuminationPct}%`;
     const infoOnRise = hasRise;
     const infoOnSet = !hasRise && hasSet;
 
     rows.push({
-        label: '🌙 Moonrise',
-        value: hasRise ? `${formatAstroTime(moonTimes.rise)} · ${moonInfo}` : 'No rise today',
+        label: infoOnRise ? `🌙 Moonrise (${moonInfo})` : '🌙 Moonrise',
+        value: hasRise ? formatAstroTime(moonTimes.rise) : 'No rise today',
         sortMin: sunMinutes(moonTimes.rise),
         moon: true, moonrise: true, highlight: infoOnRise
     });
     rows.push({
-        label: '🌙 Moonset',
-        value: infoOnSet ? `${formatAstroTime(moonTimes.set)} · ${moonInfo}`
-            : (hasSet ? formatAstroTime(moonTimes.set) : 'No set today'),
+        label: infoOnSet ? `🌙 Moonset (${moonInfo})` : '🌙 Moonset',
+        value: hasSet ? formatAstroTime(moonTimes.set) : 'No set today',
         sortMin: sunMinutes(moonTimes.set),
         moon: true, highlight: infoOnSet
     });
     // Rare polar case: neither a moonrise nor moonset today — keep the phase
     // visible on its own row so the info is never lost.
     if (!hasRise && !hasSet) {
-        rows.push({ label: `${moonPhase.emoji} Moon`, value: moonInfo, moon: true });
+        rows.push({ label: `🌙 Moon (${moonInfo})`, value: '—', moon: true });
     }
 
     // High/low tide rows are shown only when the Tides toggle is on (footer
@@ -3121,9 +3088,6 @@ async function loadWeather() {
         // Save as last used location
         saveLastLocation(currentLocation);
 
-        // Each load starts at the present, not a previously panned window.
-        chartWindowOffsetHours = 0;
-
         document.getElementById('daily-forecast').innerHTML = '<div class="loading">Loading forecast</div>';
         document.getElementById('hourly-forecast').innerHTML = '';
 
@@ -3309,9 +3273,7 @@ async function checkWeatherAlerts(data) {
         let hasWinterWeather = false;
         let hasThunderstorm = false;
 
-        // Scan the next 24 hours starting at the current hour. The hourly array
-        // now begins 7 days in the past (past_days), so anchor to "now" rather
-        // than index 0.
+        // Scan the next 24 hours starting at the current hour.
         const fnow = getLocationNow();
         let fStart = 0;
         for (let i = 0; i < hourly.time.length; i++) {
@@ -3722,7 +3684,7 @@ function initializeHourlyScrollHandler() {
             const cardRect = card.getBoundingClientRect();
             if (cardRect.left <= containerCenter && cardRect.right >= containerCenter) {
                 // Find the day label for this card or the most recent one before it
-                const dayLabel = card.querySelector('.day-label');
+                const dayLabel = card.querySelector('.day-label:not(.placeholder)');
                 if (dayLabel) {
                     visibleDay = dayLabel.textContent;
                 }
@@ -3735,13 +3697,13 @@ function initializeHourlyScrollHandler() {
             for (const card of cards) {
                 const cardRect = card.getBoundingClientRect();
                 if (cardRect.right < containerCenter) {
-                    const dayLabel = card.querySelector('.day-label');
+                    const dayLabel = card.querySelector('.day-label:not(.placeholder)');
                     if (dayLabel) {
                         visibleDay = dayLabel.textContent;
                     }
                 } else if (cardRect.left <= containerCenter) {
                     // Current visible card - check if it has a label or use the previous one
-                    const dayLabel = card.querySelector('.day-label');
+                    const dayLabel = card.querySelector('.day-label:not(.placeholder)');
                     if (dayLabel) {
                         visibleDay = dayLabel.textContent;
                     }
@@ -3757,7 +3719,7 @@ function initializeHourlyScrollHandler() {
 
     // Set initial value
     setTimeout(() => {
-        const firstDayLabel = hourlyContainer.querySelector('.day-label');
+        const firstDayLabel = hourlyContainer.querySelector('.day-label:not(.placeholder)');
         if (firstDayLabel) {
             dayIndicator.textContent = firstDayLabel.textContent;
         }
@@ -4059,7 +4021,6 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeTimeToggle,
         initializeTideToggle,
         initializeChartRangeToggle,
-        initializeChartScrubber,
         updateLocationDisplay,
         initializeModal,
         initializeShareModal,
