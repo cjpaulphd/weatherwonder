@@ -2812,7 +2812,7 @@ function renderAstroData() {
     // & tide events.
     const hasRise = moonTimes.rise && !isNaN(moonTimes.rise.getTime());
     const hasSet = moonTimes.set && !isNaN(moonTimes.set.getTime());
-    const moonInfo = `${moonPhase.emoji} ${moonPhase.name} ${illuminationPct}%`;
+    const moonInfo = `${moonPhase.name} ${moonPhase.emoji} ${illuminationPct}%`;
     const infoOnRise = hasRise;
     const infoOnSet = !hasRise && hasSet;
 
