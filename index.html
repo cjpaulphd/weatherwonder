@@ -63,6 +63,7 @@
 </head>
 <body>
     <div class="app-container" id="app-container">
+        <h1 class="sr-only">WeatherWonder weather dashboard</h1>
         <!-- Pull-to-Refresh Indicator -->
         <div id="pull-to-refresh" class="pull-to-refresh-indicator">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -167,7 +168,7 @@
 
             <!-- Temperature/Precipitation Chart -->
             <div class="chart-container">
-                <canvas id="forecast-chart"></canvas>
+                <canvas id="forecast-chart" role="img" aria-label="Forecast chart"></canvas>
             </div>
             <div class="chart-range-toggle" role="group" aria-label="Chart range">
                 <button class="chart-range-btn" data-days="1" aria-pressed="false">1D</button>
@@ -342,7 +343,7 @@
                 <h3>Share WeatherWonder</h3>
                 <p class="share-app-subtitle">Send this free weather app to friends &amp; family</p>
                 <div class="share-app-url-row">
-                    <input type="text" id="share-app-url" class="share-app-url-input" value="https://weatherwonder.app/" readonly>
+                    <input type="text" id="share-app-url" class="share-app-url-input" value="https://weatherwonder.app/" readonly aria-label="App URL">
                     <button id="copy-app-url" class="btn-primary share-app-copy-btn">Copy</button>
                 </div>
                 <div class="share-app-options">
@@ -360,7 +361,7 @@
             <div class="modal-content">
                 <h3>Enter Location</h3>
                 <div class="input-wrapper">
-                    <input type="text" id="location-input" placeholder="City or Zip">
+                    <input type="text" id="location-input" placeholder="City or Zip" aria-label="City or ZIP code">
                     <button id="clear-location-input" class="clear-input-btn" type="button">&times;</button>
                 </div>
                 <div class="modal-buttons">

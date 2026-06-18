@@ -2342,6 +2342,15 @@ function renderChart(data) {
     // Round up to the nearest gridline step for a cleaner grid
     const precipScaleMax = Math.ceil(maxPrecipAmount * 1.2 / precipCfg.step) * precipCfg.step;
 
+    // Text alternative for the chart canvas (it's role="img"). The detailed
+    // hourly numbers are also available as text in the hourly forecast cards.
+    const chartCanvas = document.getElementById('forecast-chart');
+    if (chartCanvas) {
+        const peakProb = Math.round(Math.max(0, ...precipProbs.filter(p => p != null)));
+        chartCanvas.setAttribute('aria-label',
+            `Forecast chart over ${getChartDays()} days. Temperature ranges from ${Math.round(minTemp)} to ${Math.round(maxTemp)} ${getTempUnitLabel()}. Peak precipitation chance ${peakProb} percent. Hourly details are listed below in the hourly forecast.`);
+    }
+
     // Tide axis scale (feet), padded so the curve doesn't touch the edges.
     let tideScaleMin = 0, tideScaleMax = 1;
     if (showTide) {
