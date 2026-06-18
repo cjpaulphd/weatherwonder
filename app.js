@@ -271,9 +271,11 @@ function updateFavoriteButton() {
         if (isFavorite(currentLocation)) {
             btn.textContent = '★';
             btn.classList.add('active');
+            btn.setAttribute('aria-label', 'Remove from favorites');
         } else {
             btn.textContent = '☆';
             btn.classList.remove('active');
+            btn.setAttribute('aria-label', 'Add to favorites');
         }
     }
 }
@@ -1815,10 +1817,10 @@ function renderDailyForecast(data) {
             card.innerHTML = `
                 <div class="day-name">${getDayName(date, true)}</div>
                 <div class="weather-icons">
-                    <div class="day-icon" title="${getDayName(date)}">${dayIcon}</div>
+                    <div class="day-icon" title="${getDayName(date)}" role="img" aria-label="${getDayName(date)}: ${getWeatherDesc(dayCode)}">${dayIcon}</div>
                 </div>
                 <div class="temp-range">${lowTemp}/${highTemp}${getTempUnitLabel()}</div>
-                <div class="wind-info${kClass}"><span class="wind-arrow" style="transform:rotate(${windRotation}deg)">↑</span> ${formatWindSpeed(windSpeed, true)}</div>
+                <div class="wind-info${kClass}"><span class="wind-arrow" style="transform:rotate(${windRotation}deg)" role="img" aria-label="Wind ${getWindDirection(windDir)}">↑</span> ${formatWindSpeed(windSpeed, true)}</div>
                 ${precipInfoHtml}
                 ${precipAmountHtml}
             `;
@@ -1826,8 +1828,8 @@ function renderDailyForecast(data) {
             card.innerHTML = `
                 <div class="day-name">${getDayName(date, true)}</div>
                 <div class="weather-icons">
-                    <div class="am-icon" title="Morning">${amIcon}</div>
-                    <div class="pm-icon" title="Evening">${pmIcon}</div>
+                    <div class="am-icon" title="Morning" role="img" aria-label="Morning: ${getWeatherDesc(guardedAmCode)}">${amIcon}</div>
+                    <div class="pm-icon" title="Evening" role="img" aria-label="Evening: ${getWeatherDesc(guardedPmCode)}">${pmIcon}</div>
                 </div>
                 <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
                 <div class="wind-info${kClass}">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
@@ -1931,7 +1933,7 @@ function renderHourlyForecast(data) {
         card.innerHTML = `
             ${dayLabelHtml}
             <div class="hour">${formatHour(date)}</div>
-            <div class="weather-icon">${getWeatherIcon(weatherCode, isNight)}</div>
+            <div class="weather-icon" role="img" aria-label="${getWeatherDesc(weatherCode)}">${getWeatherIcon(weatherCode, isNight)}</div>
             <div class="temp">${temp}${getTempUnitLabel()}</div>
             ${windchillHtml}
             <div class="wind${hkClass}">
