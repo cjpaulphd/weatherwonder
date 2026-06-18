@@ -47,6 +47,20 @@ Open-Meteo returns daily dates as `"YYYY-MM-DD"` strings. JavaScript's `new Date
 ### Temperature Conversion
 All temps from Open-Meteo arrive in Celsius. Conversion: `Math.round((celsius * 9/5) + 32)` via `formatTempValue()`.
 
+### Display Units (precipitation)
+Precipitation amounts arrive in mm. Cards use `formatPrecip()`; the forecast chart uses `getChartPrecipConfig()`, which returns the conversion factor, gridline step, and label suffix for the active unit mode (inches in °F, mm in °C, microns in the Kelvin easter-egg mode). Keep the chart and cards consistent — the chart must not hard-code inches.
+
+### Security: Escaping Untrusted HTML
+Rendering is done with template literals assigned to `innerHTML`; there is no framework auto-escaping. Any value that comes from an API (NWS alert text, geocoding labels) or from the user (favorite names entered via the rename prompt) **must** be wrapped in `escapeHtml()` before interpolation. `escapeHtml()` lives near the top of `app.js`. For text that intentionally contains markup (e.g. alert `instruction` newlines → `<br>`), escape first, then apply the substitution.
+
+### Avoiding Stale Renders
+`loadWeather()` increments a module-level `currentLoadId` and captures it per call. The non-blocking secondary fetches (AQI, tides, precipitation history) compare their captured id against `currentLoadId` before mutating state or the DOM, so responses for a location the user has already navigated away from are discarded. Reuse this guard for any new async render path.
+
+### Accessibility
+- **Modals** (`.modal`) use `role="dialog"` / `aria-modal`. `initializeModalFocusManagement()` observes the `hidden` class to move focus into a dialog on open, trap Tab within it, and restore focus to the opener on close. The shared Escape-to-close handler is registered in `initializeModal()`. The hidden side menu is marked `inert`.
+- **Motion & focus**: a global `:focus-visible` outline and a `@media (prefers-reduced-motion: reduce)` reset live in `styles.css`; new animations are covered automatically.
+- **Icons**: weather-condition icons, the compact wind arrow, and the forecast `<canvas>` carry `role="img"` + an `aria-label` (from `getWeatherDesc()` / `getWindDirection()`, or the summary set in `renderChart()`). Purely decorative emoji get `aria-hidden="true"`. Use the `.sr-only` class for screen-reader-only text.
+
 ### Radar Map
 Leaflet map is initialized once and reused. When changing locations, the map must be fully destroyed (`radarMap.remove()`) and re-created — just calling `setView` causes stale layers.
 
@@ -54,7 +68,7 @@ Leaflet map is initialized once and reused. When changing locations, the map mus
 The app fetches real NWS alerts from `api.weather.gov/alerts/active?point={lat},{lon}`. If the NWS API is unavailable (non-US locations, network issues), it falls back to local weather-code-based detection using Open-Meteo's hourly `weather_code` values.
 
 ### PWA / Add to Home Screen
-The app is installable as a PWA. `manifest.json` defines the app metadata, `sw.js` caches the shell assets with a network-first strategy. On Chrome/Android the `beforeinstallprompt` event is captured and re-triggered from the footer install button. On iOS, the button opens a step-by-step instruction modal (not a toast) showing how to tap Share > Add to Home Screen. The button hides itself if the app is already running in standalone mode.
+The app is installable as a PWA. `manifest.json` defines the app metadata, `sw.js` caches the shell assets with a network-first strategy. Only same-origin shell assets are cached — the fetch handler matches requests against resolved `SHELL_URLS`, never third-party API/tile responses. Bump `CACHE_NAME` (e.g. `weatherwonder-v10`) whenever shell assets change so old caches are purged on activate. On Chrome/Android the `beforeinstallprompt` event is captured and re-triggered from the footer install button. On iOS, the button opens a step-by-step instruction modal (not a toast) showing how to tap Share > Add to Home Screen. The button hides itself if the app is already running in standalone mode.
 
 ### Branding / Footer
 The footer includes: install button, "Share This App" button (opens modal with copy-URL + native share), toggle buttons (theme/temp/time), tagline linking to the GitHub repo, data attribution links, and MIT license line. The side menu header shows an inline WW logo mark next to the app name.
