@@ -21,6 +21,19 @@ const DEFAULT_LOCATION = {
 
 const LAST_LOCATION_KEY = 'weatherwonder_last_location';
 
+// Escape untrusted strings before inserting them into innerHTML, to prevent XSS.
+// Used for API-provided text (NWS alerts, geocoding results) and user-entered
+// favorite names, all of which are rendered via template literals + innerHTML.
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function getLastLocation() {
     try {
         const stored = localStorage.getItem(LAST_LOCATION_KEY);
@@ -55,6 +68,10 @@ let radarMap = null;
 let radarLayer = null;
 let precipHistoryData = null;
 let precipHistoricalAvg = null;
+// Incremented on each loadWeather() call. Async secondary fetches capture the
+// value at start and bail out if it changes, so results for a location the user
+// has navigated away from can't overwrite the current view.
+let currentLoadId = 0;
 
 // Privacy-preserving usage events (GoatCounter)
 // Only tracks action names, never location data, coordinates, or user info
@@ -271,9 +288,9 @@ function renderFavoritesList() {
     }
 
     list.innerHTML = favorites.map(fav => `
-        <div class="favorite-item" draggable="true" data-lat="${fav.latitude}" data-lon="${fav.longitude}" data-name="${fav.name}">
+        <div class="favorite-item" draggable="true" data-lat="${fav.latitude}" data-lon="${fav.longitude}" data-name="${escapeHtml(fav.name)}">
             <span class="drag-handle" title="Drag to reorder">⠿</span>
-            <span class="favorite-item-name">${fav.name}</span>
+            <span class="favorite-item-name">${escapeHtml(fav.name)}</span>
             <div class="favorite-item-actions">
                 <button class="favorite-item-rename" data-lat="${fav.latitude}" data-lon="${fav.longitude}" title="Rename">✏️</button>
                 <button class="favorite-item-remove" data-lat="${fav.latitude}" data-lon="${fav.longitude}">&times;</button>
@@ -1645,7 +1662,7 @@ function showDisambiguation(results) {
         if (result.admin1) label += `, ${result.admin1}`;
         if (result.country) label += `, ${result.country}`;
 
-        item.innerHTML = `<span>${label}</span>${alreadyFav ? '<span class="disambiguation-fav-star" title="Already in favorites">★</span>' : ''}`;
+        item.innerHTML = `<span>${escapeHtml(label)}</span>${alreadyFav ? '<span class="disambiguation-fav-star" title="Already in favorites">★</span>' : ''}`;
         item.addEventListener('click', () => {
             selectLocation(result);
             document.getElementById('location-modal').classList.add('hidden');
@@ -3091,11 +3108,33 @@ async function loadWeather() {
         document.getElementById('daily-forecast').innerHTML = '<div class="loading">Loading forecast</div>';
         document.getElementById('hourly-forecast').innerHTML = '';
 
-        weatherData = await fetchWeatherData(currentLocation.latitude, currentLocation.longitude);
+        // Token guard for this load. Async secondary fetches below compare against
+        // currentLoadId before touching shared state, so a slow response for a
+        // previous location can't paint over a newer one.
+        const loadId = ++currentLoadId;
+        const lat = currentLocation.latitude;
+        const lon = currentLocation.longitude;
 
-        // Store the location's IANA timezone from the API response (e.g. "Pacific/Auckland")
+        // Start the independent secondary fetches in parallel with the main
+        // forecast fetch — they only need lat/lon, not weatherData. Handlers are
+        // attached after the initial render, once weatherData is ready. Attach a
+        // no-op catch now so a rejection before then isn't reported as unhandled.
+        const aqiPromise = fetchAQI(lat, lon);
+        const tidePromise = fetchTideData(lat, lon);
+        aqiPromise.catch(() => {});
+        tidePromise.catch(() => {});
+
+        weatherData = await fetchWeatherData(lat, lon);
+
+        // Store the location's IANA timezone from the API response (e.g.
+        // "Pacific/Auckland"). If the response omits it, clear any stale value
+        // from a previous location so getLocationNow() falls back to browser time
+        // rather than silently using the wrong zone.
         if (weatherData.timezone) {
             currentLocation.timezone = weatherData.timezone;
+        } else {
+            delete currentLocation.timezone;
+            console.warn('Weather API response lacked a timezone; falling back to browser time.');
         }
 
         // Get current temperature, feels-like, humidity, and wind from hourly data
@@ -3117,31 +3156,10 @@ async function loadWeather() {
         }
         updateLocationDisplay(currentTemp, feelsLike);
 
-        // Fetch AQI (non-blocking), then render full conditions bar
-        fetchAQI(currentLocation.latitude, currentLocation.longitude)
-            .then(aqi => { currentConditions.aqi = aqi; renderConditionsBar(); })
-            .catch(() => { currentConditions.aqi = null; renderConditionsBar(); });
-
-        // Fetch tide data (non-blocking). Reset first so a previous coastal
-        // location's data and toggle don't leak into an inland one. When data
-        // arrives for a coastal location, reveal the toggle and redraw the
-        // chart so the tide line appears if it's enabled.
+        // Reset tide state before the initial render so a previous coastal
+        // location's tide data and toggle don't leak into an inland one.
         tideData = null;
         updateTideToggleUI();
-        fetchTideData(currentLocation.latitude, currentLocation.longitude)
-            .then(data => {
-                tideData = data;
-                updateTideToggleUI();
-                if (isCoastalLocation()) {
-                    // Reveal the tide legend toggle and the high/low tide rows.
-                    if (weatherData) {
-                        renderChart(weatherData);
-                        renderHourlyForecast(weatherData);
-                    }
-                    renderAstroData();
-                }
-            })
-            .catch(() => { tideData = null; updateTideToggleUI(); });
 
         // Render conditions bar immediately with humidity/wind (AQI will update when ready)
         renderConditionsBar();
@@ -3153,17 +3171,54 @@ async function loadWeather() {
         initializeRadar();
         renderAstroData();
 
+        // weatherData and the initial render are ready, so attach handlers to the
+        // secondary fetches started above. The token guard discards stale results.
+        aqiPromise
+            .then(aqi => {
+                if (loadId !== currentLoadId) return;
+                currentConditions.aqi = aqi;
+                renderConditionsBar();
+            })
+            .catch(() => {
+                if (loadId !== currentLoadId) return;
+                currentConditions.aqi = null;
+                renderConditionsBar();
+            });
+
+        // When tide data arrives for a coastal location, reveal the toggle and
+        // redraw the chart/hourly so the tide line appears if it's enabled.
+        tidePromise
+            .then(data => {
+                if (loadId !== currentLoadId) return;
+                tideData = data;
+                updateTideToggleUI();
+                if (isCoastalLocation()) {
+                    if (weatherData) {
+                        renderChart(weatherData);
+                        renderHourlyForecast(weatherData);
+                    }
+                    renderAstroData();
+                }
+            })
+            .catch(() => {
+                if (loadId !== currentLoadId) return;
+                tideData = null;
+                updateTideToggleUI();
+            });
+
         // Fetch and render precipitation history + historical averages
         Promise.all([
             fetchPrecipHistory(currentLocation.latitude, currentLocation.longitude),
             fetchHistoricalPrecipAvg(currentLocation.latitude, currentLocation.longitude).catch(() => null)
         ])
             .then(([data, histAvg]) => {
+                if (loadId !== currentLoadId) return;
                 precipHistoryData = data;
                 precipHistoricalAvg = histAvg;
                 renderPrecipHistory(data, histAvg);
             })
             .catch(err => {
+                if (loadId !== currentLoadId) return;
                 console.error('Error loading precipitation history:', err);
                 const container = document.getElementById('precip-history');
                 if (container) container.innerHTML = '<div class="error">Precipitation history unavailable</div>';
@@ -3182,7 +3237,7 @@ async function loadWeather() {
     } catch (error) {
         console.error('Error loading weather:', error);
         document.getElementById('daily-forecast').innerHTML =
-            `<div class="error">Failed to load weather data: ${error.message}</div>`;
+            `<div class="error">Failed to load weather data: ${escapeHtml(error.message)}</div>`;
     } finally {
         if (refreshBtn) refreshBtn.classList.remove('spinning');
     }
@@ -3244,7 +3299,7 @@ async function checkWeatherAlerts(data) {
                 alertEl.style.backgroundColor = bgColor;
                 alertEl.innerHTML = `
                     <span class="alert-icon">${icon}</span>
-                    <span class="alert-text-content">${headline}</span>
+                    <span class="alert-text-content">${escapeHtml(headline)}</span>
                     <span class="alert-arrow">›</span>
                 `;
 
@@ -3317,7 +3372,7 @@ function showAlertDetail(props, nwsUrl) {
     const severity = props.severity || '';
     const headline = props.headline || event;
     const description = (props.description || '').replace(/\n/g, '<br>');
-    const instruction = (props.instruction || '').replace(/\n/g, '<br>');
+    const instruction = escapeHtml(props.instruction || '').replace(/\n/g, '<br>');
     const areaDesc = props.areaDesc || '';
     const alertTimeLocale = getTimeFormat() === '24' ? 'en-GB' : 'en-US';
     const alertTimeOpts = { weekday: 'short', month: 'short', day: 'numeric', hour: getTimeFormat() === '24' ? '2-digit' : 'numeric', minute: '2-digit' };
@@ -3328,13 +3383,13 @@ function showAlertDetail(props, nwsUrl) {
     const expires = props.expires ? new Date(props.expires).toLocaleString(alertTimeLocale, alertTimeOpts) : '';
     const sender = props.senderName || '';
 
-    header.innerHTML = `<h3>${event}</h3>`;
+    header.innerHTML = `<h3>${escapeHtml(event)}</h3>`;
     if (severity) {
-        header.innerHTML += `<span class="alert-detail-severity alert-severity-${severity.toLowerCase()}">${severity}</span>`;
+        header.innerHTML += `<span class="alert-detail-severity alert-severity-${escapeHtml(severity.toLowerCase())}">${escapeHtml(severity)}</span>`;
     }
 
     let bodyHtml = '';
-    if (headline) bodyHtml += `<p class="alert-detail-headline">${headline}</p>`;
+    if (headline) bodyHtml += `<p class="alert-detail-headline">${escapeHtml(headline)}</p>`;
     if (onset || ends) {
         bodyHtml += `<div class="alert-detail-timing">`;
         if (onset) bodyHtml += `<div><strong>From:</strong> ${onset}</div>`;
@@ -3342,10 +3397,10 @@ function showAlertDetail(props, nwsUrl) {
         else if (expires) bodyHtml += `<div><strong>Expires:</strong> ${expires}</div>`;
         bodyHtml += `</div>`;
     }
-    if (areaDesc) bodyHtml += `<div class="alert-detail-area"><strong>Areas:</strong> ${areaDesc}</div>`;
-    if (description) bodyHtml += `<div class="alert-detail-desc">${description}</div>`;
+    if (areaDesc) bodyHtml += `<div class="alert-detail-area"><strong>Areas:</strong> ${escapeHtml(areaDesc)}</div>`;
+    if (description) bodyHtml += `<div class="alert-detail-desc">${escapeHtml(description)}</div>`;
     if (instruction) bodyHtml += `<div class="alert-detail-instruction"><strong>Instructions:</strong><br>${instruction}</div>`;
-    if (sender) bodyHtml += `<div class="alert-detail-sender">Issued by ${sender}</div>`;
+    if (sender) bodyHtml += `<div class="alert-detail-sender">Issued by ${escapeHtml(sender)}</div>`;
 
     body.innerHTML = bodyHtml;
     nwsLink.href = nwsUrl;
