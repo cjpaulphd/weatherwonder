@@ -38,6 +38,12 @@ A single **Sun, Moon, and Tide** table, with all timed events (twilight, sunrise
 - **Unit Toggles** — Switch between °F/°C and 12/24-hour time formats; coastal locations also get a tide-line toggle
 - **Responsive Design** — Scales from mobile to desktop (max 960px)
 
+### Accessibility
+- **Keyboard & screen-reader friendly** — Visible focus indicators, modal dialogs that move focus in, trap Tab, close on Escape, and restore focus on close
+- **Reduced motion** — Honors the `prefers-reduced-motion` system setting
+- **Labeled visuals** — Weather-condition icons, the wind-direction arrow, and the forecast chart expose text alternatives to assistive technology; decorative emoji are hidden from it
+- **AA contrast** — Theme text colors meet WCAG AA contrast
+
 ## Data Sources
 
 All APIs are free and require no API keys:

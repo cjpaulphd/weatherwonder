@@ -21,12 +21,27 @@ const DEFAULT_LOCATION = {
 
 const LAST_LOCATION_KEY = 'weatherwonder_last_location';
 
+// Escape untrusted strings before inserting them into innerHTML, to prevent XSS.
+// Used for API-provided text (NWS alerts, geocoding results) and user-entered
+// favorite names, all of which are rendered via template literals + innerHTML.
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function getLastLocation() {
     try {
         const stored = localStorage.getItem(LAST_LOCATION_KEY);
         if (stored) {
             const loc = JSON.parse(stored);
-            if (loc.name && loc.latitude && loc.longitude) return loc;
+            // Use finite-number checks, not truthiness: lat 0 (equator) or
+            // lon 0 (prime meridian) are valid but falsy.
+            if (loc.name && Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)) return loc;
         }
     } catch (e) {}
     return null;
@@ -55,6 +70,10 @@ let radarMap = null;
 let radarLayer = null;
 let precipHistoryData = null;
 let precipHistoricalAvg = null;
+// Incremented on each loadWeather() call. Async secondary fetches capture the
+// value at start and bail out if it changes, so results for a location the user
+// has navigated away from can't overwrite the current view.
+let currentLoadId = 0;
 
 // Privacy-preserving usage events (GoatCounter)
 // Only tracks action names, never location data, coordinates, or user info
@@ -252,9 +271,11 @@ function updateFavoriteButton() {
         if (isFavorite(currentLocation)) {
             btn.textContent = '★';
             btn.classList.add('active');
+            btn.setAttribute('aria-label', 'Remove from favorites');
         } else {
             btn.textContent = '☆';
             btn.classList.remove('active');
+            btn.setAttribute('aria-label', 'Add to favorites');
         }
     }
 }
@@ -271,9 +292,9 @@ function renderFavoritesList() {
     }
 
     list.innerHTML = favorites.map(fav => `
-        <div class="favorite-item" draggable="true" data-lat="${fav.latitude}" data-lon="${fav.longitude}" data-name="${fav.name}">
+        <div class="favorite-item" draggable="true" data-lat="${fav.latitude}" data-lon="${fav.longitude}" data-name="${escapeHtml(fav.name)}">
             <span class="drag-handle" title="Drag to reorder">⠿</span>
-            <span class="favorite-item-name">${fav.name}</span>
+            <span class="favorite-item-name">${escapeHtml(fav.name)}</span>
             <div class="favorite-item-actions">
                 <button class="favorite-item-rename" data-lat="${fav.latitude}" data-lon="${fav.longitude}" title="Rename">✏️</button>
                 <button class="favorite-item-remove" data-lat="${fav.latitude}" data-lon="${fav.longitude}">&times;</button>
@@ -1019,12 +1040,18 @@ function initializeTheme() {
 }
 
 function openMenu() {
-    document.getElementById('menu-panel').classList.remove('hidden');
+    const panel = document.getElementById('menu-panel');
+    panel.classList.remove('hidden');
+    panel.inert = false;
     document.getElementById('menu-overlay').classList.remove('hidden');
 }
 
 function closeMenu() {
-    document.getElementById('menu-panel').classList.add('hidden');
+    const panel = document.getElementById('menu-panel');
+    panel.classList.add('hidden');
+    // Make the hidden panel inert so its controls aren't keyboard-focusable
+    // while off-screen.
+    panel.inert = true;
     document.getElementById('menu-overlay').classList.add('hidden');
 }
 
@@ -1134,6 +1161,17 @@ function getTempUnitLabel() {
     const unit = getTempUnit();
     if (unit === 'K') return ' K';
     return unit === 'C' ? '°C' : '°F';
+}
+
+// Chart precipitation-axis units. The hourly API returns precipitation in mm;
+// the chart shows it in the same unit as the rest of the UI — inches in °F
+// mode, mm in °C, microns in the Kelvin easter-egg mode. `factor` converts mm
+// to the display unit and `step` is the gridline spacing in that unit.
+function getChartPrecipConfig() {
+    const unit = getTempUnit();
+    if (unit === 'C') return { factor: 1, step: 1, gridDecimals: 0, tipDecimals: 1, suffix: ' mm' };
+    if (unit === 'K') return { factor: 1000, step: 1000, gridDecimals: 0, tipDecimals: 0, suffix: ' µm' };
+    return { factor: 1 / 25.4, step: 0.1, gridDecimals: 1, tipDecimals: 2, suffix: '"' };
 }
 
 // Format precipitation amount (mm in metric, inches in imperial, microns in Kelvin mode)
@@ -1645,7 +1683,7 @@ function showDisambiguation(results) {
         if (result.admin1) label += `, ${result.admin1}`;
         if (result.country) label += `, ${result.country}`;
 
-        item.innerHTML = `<span>${label}</span>${alreadyFav ? '<span class="disambiguation-fav-star" title="Already in favorites">★</span>' : ''}`;
+        item.innerHTML = `<span>${escapeHtml(label)}</span>${alreadyFav ? '<span class="disambiguation-fav-star" title="Already in favorites">★</span>' : ''}`;
         item.addEventListener('click', () => {
             selectLocation(result);
             document.getElementById('location-modal').classList.add('hidden');
@@ -1779,10 +1817,10 @@ function renderDailyForecast(data) {
             card.innerHTML = `
                 <div class="day-name">${getDayName(date, true)}</div>
                 <div class="weather-icons">
-                    <div class="day-icon" title="${getDayName(date)}">${dayIcon}</div>
+                    <div class="day-icon" title="${getDayName(date)}" role="img" aria-label="${getDayName(date)}: ${getWeatherDesc(dayCode)}">${dayIcon}</div>
                 </div>
                 <div class="temp-range">${lowTemp}/${highTemp}${getTempUnitLabel()}</div>
-                <div class="wind-info${kClass}"><span class="wind-arrow" style="transform:rotate(${windRotation}deg)">↑</span> ${formatWindSpeed(windSpeed, true)}</div>
+                <div class="wind-info${kClass}"><span class="wind-arrow" style="transform:rotate(${windRotation}deg)" role="img" aria-label="Wind ${getWindDirection(windDir)}">↑</span> ${formatWindSpeed(windSpeed, true)}</div>
                 ${precipInfoHtml}
                 ${precipAmountHtml}
             `;
@@ -1790,8 +1828,8 @@ function renderDailyForecast(data) {
             card.innerHTML = `
                 <div class="day-name">${getDayName(date, true)}</div>
                 <div class="weather-icons">
-                    <div class="am-icon" title="Morning">${amIcon}</div>
-                    <div class="pm-icon" title="Evening">${pmIcon}</div>
+                    <div class="am-icon" title="Morning" role="img" aria-label="Morning: ${getWeatherDesc(guardedAmCode)}">${amIcon}</div>
+                    <div class="pm-icon" title="Evening" role="img" aria-label="Evening: ${getWeatherDesc(guardedPmCode)}">${pmIcon}</div>
                 </div>
                 <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
                 <div class="wind-info${kClass}">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
@@ -1895,7 +1933,7 @@ function renderHourlyForecast(data) {
         card.innerHTML = `
             ${dayLabelHtml}
             <div class="hour">${formatHour(date)}</div>
-            <div class="weather-icon">${getWeatherIcon(weatherCode, isNight)}</div>
+            <div class="weather-icon" role="img" aria-label="${getWeatherDesc(weatherCode)}">${getWeatherIcon(weatherCode, isNight)}</div>
             <div class="temp">${temp}${getTempUnitLabel()}</div>
             ${windchillHtml}
             <div class="wind${hkClass}">
@@ -2005,14 +2043,17 @@ const gridLinesPlugin = {
             }
         }
 
-        // Draw precipitation amount grid lines (every 0.10") - green color.
+        // Draw precipitation amount grid lines (one per unit step) - green color.
         // Skipped when the precip-amount line is toggled off via its legend.
-        const precipMax = Math.ceil(yPrecipScale.max * 10) / 10;
+        const precipCfg = getChartPrecipConfig();
+        const precipMax = Math.ceil(yPrecipScale.max / precipCfg.step) * precipCfg.step;
 
         ctx.strokeStyle = gridColors.precipGridLine;
         ctx.setLineDash([3, 3]);
 
-        for (let precip = 0.1; isChartLineVisible('precipAmount') && precip <= precipMax; precip += 0.1) {
+        for (let n = 1; isChartLineVisible('precipAmount'); n++) {
+            const precip = n * precipCfg.step;
+            if (precip > precipMax + precipCfg.step * 0.001) break;
             const y = yPrecipScale.getPixelForValue(precip);
             if (y >= chartArea.top && y <= chartArea.bottom) {
                 ctx.beginPath();
@@ -2024,7 +2065,7 @@ const gridLinesPlugin = {
                 ctx.fillStyle = gridColors.precipGridLabel;
                 ctx.font = '9px sans-serif';
                 ctx.textAlign = 'right';
-                ctx.fillText(`${precip.toFixed(1)}"`, chartArea.right - 2, y - 2);
+                ctx.fillText(`${precip.toFixed(precipCfg.gridDecimals)}${precipCfg.suffix}`, chartArea.right - 2, y - 2);
             }
         }
 
@@ -2255,6 +2296,7 @@ function renderChart(data) {
     const tideHeights = [];
     const windSpeeds = [];
     const isDayFlags = [];
+    const precipCfg = getChartPrecipConfig();
 
     for (let i = startIndex; i < endIndex; i++) {
         const date = new Date(hourly.time[i]);
@@ -2262,7 +2304,7 @@ function renderChart(data) {
         const tu = getTempUnit();
         temps.push(tu === 'K' ? hourly.temperature_2m[i] + 273.15 : (tu === 'C' ? hourly.temperature_2m[i] : (hourly.temperature_2m[i] * 9/5) + 32));
         precipProbs.push(hourly.precipitation_probability[i]);
-        precipAmounts.push(hourly.precipitation[i] / 25.4);
+        precipAmounts.push(hourly.precipitation[i] * precipCfg.factor);
         // Wind speed is stored in mph; the tooltip converts for display.
         windSpeeds.push(hourly.wind_speed_10m[i]);
         isDayFlags.push(hourly.is_day[i]);
@@ -2298,9 +2340,18 @@ function renderChart(data) {
     const tempScaleMin = Math.floor((minTemp - tempRange * 0.1) / 10) * 10;
     const tempScaleMax = Math.ceil((maxTemp + tempRange * 0.1) / 10) * 10;
 
-    const maxPrecipAmount = Math.max(0.1, ...precipAmounts);
-    // Round up to nearest 0.1 for cleaner grid
-    const precipScaleMax = Math.ceil(maxPrecipAmount * 1.2 * 10) / 10;
+    const maxPrecipAmount = Math.max(precipCfg.step, ...precipAmounts);
+    // Round up to the nearest gridline step for a cleaner grid
+    const precipScaleMax = Math.ceil(maxPrecipAmount * 1.2 / precipCfg.step) * precipCfg.step;
+
+    // Text alternative for the chart canvas (it's role="img"). The detailed
+    // hourly numbers are also available as text in the hourly forecast cards.
+    const chartCanvas = document.getElementById('forecast-chart');
+    if (chartCanvas) {
+        const peakProb = Math.round(Math.max(0, ...precipProbs.filter(p => p != null)));
+        chartCanvas.setAttribute('aria-label',
+            `Forecast chart over ${getChartDays()} days. Temperature ranges from ${Math.round(minTemp)} to ${Math.round(maxTemp)} ${getTempUnitLabel()}. Peak precipitation chance ${peakProb} percent. Hourly details are listed below in the hourly forecast.`);
+    }
 
     // Tide axis scale (feet), padded so the curve doesn't touch the edges.
     let tideScaleMin = 0, tideScaleMax = 1;
@@ -2448,9 +2499,9 @@ function renderChart(data) {
                             } else if (axis === 'y-wind') {
                                 return `Wind: ${formatWindSpeed(context.raw)}`;
                             } else {
-                                const inches = context.raw;
-                                if (inches < 0.01) return 'Precip Amount: 0.00"';
-                                return `Precip Amount: ${inches.toFixed(2)}"`;
+                                const cfg = getChartPrecipConfig();
+                                const amt = context.raw < cfg.step / 10 ? 0 : context.raw;
+                                return `Precip Amount: ${amt.toFixed(cfg.tipDecimals)}${cfg.suffix}`;
                             }
                         }
                     }
@@ -3091,11 +3142,33 @@ async function loadWeather() {
         document.getElementById('daily-forecast').innerHTML = '<div class="loading">Loading forecast</div>';
         document.getElementById('hourly-forecast').innerHTML = '';
 
-        weatherData = await fetchWeatherData(currentLocation.latitude, currentLocation.longitude);
+        // Token guard for this load. Async secondary fetches below compare against
+        // currentLoadId before touching shared state, so a slow response for a
+        // previous location can't paint over a newer one.
+        const loadId = ++currentLoadId;
+        const lat = currentLocation.latitude;
+        const lon = currentLocation.longitude;
 
-        // Store the location's IANA timezone from the API response (e.g. "Pacific/Auckland")
+        // Start the independent secondary fetches in parallel with the main
+        // forecast fetch — they only need lat/lon, not weatherData. Handlers are
+        // attached after the initial render, once weatherData is ready. Attach a
+        // no-op catch now so a rejection before then isn't reported as unhandled.
+        const aqiPromise = fetchAQI(lat, lon);
+        const tidePromise = fetchTideData(lat, lon);
+        aqiPromise.catch(() => {});
+        tidePromise.catch(() => {});
+
+        weatherData = await fetchWeatherData(lat, lon);
+
+        // Store the location's IANA timezone from the API response (e.g.
+        // "Pacific/Auckland"). If the response omits it, clear any stale value
+        // from a previous location so getLocationNow() falls back to browser time
+        // rather than silently using the wrong zone.
         if (weatherData.timezone) {
             currentLocation.timezone = weatherData.timezone;
+        } else {
+            delete currentLocation.timezone;
+            console.warn('Weather API response lacked a timezone; falling back to browser time.');
         }
 
         // Get current temperature, feels-like, humidity, and wind from hourly data
@@ -3117,31 +3190,14 @@ async function loadWeather() {
         }
         updateLocationDisplay(currentTemp, feelsLike);
 
-        // Fetch AQI (non-blocking), then render full conditions bar
-        fetchAQI(currentLocation.latitude, currentLocation.longitude)
-            .then(aqi => { currentConditions.aqi = aqi; renderConditionsBar(); })
-            .catch(() => { currentConditions.aqi = null; renderConditionsBar(); });
-
-        // Fetch tide data (non-blocking). Reset first so a previous coastal
-        // location's data and toggle don't leak into an inland one. When data
-        // arrives for a coastal location, reveal the toggle and redraw the
-        // chart so the tide line appears if it's enabled.
+        // Reset tide state before the initial render so a previous coastal
+        // location's tide data and toggle don't leak into an inland one.
         tideData = null;
         updateTideToggleUI();
-        fetchTideData(currentLocation.latitude, currentLocation.longitude)
-            .then(data => {
-                tideData = data;
-                updateTideToggleUI();
-                if (isCoastalLocation()) {
-                    // Reveal the tide legend toggle and the high/low tide rows.
-                    if (weatherData) {
-                        renderChart(weatherData);
-                        renderHourlyForecast(weatherData);
-                    }
-                    renderAstroData();
-                }
-            })
-            .catch(() => { tideData = null; updateTideToggleUI(); });
+
+        // Clear the previous location's AQI so the conditions bar doesn't show a
+        // stale value during the new fetch; it's refreshed when aqiPromise resolves.
+        currentConditions.aqi = null;
 
         // Render conditions bar immediately with humidity/wind (AQI will update when ready)
         renderConditionsBar();
@@ -3153,17 +3209,54 @@ async function loadWeather() {
         initializeRadar();
         renderAstroData();
 
+        // weatherData and the initial render are ready, so attach handlers to the
+        // secondary fetches started above. The token guard discards stale results.
+        aqiPromise
+            .then(aqi => {
+                if (loadId !== currentLoadId) return;
+                currentConditions.aqi = aqi;
+                renderConditionsBar();
+            })
+            .catch(() => {
+                if (loadId !== currentLoadId) return;
+                currentConditions.aqi = null;
+                renderConditionsBar();
+            });
+
+        // When tide data arrives for a coastal location, reveal the toggle and
+        // redraw the chart/hourly so the tide line appears if it's enabled.
+        tidePromise
+            .then(data => {
+                if (loadId !== currentLoadId) return;
+                tideData = data;
+                updateTideToggleUI();
+                if (isCoastalLocation()) {
+                    if (weatherData) {
+                        renderChart(weatherData);
+                        renderHourlyForecast(weatherData);
+                    }
+                    renderAstroData();
+                }
+            })
+            .catch(() => {
+                if (loadId !== currentLoadId) return;
+                tideData = null;
+                updateTideToggleUI();
+            });
+
         // Fetch and render precipitation history + historical averages
         Promise.all([
             fetchPrecipHistory(currentLocation.latitude, currentLocation.longitude),
             fetchHistoricalPrecipAvg(currentLocation.latitude, currentLocation.longitude).catch(() => null)
         ])
             .then(([data, histAvg]) => {
+                if (loadId !== currentLoadId) return;
                 precipHistoryData = data;
                 precipHistoricalAvg = histAvg;
                 renderPrecipHistory(data, histAvg);
             })
             .catch(err => {
+                if (loadId !== currentLoadId) return;
                 console.error('Error loading precipitation history:', err);
                 const container = document.getElementById('precip-history');
                 if (container) container.innerHTML = '<div class="error">Precipitation history unavailable</div>';
@@ -3182,7 +3275,7 @@ async function loadWeather() {
     } catch (error) {
         console.error('Error loading weather:', error);
         document.getElementById('daily-forecast').innerHTML =
-            `<div class="error">Failed to load weather data: ${error.message}</div>`;
+            `<div class="error">Failed to load weather data: ${escapeHtml(error.message)}</div>`;
     } finally {
         if (refreshBtn) refreshBtn.classList.remove('spinning');
     }
@@ -3244,7 +3337,7 @@ async function checkWeatherAlerts(data) {
                 alertEl.style.backgroundColor = bgColor;
                 alertEl.innerHTML = `
                     <span class="alert-icon">${icon}</span>
-                    <span class="alert-text-content">${headline}</span>
+                    <span class="alert-text-content">${escapeHtml(headline)}</span>
                     <span class="alert-arrow">›</span>
                 `;
 
@@ -3294,11 +3387,11 @@ async function checkWeatherAlerts(data) {
 
         if (hasWinterWeather) {
             alertBanner.classList.remove('hidden');
-            alertText.textContent = 'Winter Weather Advisory';
+            alertText.textContent = 'Wintry Precipitation Likely';
             document.querySelector('.alert-icon').textContent = '❄️';
         } else if (hasThunderstorm) {
             alertBanner.classList.remove('hidden');
-            alertText.textContent = 'Thunderstorm Warning';
+            alertText.textContent = 'Thunderstorms Likely';
             document.querySelector('.alert-icon').textContent = '⛈️';
         } else {
             alertBanner.classList.add('hidden');
@@ -3317,7 +3410,7 @@ function showAlertDetail(props, nwsUrl) {
     const severity = props.severity || '';
     const headline = props.headline || event;
     const description = (props.description || '').replace(/\n/g, '<br>');
-    const instruction = (props.instruction || '').replace(/\n/g, '<br>');
+    const instruction = escapeHtml(props.instruction || '').replace(/\n/g, '<br>');
     const areaDesc = props.areaDesc || '';
     const alertTimeLocale = getTimeFormat() === '24' ? 'en-GB' : 'en-US';
     const alertTimeOpts = { weekday: 'short', month: 'short', day: 'numeric', hour: getTimeFormat() === '24' ? '2-digit' : 'numeric', minute: '2-digit' };
@@ -3328,13 +3421,13 @@ function showAlertDetail(props, nwsUrl) {
     const expires = props.expires ? new Date(props.expires).toLocaleString(alertTimeLocale, alertTimeOpts) : '';
     const sender = props.senderName || '';
 
-    header.innerHTML = `<h3>${event}</h3>`;
+    header.innerHTML = `<h3>${escapeHtml(event)}</h3>`;
     if (severity) {
-        header.innerHTML += `<span class="alert-detail-severity alert-severity-${severity.toLowerCase()}">${severity}</span>`;
+        header.innerHTML += `<span class="alert-detail-severity alert-severity-${escapeHtml(severity.toLowerCase())}">${escapeHtml(severity)}</span>`;
     }
 
     let bodyHtml = '';
-    if (headline) bodyHtml += `<p class="alert-detail-headline">${headline}</p>`;
+    if (headline) bodyHtml += `<p class="alert-detail-headline">${escapeHtml(headline)}</p>`;
     if (onset || ends) {
         bodyHtml += `<div class="alert-detail-timing">`;
         if (onset) bodyHtml += `<div><strong>From:</strong> ${onset}</div>`;
@@ -3342,10 +3435,10 @@ function showAlertDetail(props, nwsUrl) {
         else if (expires) bodyHtml += `<div><strong>Expires:</strong> ${expires}</div>`;
         bodyHtml += `</div>`;
     }
-    if (areaDesc) bodyHtml += `<div class="alert-detail-area"><strong>Areas:</strong> ${areaDesc}</div>`;
-    if (description) bodyHtml += `<div class="alert-detail-desc">${description}</div>`;
+    if (areaDesc) bodyHtml += `<div class="alert-detail-area"><strong>Areas:</strong> ${escapeHtml(areaDesc)}</div>`;
+    if (description) bodyHtml += `<div class="alert-detail-desc">${escapeHtml(description)}</div>`;
     if (instruction) bodyHtml += `<div class="alert-detail-instruction"><strong>Instructions:</strong><br>${instruction}</div>`;
-    if (sender) bodyHtml += `<div class="alert-detail-sender">Issued by ${sender}</div>`;
+    if (sender) bodyHtml += `<div class="alert-detail-sender">Issued by ${escapeHtml(sender)}</div>`;
 
     body.innerHTML = bodyHtml;
     nwsLink.href = nwsUrl;
@@ -3613,6 +3706,23 @@ function initializeModal() {
             searchBtn.disabled = false;
             searchBtn.textContent = 'Search';
         }
+    });
+
+    // Close any open modal (or the side menu) with the Escape key. Registered
+    // once here for all modals; clicks the modal's own close button so its
+    // cleanup runs.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const openModal = Array.from(document.querySelectorAll('.modal'))
+            .find(m => !m.classList.contains('hidden'));
+        if (openModal) {
+            const close = openModal.querySelector('.close-btn');
+            if (close) close.click();
+            else openModal.classList.add('hidden');
+            return;
+        }
+        const menuPanel = document.getElementById('menu-panel');
+        if (menuPanel && !menuPanel.classList.contains('hidden')) closeMenu();
     });
 
     locationInput.addEventListener('keypress', (e) => {
@@ -4007,6 +4117,92 @@ function initializePullToRefresh() {
     }, { passive: true });
 }
 
+// Accessible modal focus management: move focus into a dialog when it opens,
+// trap Tab within it, and restore focus to the triggering element on close.
+// Modals are opened/closed by toggling the `hidden` class from many call sites,
+// so we observe that class rather than wrapping every call site.
+function initializeModalFocusManagement() {
+    const modals = Array.from(document.querySelectorAll('.modal'));
+    if (!modals.length) return;
+
+    const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const getFocusable = (modal) =>
+        Array.from(modal.querySelectorAll(FOCUSABLE)).filter(el => el.getClientRects().length > 0);
+
+    // Continuously track the last element focused OUTSIDE any modal, so we know
+    // where to return focus when a modal closes. Tracking it live (rather than
+    // reading activeElement at open time) is important because some modals focus
+    // their own input synchronously as they open.
+    let lastFocusedOutsideModal = null;
+    document.addEventListener('focusin', (e) => {
+        if (e.target && !e.target.closest('.modal')) {
+            lastFocusedOutsideModal = e.target;
+        }
+    });
+
+    const onOpen = (modal) => {
+        // Only move focus in if it isn't already inside (modals that focus their
+        // own input have already done so by the time this observer fires).
+        if (!modal.contains(document.activeElement)) {
+            const focusable = getFocusable(modal);
+            const target = focusable[0] || modal;
+            if (target === modal) modal.setAttribute('tabindex', '-1');
+            target.focus();
+        }
+    };
+
+    const onClose = () => {
+        const el = lastFocusedOutsideModal;
+        const usable = el && typeof el.focus === 'function' && document.contains(el)
+            && !el.closest('[inert]') && el.getClientRects().length > 0;
+        if (usable) {
+            el.focus();
+        } else {
+            // The trigger is gone or now hidden (e.g. a menu button after the
+            // menu closed); fall back to a stable, always-visible control.
+            const fallback = document.querySelector('.menu-btn');
+            if (fallback) fallback.focus();
+        }
+    };
+
+    modals.forEach((modal) => {
+        const observer = new MutationObserver(() => {
+            const isOpen = !modal.classList.contains('hidden');
+            if (isOpen && !modal.dataset.focusActive) {
+                modal.dataset.focusActive = 'true';
+                onOpen(modal);
+            } else if (!isOpen && modal.dataset.focusActive) {
+                delete modal.dataset.focusActive;
+                onClose();
+            }
+        });
+        observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    });
+
+    // Trap Tab / Shift+Tab within the open modal.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        const openModal = modals.find(m => !m.classList.contains('hidden'));
+        if (!openModal) return;
+        const focusable = getFocusable(openModal);
+        if (!focusable.length) { e.preventDefault(); return; }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey) {
+            if (active === first || !openModal.contains(active)) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else {
+            if (active === last || !openModal.contains(active)) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
+    });
+}
+
 // Register service worker
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -4029,6 +4225,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeInstallButton,
         initializeIOSInstallModal,
         initializeShareAppModal,
+        initializeModalFocusManagement,
         initializeCIT2000,
         initializePullToRefresh
     ];
