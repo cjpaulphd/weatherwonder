@@ -4106,6 +4106,92 @@ function initializePullToRefresh() {
     }, { passive: true });
 }
 
+// Accessible modal focus management: move focus into a dialog when it opens,
+// trap Tab within it, and restore focus to the triggering element on close.
+// Modals are opened/closed by toggling the `hidden` class from many call sites,
+// so we observe that class rather than wrapping every call site.
+function initializeModalFocusManagement() {
+    const modals = Array.from(document.querySelectorAll('.modal'));
+    if (!modals.length) return;
+
+    const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const getFocusable = (modal) =>
+        Array.from(modal.querySelectorAll(FOCUSABLE)).filter(el => el.getClientRects().length > 0);
+
+    // Continuously track the last element focused OUTSIDE any modal, so we know
+    // where to return focus when a modal closes. Tracking it live (rather than
+    // reading activeElement at open time) is important because some modals focus
+    // their own input synchronously as they open.
+    let lastFocusedOutsideModal = null;
+    document.addEventListener('focusin', (e) => {
+        if (e.target && !e.target.closest('.modal')) {
+            lastFocusedOutsideModal = e.target;
+        }
+    });
+
+    const onOpen = (modal) => {
+        // Only move focus in if it isn't already inside (modals that focus their
+        // own input have already done so by the time this observer fires).
+        if (!modal.contains(document.activeElement)) {
+            const focusable = getFocusable(modal);
+            const target = focusable[0] || modal;
+            if (target === modal) modal.setAttribute('tabindex', '-1');
+            target.focus();
+        }
+    };
+
+    const onClose = () => {
+        const el = lastFocusedOutsideModal;
+        const usable = el && typeof el.focus === 'function' && document.contains(el)
+            && !el.closest('[inert]') && el.getClientRects().length > 0;
+        if (usable) {
+            el.focus();
+        } else {
+            // The trigger is gone or now hidden (e.g. a menu button after the
+            // menu closed); fall back to a stable, always-visible control.
+            const fallback = document.querySelector('.menu-btn');
+            if (fallback) fallback.focus();
+        }
+    };
+
+    modals.forEach((modal) => {
+        const observer = new MutationObserver(() => {
+            const isOpen = !modal.classList.contains('hidden');
+            if (isOpen && !modal.dataset.focusActive) {
+                modal.dataset.focusActive = 'true';
+                onOpen(modal);
+            } else if (!isOpen && modal.dataset.focusActive) {
+                delete modal.dataset.focusActive;
+                onClose();
+            }
+        });
+        observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    });
+
+    // Trap Tab / Shift+Tab within the open modal.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        const openModal = modals.find(m => !m.classList.contains('hidden'));
+        if (!openModal) return;
+        const focusable = getFocusable(openModal);
+        if (!focusable.length) { e.preventDefault(); return; }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey) {
+            if (active === first || !openModal.contains(active)) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else {
+            if (active === last || !openModal.contains(active)) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
+    });
+}
+
 // Register service worker
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -4128,6 +4214,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeInstallButton,
         initializeIOSInstallModal,
         initializeShareAppModal,
+        initializeModalFocusManagement,
         initializeCIT2000,
         initializePullToRefresh
     ];
