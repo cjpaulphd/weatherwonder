@@ -1,7 +1,7 @@
 // WeatherWonder Service Worker
 // Provides offline shell caching for PWA install support
 
-const CACHE_NAME = 'weatherwonder-v9';
+const CACHE_NAME = 'weatherwonder-v10';
 const SHELL_ASSETS = [
     './',
     './index.html',
@@ -11,6 +11,11 @@ const SHELL_ASSETS = [
     './og-image.png',
     './og-image-square.png'
 ];
+
+// Absolute URLs of the shell assets, resolved against the service worker's
+// scope. Used to decide what to cache so that only same-origin app-shell
+// assets are stored — never third-party API responses or map tiles.
+const SHELL_URLS = SHELL_ASSETS.map((a) => new URL(a, self.location.href).href);
 
 // Cache app shell on install
 self.addEventListener('install', (event) => {
@@ -32,11 +37,15 @@ self.addEventListener('activate', (event) => {
 
 // Network-first strategy: try network, fall back to cache
 self.addEventListener('fetch', (event) => {
+    if (event.request.method !== 'GET') return;
     event.respondWith(
         fetch(event.request)
             .then((response) => {
-                // Cache successful responses for shell assets
-                if (response.ok && SHELL_ASSETS.some((a) => event.request.url.endsWith(a.replace('./', '')))) {
+                // Only cache same-origin app-shell assets. Previously this used
+                // endsWith() against asset names, but './' became endsWith('')
+                // which matched every URL and cached all API/tile responses.
+                const url = event.request.url.split('?')[0];
+                if (response.ok && SHELL_URLS.includes(url)) {
                     const clone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
                 }

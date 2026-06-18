@@ -39,7 +39,9 @@ function getLastLocation() {
         const stored = localStorage.getItem(LAST_LOCATION_KEY);
         if (stored) {
             const loc = JSON.parse(stored);
-            if (loc.name && loc.latitude && loc.longitude) return loc;
+            // Use finite-number checks, not truthiness: lat 0 (equator) or
+            // lon 0 (prime meridian) are valid but falsy.
+            if (loc.name && Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)) return loc;
         }
     } catch (e) {}
     return null;
@@ -1036,12 +1038,18 @@ function initializeTheme() {
 }
 
 function openMenu() {
-    document.getElementById('menu-panel').classList.remove('hidden');
+    const panel = document.getElementById('menu-panel');
+    panel.classList.remove('hidden');
+    panel.inert = false;
     document.getElementById('menu-overlay').classList.remove('hidden');
 }
 
 function closeMenu() {
-    document.getElementById('menu-panel').classList.add('hidden');
+    const panel = document.getElementById('menu-panel');
+    panel.classList.add('hidden');
+    // Make the hidden panel inert so its controls aren't keyboard-focusable
+    // while off-screen.
+    panel.inert = true;
     document.getElementById('menu-overlay').classList.add('hidden');
 }
 
@@ -1151,6 +1159,17 @@ function getTempUnitLabel() {
     const unit = getTempUnit();
     if (unit === 'K') return ' K';
     return unit === 'C' ? '°C' : '°F';
+}
+
+// Chart precipitation-axis units. The hourly API returns precipitation in mm;
+// the chart shows it in the same unit as the rest of the UI — inches in °F
+// mode, mm in °C, microns in the Kelvin easter-egg mode. `factor` converts mm
+// to the display unit and `step` is the gridline spacing in that unit.
+function getChartPrecipConfig() {
+    const unit = getTempUnit();
+    if (unit === 'C') return { factor: 1, step: 1, gridDecimals: 0, tipDecimals: 1, suffix: ' mm' };
+    if (unit === 'K') return { factor: 1000, step: 1000, gridDecimals: 0, tipDecimals: 0, suffix: ' µm' };
+    return { factor: 1 / 25.4, step: 0.1, gridDecimals: 1, tipDecimals: 2, suffix: '"' };
 }
 
 // Format precipitation amount (mm in metric, inches in imperial, microns in Kelvin mode)
@@ -2022,14 +2041,17 @@ const gridLinesPlugin = {
             }
         }
 
-        // Draw precipitation amount grid lines (every 0.10") - green color.
+        // Draw precipitation amount grid lines (one per unit step) - green color.
         // Skipped when the precip-amount line is toggled off via its legend.
-        const precipMax = Math.ceil(yPrecipScale.max * 10) / 10;
+        const precipCfg = getChartPrecipConfig();
+        const precipMax = Math.ceil(yPrecipScale.max / precipCfg.step) * precipCfg.step;
 
         ctx.strokeStyle = gridColors.precipGridLine;
         ctx.setLineDash([3, 3]);
 
-        for (let precip = 0.1; isChartLineVisible('precipAmount') && precip <= precipMax; precip += 0.1) {
+        for (let n = 1; isChartLineVisible('precipAmount'); n++) {
+            const precip = n * precipCfg.step;
+            if (precip > precipMax + precipCfg.step * 0.001) break;
             const y = yPrecipScale.getPixelForValue(precip);
             if (y >= chartArea.top && y <= chartArea.bottom) {
                 ctx.beginPath();
@@ -2041,7 +2063,7 @@ const gridLinesPlugin = {
                 ctx.fillStyle = gridColors.precipGridLabel;
                 ctx.font = '9px sans-serif';
                 ctx.textAlign = 'right';
-                ctx.fillText(`${precip.toFixed(1)}"`, chartArea.right - 2, y - 2);
+                ctx.fillText(`${precip.toFixed(precipCfg.gridDecimals)}${precipCfg.suffix}`, chartArea.right - 2, y - 2);
             }
         }
 
@@ -2272,6 +2294,7 @@ function renderChart(data) {
     const tideHeights = [];
     const windSpeeds = [];
     const isDayFlags = [];
+    const precipCfg = getChartPrecipConfig();
 
     for (let i = startIndex; i < endIndex; i++) {
         const date = new Date(hourly.time[i]);
@@ -2279,7 +2302,7 @@ function renderChart(data) {
         const tu = getTempUnit();
         temps.push(tu === 'K' ? hourly.temperature_2m[i] + 273.15 : (tu === 'C' ? hourly.temperature_2m[i] : (hourly.temperature_2m[i] * 9/5) + 32));
         precipProbs.push(hourly.precipitation_probability[i]);
-        precipAmounts.push(hourly.precipitation[i] / 25.4);
+        precipAmounts.push(hourly.precipitation[i] * precipCfg.factor);
         // Wind speed is stored in mph; the tooltip converts for display.
         windSpeeds.push(hourly.wind_speed_10m[i]);
         isDayFlags.push(hourly.is_day[i]);
@@ -2315,9 +2338,9 @@ function renderChart(data) {
     const tempScaleMin = Math.floor((minTemp - tempRange * 0.1) / 10) * 10;
     const tempScaleMax = Math.ceil((maxTemp + tempRange * 0.1) / 10) * 10;
 
-    const maxPrecipAmount = Math.max(0.1, ...precipAmounts);
-    // Round up to nearest 0.1 for cleaner grid
-    const precipScaleMax = Math.ceil(maxPrecipAmount * 1.2 * 10) / 10;
+    const maxPrecipAmount = Math.max(precipCfg.step, ...precipAmounts);
+    // Round up to the nearest gridline step for a cleaner grid
+    const precipScaleMax = Math.ceil(maxPrecipAmount * 1.2 / precipCfg.step) * precipCfg.step;
 
     // Tide axis scale (feet), padded so the curve doesn't touch the edges.
     let tideScaleMin = 0, tideScaleMax = 1;
@@ -2465,9 +2488,9 @@ function renderChart(data) {
                             } else if (axis === 'y-wind') {
                                 return `Wind: ${formatWindSpeed(context.raw)}`;
                             } else {
-                                const inches = context.raw;
-                                if (inches < 0.01) return 'Precip Amount: 0.00"';
-                                return `Precip Amount: ${inches.toFixed(2)}"`;
+                                const cfg = getChartPrecipConfig();
+                                const amt = context.raw < cfg.step / 10 ? 0 : context.raw;
+                                return `Precip Amount: ${amt.toFixed(cfg.tipDecimals)}${cfg.suffix}`;
                             }
                         }
                     }
@@ -3161,6 +3184,10 @@ async function loadWeather() {
         tideData = null;
         updateTideToggleUI();
 
+        // Clear the previous location's AQI so the conditions bar doesn't show a
+        // stale value during the new fetch; it's refreshed when aqiPromise resolves.
+        currentConditions.aqi = null;
+
         // Render conditions bar immediately with humidity/wind (AQI will update when ready)
         renderConditionsBar();
 
@@ -3349,11 +3376,11 @@ async function checkWeatherAlerts(data) {
 
         if (hasWinterWeather) {
             alertBanner.classList.remove('hidden');
-            alertText.textContent = 'Winter Weather Advisory';
+            alertText.textContent = 'Wintry Precipitation Likely';
             document.querySelector('.alert-icon').textContent = '❄️';
         } else if (hasThunderstorm) {
             alertBanner.classList.remove('hidden');
-            alertText.textContent = 'Thunderstorm Warning';
+            alertText.textContent = 'Thunderstorms Likely';
             document.querySelector('.alert-icon').textContent = '⛈️';
         } else {
             alertBanner.classList.add('hidden');
@@ -3668,6 +3695,23 @@ function initializeModal() {
             searchBtn.disabled = false;
             searchBtn.textContent = 'Search';
         }
+    });
+
+    // Close any open modal (or the side menu) with the Escape key. Registered
+    // once here for all modals; clicks the modal's own close button so its
+    // cleanup runs.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const openModal = Array.from(document.querySelectorAll('.modal'))
+            .find(m => !m.classList.contains('hidden'));
+        if (openModal) {
+            const close = openModal.querySelector('.close-btn');
+            if (close) close.click();
+            else openModal.classList.add('hidden');
+            return;
+        }
+        const menuPanel = document.getElementById('menu-panel');
+        if (menuPanel && !menuPanel.classList.contains('hidden')) closeMenu();
     });
 
     locationInput.addEventListener('keypress', (e) => {

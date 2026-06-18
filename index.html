@@ -97,7 +97,7 @@
 
         <!-- Menu Panel -->
         <div id="menu-overlay" class="menu-overlay hidden"></div>
-        <nav id="menu-panel" class="menu-panel hidden">
+        <nav id="menu-panel" class="menu-panel hidden" inert>
             <div class="menu-header">
                 <div class="menu-brand">
                     <svg class="menu-logo" width="28" height="28" viewBox="0 0 512 512">
@@ -139,7 +139,7 @@
         </div>
 
         <!-- Alert Detail Modal -->
-        <div id="alert-detail-modal" class="modal hidden">
+        <div id="alert-detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Weather alert details">
             <div class="modal-content alert-detail-content">
                 <div id="alert-detail-header" class="alert-detail-header"></div>
                 <div id="alert-detail-body" class="alert-detail-body"></div>
@@ -302,7 +302,7 @@
         </footer>
 
         <!-- iOS Install Instructions Modal -->
-        <div id="ios-install-modal" class="modal hidden">
+        <div id="ios-install-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Add to Home Screen">
             <div class="modal-content ios-install-content">
                 <h3>Add to Home Screen</h3>
                 <p class="ios-install-subtitle">Install WeatherWonder as an app on your device</p>
@@ -337,7 +337,7 @@
         </div>
 
         <!-- Share App Modal -->
-        <div id="share-app-modal" class="modal hidden">
+        <div id="share-app-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Share this app">
             <div class="modal-content share-app-modal-content">
                 <h3>Share WeatherWonder</h3>
                 <p class="share-app-subtitle">Send this free weather app to friends &amp; family</p>
@@ -356,7 +356,7 @@
         </div>
 
         <!-- Location Search Modal -->
-        <div id="location-modal" class="modal hidden">
+        <div id="location-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Change location">
             <div class="modal-content">
                 <h3>Enter Location</h3>
                 <div class="input-wrapper">
@@ -373,7 +373,7 @@
         </div>
 
         <!-- Share Modal -->
-        <div id="share-modal" class="modal hidden">
+        <div id="share-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Share forecast">
             <div class="modal-content share-modal-content">
                 <h3>Share Forecast</h3>
                 <div class="share-options">
