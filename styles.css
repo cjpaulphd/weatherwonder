@@ -1864,6 +1864,42 @@ body {
 
 /* CIT2000 Toggle Button — base inherits from .theme-toggle */
 
+/* "Do you have your micrometer?" unit toggle — only visible in CIT2000 mode,
+   shown right under the conditions bar and above the daily forecast. */
+.micrometer-toggle {
+    display: none;
+}
+
+.cit2000-active .micrometer-toggle {
+    display: block;
+    width: 100%;
+    margin: 4px 0 16px;
+    padding: 12px 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.cit2000-active .micrometer-toggle:hover {
+    background: rgba(255, 255, 255, 0.16);
+    transform: translateY(-1px);
+}
+
+.cit2000-active .micrometer-toggle.active {
+    border-color: transparent;
+    color: #fff;
+    background: linear-gradient(90deg, #ff0000, #ff7700, #ffff00, #00ff00, #0077ff, #8800ff, #ff0000);
+    background-size: 200% 100%;
+    animation: cit2000-bg-drift 20s ease-in-out infinite;
+}
+
 /* CIT2000 "Seek the Joy!" tagline after hourly forecast */
 .cit2000-seek-joy {
     text-align: center;

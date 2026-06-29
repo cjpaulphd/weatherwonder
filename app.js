@@ -163,14 +163,15 @@ function toggleCIT2000() {
     setCIT2000(on);
     applyCIT2000(on);
     trackEvent('cit2000-' + (on ? 'on' : 'off'));
-    if (on) {
-        // Switch to Kelvin (microns) when entering CIT2000 mode
-        saveTempUnit('K');
-    } else if (getTempUnit() === 'K') {
-        // If turning off CIT2000 and user was on Kelvin, revert to Fahrenheit
+    // Entering CIT2000 no longer forces Kelvin/microns — the in-mode
+    // "Do you have your micrometer?" button toggles those units. But if we're
+    // leaving CIT2000 while on Kelvin, revert to Fahrenheit since Kelvin/micron
+    // units are only available inside CIT2000 mode.
+    if (!on && getTempUnit() === 'K') {
         saveTempUnit('F');
     }
     updateTempToggleUI();
+    updateMicrometerToggleUI();
     // Re-render everything with the new units
     if (weatherData) {
         renderDailyForecast(weatherData);
@@ -191,8 +192,37 @@ function updateCIT2000ToggleUI() {
     if (!btn) return;
     const label = btn.querySelector('.cit2000-label');
     if (label) {
-        label.textContent = isCIT2000() ? 'CIT2000 On' : 'CIT2000';
+        label.textContent = isCIT2000() ? 'CIT2000 Mode On' : 'CIT2000 Mode';
     }
+}
+
+// The "Do you have your micrometer?" button is shown only inside CIT2000 mode
+// (visibility is driven by the .cit2000-active class in CSS) and toggles the
+// Kelvin/micron (µm) units on and off.
+function toggleMicrometer() {
+    const on = getTempUnit() === 'K';
+    saveTempUnit(on ? 'F' : 'K');
+    trackEvent('micrometer-' + (on ? 'off' : 'on'));
+    updateTempToggleUI();
+    updateMicrometerToggleUI();
+    // Re-render everything with the new units
+    if (weatherData) {
+        renderDailyForecast(weatherData);
+        renderHourlyForecast(weatherData);
+        renderChart(weatherData);
+        reloadLocationTemp();
+        if (precipHistoryData) {
+            renderPrecipHistory(precipHistoryData, precipHistoricalAvg);
+        }
+    }
+}
+
+function updateMicrometerToggleUI() {
+    const btn = document.getElementById('micrometer-toggle');
+    if (!btn) return;
+    const on = getTempUnit() === 'K';
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.classList.toggle('active', on);
 }
 
 function initializeCIT2000() {
@@ -200,11 +230,16 @@ function initializeCIT2000() {
     if (btn) {
         btn.addEventListener('click', toggleCIT2000);
     }
+    const micrometerBtn = document.getElementById('micrometer-toggle');
+    if (micrometerBtn) {
+        micrometerBtn.addEventListener('click', toggleMicrometer);
+    }
     // Restore state on load
     if (isCIT2000()) {
         applyCIT2000(true);
     }
     updateCIT2000ToggleUI();
+    updateMicrometerToggleUI();
 }
 
 // Favorites management with localStorage
