@@ -130,6 +130,9 @@
         <!-- Current Conditions Bar (AQI, Humidity, Wind) -->
         <div id="conditions-bar" class="conditions-bar"></div>
 
+        <!-- Micrometer Unit Toggle (CIT2000 only) — toggles K/µm units on/off -->
+        <button id="micrometer-toggle" class="micrometer-toggle" aria-pressed="false">Do you have your micrometer?</button>
+
         <!-- Weather Alert Banners (NWS API) -->
         <div id="alert-container" class="alert-container hidden"></div>
         <!-- Fallback Alert Banner (local detection) -->
@@ -297,7 +300,7 @@
             </div>
             <button id="cit2000-btn" class="theme-toggle cit2000-btn">
                 <span class="theme-toggle-icon">🌈</span>
-                <span class="cit2000-label">CIT2000</span>
+                <span class="cit2000-label">CIT2000 Mode</span>
             </button>
             <div id="cit2000-banner" class="cit2000-banner hidden">Pahooootie</div>
         </footer>
