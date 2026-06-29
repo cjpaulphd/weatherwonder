@@ -1122,10 +1122,10 @@ function getWeatherDesc(code) {
 }
 
 // Get weather icon from code
-function getWeatherIcon(code, isNight = false) {
+function getWeatherIcon(code, isNight = false, moonEmoji = '🌙') {
     const weather = weatherCodes[code] || { icon: '❓', desc: 'Unknown' };
     if (isNight && code <= 2) {
-        return code === 0 ? '🌙' : '🌙';
+        return moonEmoji;
     }
     return weather.icon;
 }
@@ -1716,6 +1716,12 @@ function getAmPmWeatherCodes(data, targetDate) {
     let amTemp = null;
     let pmTemp = null;
 
+    // Aggregate each half-day into a single "most significant" condition rather
+    // than sampling one point hour. WMO weather codes increase roughly with
+    // severity (clear 0 → cloud 1-3 → fog 45-48 → rain 51-67 → snow 71-86 →
+    // thunder 95-99), so the highest code in the window is a reasonable summary
+    // of what the period feels like. The temperature is captured at that same
+    // hour so tempGuardedCode() can still swap a warm snow code for rain.
     for (let i = 0; i < hourly.time.length; i++) {
         const hourDate = new Date(hourly.time[i]);
         const hourDay = new Date(hourDate);
@@ -1723,14 +1729,15 @@ function getAmPmWeatherCodes(data, targetDate) {
 
         if (hourDay.getTime() === targetDay.getTime()) {
             const hour = hourDate.getHours();
-            // AM: around 9-10 AM
-            if (hour === 9 || hour === 10) {
-                amCode = hourly.weather_code[i];
+            const code = hourly.weather_code[i];
+            // AM: morning, 6am–noon
+            if (hour >= 6 && hour < 12 && (amCode === null || code > amCode)) {
+                amCode = code;
                 amTemp = hourly.temperature_2m[i];
             }
-            // PM: around 5-6 PM
-            if (hour === 17 || hour === 18) {
-                pmCode = hourly.weather_code[i];
+            // PM: afternoon, noon–6pm
+            if (hour >= 12 && hour < 18 && (pmCode === null || code > pmCode)) {
+                pmCode = code;
                 pmTemp = hourly.temperature_2m[i];
             }
         }
@@ -1794,7 +1801,7 @@ function renderDailyForecast(data) {
         const guardedAmCode = tempGuardedCode(rawAmCode, amTemp ?? daily.temperature_2m_min[i]);
         const guardedPmCode = tempGuardedCode(rawPmCode, pmTemp ?? daily.temperature_2m_max[i]);
         const amIcon = getWeatherIcon(guardedAmCode);
-        const pmIcon = getWeatherIcon(guardedPmCode, true);
+        const pmIcon = getWeatherIcon(guardedPmCode);
 
         const kClass = getTempUnit() === 'K' ? ' kelvin-units' : '';
         const compact = days >= 10;
@@ -1812,7 +1819,7 @@ function renderDailyForecast(data) {
 
         if (compact) {
             const dayCode = tempGuardedCode(dailyWeatherCode, daily.temperature_2m_max[i]);
-            const dayIcon = getWeatherIcon(dayCode, true);
+            const dayIcon = getWeatherIcon(dayCode);
             const windRotation = windDir + 180;
             card.innerHTML = `
                 <div class="day-name">${getDayName(date, true)}</div>
@@ -1829,7 +1836,7 @@ function renderDailyForecast(data) {
                 <div class="day-name">${getDayName(date, true)}</div>
                 <div class="weather-icons">
                     <div class="am-icon" title="Morning" role="img" aria-label="Morning: ${getWeatherDesc(guardedAmCode)}">${amIcon}</div>
-                    <div class="pm-icon" title="Evening" role="img" aria-label="Evening: ${getWeatherDesc(guardedPmCode)}">${pmIcon}</div>
+                    <div class="pm-icon" title="Afternoon" role="img" aria-label="Afternoon: ${getWeatherDesc(guardedPmCode)}">${pmIcon}</div>
                 </div>
                 <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
                 <div class="wind-info${kClass}">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
@@ -1875,6 +1882,11 @@ function renderHourlyForecast(data) {
     for (let i = startIndex; i < Math.min(startIndex + 48, hourly.time.length); i++) {
         const date = new Date(hourly.time[i]);
         const isNight = hourly.is_day[i] === 0;
+        // For clear/partly-cloudy night hours, show the actual lunar phase glyph
+        // (matching the astronomy table) instead of a generic crescent.
+        const moonEmoji = isNight
+            ? getMoonPhaseInfo(SunCalc.getMoonIllumination(date).phase).emoji
+            : '🌙';
 
         const card = document.createElement('div');
         card.className = 'hourly-card';
@@ -1933,7 +1945,7 @@ function renderHourlyForecast(data) {
         card.innerHTML = `
             ${dayLabelHtml}
             <div class="hour">${formatHour(date)}</div>
-            <div class="weather-icon" role="img" aria-label="${getWeatherDesc(weatherCode)}">${getWeatherIcon(weatherCode, isNight)}</div>
+            <div class="weather-icon" role="img" aria-label="${getWeatherDesc(weatherCode)}">${getWeatherIcon(weatherCode, isNight, moonEmoji)}</div>
             <div class="temp">${temp}${getTempUnitLabel()}</div>
             ${windchillHtml}
             <div class="wind${hkClass}">
