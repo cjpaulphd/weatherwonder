@@ -105,7 +105,7 @@ function applyCIT2000(on) {
     const seekJoy = document.getElementById('cit2000-seek-joy');
     // Section header renames for fun
     const sectionMap = {
-        'daily-section': { normal: 'DAILY FORECAST', fun: 'DAILY PAHOOOOTIE FORECAST' },
+        'daily-section': { normal: 'DAILY FORECAST', fun: 'DAILY VIBES FORECAST' },
         'hourly-section': { normal: 'HOURLY FORECAST', fun: 'HOURLY VIBE CHECK' },
         'radar-section': { normal: 'DOPPLER RADAR (50 mi)', fun: 'BLEEPS / SWEEPS / CREEPS' },
         'precip-history-section': { normal: 'PRECIPITATION HISTORY', fun: 'SKY JUICE HISTORY' }
