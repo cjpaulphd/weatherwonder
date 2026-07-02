@@ -1101,6 +1101,17 @@ body {
     background-color: var(--temp-red);
 }
 
+.legend-color.feels {
+    background-color: transparent;
+    background-image: repeating-linear-gradient(
+        to right,
+        var(--temp-red) 0,
+        var(--temp-red) 4px,
+        transparent 4px,
+        transparent 7px
+    );
+}
+
 .legend-color.precip-prob {
     background-color: var(--precip-blue);
 }
