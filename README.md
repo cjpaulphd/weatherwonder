@@ -30,6 +30,7 @@ A single **Sun, Moon, and Tide** table, with all timed events (twilight, sunrise
 - **Favorite Locations** — Save locations locally and switch between them from the side menu
 - **Refresh Button** — One-tap weather data refresh
 - **Feels-Like Temperature** — Displayed in the header when it differs significantly from actual temp
+- **Weather Explainers** — Info (ⓘ) buttons on the conditions bar and the Daily Forecast and Radar headers open short, plain-spoken pop-ups covering the meteorology behind the app: relative humidity vs. dew point and feels-like, how the numerical-weather-prediction models are built and why confidence fades with lead time, and how Doppler reflectivity (dBZ) maps to the radar colors. Each links across to the related topics
 - **Last Updated Timestamp** — Shows when data was last fetched
 - **Sharing** — Screenshot, link copy, and native device sharing for individual forecast sections
 - **Share This App** — Footer button to copy the app URL or share via native device sharing

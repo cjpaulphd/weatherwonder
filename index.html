@@ -156,6 +156,13 @@
         <section class="forecast-section" id="daily-section">
             <div class="section-header">
                 <h2>DAILY FORECAST</h2>
+                <button class="info-btn" data-explain="forecast" aria-label="How the forecast works">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                </button>
                 <button class="share-btn" id="share-daily-btn" aria-label="Share">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
@@ -206,6 +213,13 @@
         <section class="forecast-section" id="radar-section">
             <div class="section-header">
                 <h2>DOPPLER RADAR (50 mi)</h2>
+                <button class="info-btn" data-explain="radar" aria-label="How to read the radar">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                </button>
                 <button class="share-btn" id="share-radar-btn" aria-label="Share">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
@@ -356,6 +370,15 @@
                     </button>
                 </div>
                 <button id="close-share-app-modal" class="close-btn">&times;</button>
+            </div>
+        </div>
+
+        <!-- Weather Explainer Modal (shared; content set by data-explain triggers) -->
+        <div id="explainer-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="explainer-title">
+            <div class="modal-content explainer-content">
+                <h3 id="explainer-title" tabindex="-1"></h3>
+                <div id="explainer-body" class="explainer-body"></div>
+                <button id="close-explainer" class="close-btn" aria-label="Close">&times;</button>
             </div>
         </div>
 
