@@ -745,7 +745,7 @@ function initializeTideToggle() {
 // its legend entry. State persists in localStorage and applies across every
 // day-range view. Tide is handled separately via isTideLineOn().
 const CHART_LINES_KEY = 'weatherwonder_chart_lines';
-const CHART_LINE_DEFAULTS = { temp: true, precipProb: true, precipAmount: true, wind: false };
+const CHART_LINE_DEFAULTS = { temp: true, feelsLike: false, precipProb: true, precipAmount: true, wind: false };
 
 function getChartLineVisibility() {
     try {
@@ -2073,7 +2073,8 @@ const gridLinesPlugin = {
         ctx.lineWidth = 1;
         ctx.setLineDash([5, 5]);
 
-        for (let temp = tempMin; isChartLineVisible('temp') && temp <= tempMax; temp += 10) {
+        const showTempGrid = isChartLineVisible('temp') || isChartLineVisible('feelsLike');
+        for (let temp = tempMin; showTempGrid && temp <= tempMax; temp += 10) {
             const y = yTempScale.getPixelForValue(temp);
             if (y >= chartArea.top && y <= chartArea.bottom) {
                 ctx.beginPath();
@@ -2291,6 +2292,7 @@ function getChartColors() {
 
     return {
         tempBorder: tempRed,
+        feelsBorder: tempRed,
         precipProbBorder: precipBlue,
         precipProbBg: hexToRgba(precipBlue, 0.1),
         precipAmountBorder: precipGreen,
@@ -2338,6 +2340,7 @@ function renderChart(data) {
 
     const labels = [];
     const temps = [];
+    const feelsLikeTemps = [];
     const precipProbs = [];
     const precipAmounts = [];
     const tideHeights = [];
@@ -2350,6 +2353,8 @@ function renderChart(data) {
         labels.push(date);
         const tu = getTempUnit();
         temps.push(tu === 'K' ? hourly.temperature_2m[i] + 273.15 : (tu === 'C' ? hourly.temperature_2m[i] : (hourly.temperature_2m[i] * 9/5) + 32));
+        const fl = hourly.apparent_temperature[i];
+        feelsLikeTemps.push(fl == null ? null : (tu === 'K' ? fl + 273.15 : (tu === 'C' ? fl : (fl * 9/5) + 32)));
         precipProbs.push(hourly.precipitation_probability[i]);
         precipAmounts.push(hourly.precipitation[i] * precipCfg.factor);
         // Wind speed is stored in mph; the tooltip converts for display.
@@ -2379,8 +2384,13 @@ function renderChart(data) {
         precipProbs[i] = precipAmounts[i] > 0 ? 100 : 0;
     }
 
-    const minTemp = Math.min(...temps);
-    const maxTemp = Math.max(...temps);
+    // When the feels-like line is on, factor its values into the axis range so
+    // the dashed line never clips outside the temperature scale.
+    const tempScaleValues = isChartLineVisible('feelsLike')
+        ? temps.concat(feelsLikeTemps.filter(v => v != null))
+        : temps;
+    const minTemp = Math.min(...tempScaleValues);
+    const maxTemp = Math.max(...tempScaleValues);
     const tempRange = maxTemp - minTemp;
 
     // Round to nearest 10 for cleaner grid
@@ -2439,6 +2449,19 @@ function renderChart(data) {
                     tension: 0.4,
                     pointRadius: 0,
                     pointHoverRadius: 4,
+                    yAxisID: 'y-temp'
+                }] : []),
+                ...(isChartLineVisible('feelsLike') ? [{
+                    label: 'Feels Like',
+                    data: feelsLikeTemps,
+                    borderColor: colors.feelsBorder,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 4],
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    spanGaps: true,
                     yAxisID: 'y-temp'
                 }] : []),
                 ...(isChartLineVisible('precipProb') ? [{
@@ -2533,7 +2556,8 @@ function renderChart(data) {
                             const isPast = labelDate instanceof Date && labelDate < getLocationNow();
                             const axis = context.dataset.yAxisID;
                             if (axis === 'y-temp') {
-                                return `Temperature: ${Math.round(context.raw)}${getTempUnitLabel()}`;
+                                if (context.raw == null) return null;
+                                return `${context.dataset.label}: ${Math.round(context.raw)}${getTempUnitLabel()}`;
                             } else if (axis === 'y-precip-prob') {
                                 if (isPast) {
                                     return context.raw >= 50 ? 'Rain: yes' : 'Rain: no';
@@ -2610,6 +2634,7 @@ function renderChart(data) {
     // on every view, but default off when switching into a 5/7/10-day view.
     const items = [
         { key: 'temp', cls: 'temp', label: 'Temp', on: isChartLineVisible('temp') },
+        { key: 'feelsLike', cls: 'feels', label: 'Feels Like', on: isChartLineVisible('feelsLike') },
         { key: 'precipProb', cls: 'precip-prob', label: 'Precip %', on: isChartLineVisible('precipProb') },
         { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') },
         { key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') }
