@@ -913,8 +913,15 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: none;
+    /* Explicitly strip the native control chrome. On iOS Safari a <button>
+       keeps an opaque rounded background unless -webkit-appearance is cleared;
+       `background: none` alone is not enough. */
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    background-color: transparent;
     border: none;
+    -webkit-tap-highlight-color: transparent;
     color: var(--text-secondary);
     cursor: pointer;
     padding: 2px;
