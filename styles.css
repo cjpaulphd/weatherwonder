@@ -18,6 +18,7 @@
     --temp-red: #ef9a9a;
     --tide-purple: #b39ddb;
     --wind-orange: #ffb74d;
+    --uv-violet: #b388ff;
     --snow-color: #e91e63;
     --rain-color: #2196f3;
 }
@@ -35,6 +36,7 @@
     --temp-red: #c62828;
     --tide-purple: #7e57c2;
     --wind-orange: #ef6c00;
+    --uv-violet: #6200ea;
     --snow-color: #c2185b;
     --rain-color: #1565c0;
 }
@@ -1245,6 +1247,10 @@ body {
     background-color: var(--wind-orange);
 }
 
+.legend-color.uv {
+    background-color: var(--uv-violet);
+}
+
 /* Chart day-range toggle */
 .chart-range-toggle {
     display: flex;
@@ -2113,6 +2119,7 @@ body {
     --temp-red: #ff6699;
     --tide-purple: #cc66ff;
     --wind-orange: #ff9933;
+    --uv-violet: #e066ff;
     --snow-color: #ff00ff;
     --rain-color: #00ccff;
 }
@@ -2131,6 +2138,7 @@ body {
     --temp-red: #cc3366;
     --tide-purple: #9933cc;
     --wind-orange: #cc6600;
+    --uv-violet: #8800dd;
     --snow-color: #cc00cc;
     --rain-color: #0088cc;
 }

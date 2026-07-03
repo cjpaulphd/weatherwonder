@@ -745,7 +745,7 @@ function initializeTideToggle() {
 // its legend entry. State persists in localStorage and applies across every
 // day-range view. Tide is handled separately via isTideLineOn().
 const CHART_LINES_KEY = 'weatherwonder_chart_lines';
-const CHART_LINE_DEFAULTS = { temp: true, feelsLike: false, precipProb: true, precipAmount: true, wind: false };
+const CHART_LINE_DEFAULTS = { temp: true, feelsLike: false, precipProb: true, precipAmount: true, wind: false, uv: false };
 
 function getChartLineVisibility() {
     try {
@@ -1345,6 +1345,7 @@ async function fetchWeatherData(lat, lon) {
             'weather_code',
             'wind_speed_10m',
             'wind_direction_10m',
+            'uv_index',
             'is_day'
         ].join(','),
         daily: [
@@ -2158,6 +2159,9 @@ const gridLinesPlugin = {
         if (isTideLineOn() && isCoastalLocation()) {
             drawUnitAxis(chart.scales['y-tide'], 'right', gridColors.tideBorder, v => formatTideHeight(v, true));
         }
+        if (isChartLineVisible('uv')) {
+            drawUnitAxis(chart.scales['y-uv'], 'right', gridColors.uvBorder, v => `UV ${Math.round(v)}`);
+        }
 
         // Draw day separators
         const labels = chart.data.labels;
@@ -2280,6 +2284,7 @@ function getChartColors() {
     const precipGreen = styles.getPropertyValue('--precip-green').trim();
     const tidePurple = styles.getPropertyValue('--tide-purple').trim();
     const windOrange = styles.getPropertyValue('--wind-orange').trim();
+    const uvViolet = styles.getPropertyValue('--uv-violet').trim();
 
     // Parse hex color to rgba with alpha
     function hexToRgba(hex, alpha) {
@@ -2307,6 +2312,7 @@ function getChartColors() {
         precipAmountBg: hexToRgba(precipGreen, 0.3),
         tideBorder: tidePurple,
         windBorder: windOrange,
+        uvBorder: uvViolet,
         tempGridLine: hexToRgba(tempRed, 0.3),
         tempGridLabel: hexToRgba(tempRed, 0.7),
         precipGridLine: hexToRgba(precipGreen, 0.3),
@@ -2353,6 +2359,7 @@ function renderChart(data) {
     const precipAmounts = [];
     const tideHeights = [];
     const windSpeeds = [];
+    const uvValues = [];
     const isDayFlags = [];
     const precipCfg = getChartPrecipConfig();
 
@@ -2367,6 +2374,8 @@ function renderChart(data) {
         precipAmounts.push(hourly.precipitation[i] * precipCfg.factor);
         // Wind speed is stored in mph; the tooltip converts for display.
         windSpeeds.push(hourly.wind_speed_10m[i]);
+        // UV index is a unitless 0–11+ scale, the same across all display modes.
+        uvValues.push(hourly.uv_index ? hourly.uv_index[i] : null);
         isDayFlags.push(hourly.is_day[i]);
         if (showTide) {
             const ft = tideByTime[hourly.time[i]];
@@ -2434,6 +2443,11 @@ function renderChart(data) {
     // Wind axis scale (mph), from 0 up to a padded max.
     const maxWind = Math.max(5, ...windSpeeds.filter(v => v != null));
     const windScaleMax = Math.ceil(maxWind * 1.2 / 5) * 5;
+
+    // UV axis scale (unitless), from 0 up to a padded whole-number max. A floor
+    // of 2 keeps the line readable on low-UV days.
+    const maxUv = Math.max(2, ...uvValues.filter(v => v != null));
+    const uvScaleMax = Math.ceil(maxUv * 1.1);
 
     if (forecastChart) {
         forecastChart.destroy();
@@ -2507,6 +2521,18 @@ function renderChart(data) {
                     pointHoverRadius: 4,
                     yAxisID: 'y-wind'
                 }] : []),
+                ...(isChartLineVisible('uv') ? [{
+                    label: 'UV Index',
+                    data: uvValues,
+                    borderColor: colors.uvBorder,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    spanGaps: true,
+                    yAxisID: 'y-uv'
+                }] : []),
                 ...(showTide ? [{
                     label: 'Tide',
                     data: tideHeights,
@@ -2577,6 +2603,9 @@ function renderChart(data) {
                                 return `Tide: ${sign}${formatTideHeight(context.raw, true)}`;
                             } else if (axis === 'y-wind') {
                                 return `Wind: ${formatWindSpeed(context.raw)}`;
+                            } else if (axis === 'y-uv') {
+                                if (context.raw == null) return null;
+                                return `UV Index: ${Math.round(context.raw)}`;
                             } else {
                                 const cfg = getChartPrecipConfig();
                                 const amt = context.raw < cfg.step / 10 ? 0 : context.raw;
@@ -2620,6 +2649,12 @@ function renderChart(data) {
                     position: 'right',
                     min: 0,
                     max: windScaleMax
+                },
+                'y-uv': {
+                    display: false,
+                    position: 'right',
+                    min: 0,
+                    max: uvScaleMax
                 }
             }
         }
@@ -2645,7 +2680,8 @@ function renderChart(data) {
         { key: 'feelsLike', cls: 'feels', label: 'Feels Like', on: isChartLineVisible('feelsLike') },
         { key: 'precipProb', cls: 'precip-prob', label: 'Precip %', on: isChartLineVisible('precipProb') },
         { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') },
-        { key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') }
+        { key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') },
+        { key: 'uv', cls: 'uv', label: 'UV', on: isChartLineVisible('uv') }
     ];
     if (isCoastalLocation()) {
         items.push({ key: 'tide', cls: 'tide', label: 'Tide', on: isTideLineOn() });
