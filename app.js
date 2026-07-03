@@ -4250,6 +4250,57 @@ const EXPLAINERS = {
                 <button class="explainer-link" data-explain="conditions">Current conditions</button>
             </div>
         `
+    },
+    astro: {
+        title: 'Sun, Moon & Tide',
+        body: `
+            <p class="explainer-intro">The table lists the day's sky events in chronological order, in the location's local time.</p>
+
+            <h4>Twilight</h4>
+            <p>Twilight is the stretch of partial light before sunrise and after sunset, graded by how far the sun sits <em>below</em> the horizon:</p>
+            <p><strong>Civil</strong> (0&ndash;6&deg; below) is the brightest stage — enough natural light to be out without artificial lighting, with only the brightest stars and planets showing. This is "dawn" and "dusk" in the everyday sense.</p>
+            <p><strong>Nautical</strong> (6&ndash;12&deg;) is when the sea horizon is still faintly visible against the sky — historically the window sailors used to sight stars against it for navigation. On land it looks dark.</p>
+            <p><strong>Astronomical</strong> (12&ndash;18&deg;) is the last faint trace of sunlight. Once the sun is 18&deg; down the sky is fully dark and the faintest objects are visible; beyond that is true night. So <strong>Astronomical Dawn</strong> is the very first light of the day, and <strong>Astronomical Dusk</strong> is the last.</p>
+
+            <h4>Sun</h4>
+            <p>Sunrise and sunset are the moments the sun's upper edge crosses the horizon. <strong>Solar noon</strong> is when it reaches its highest point in the sky — that's rarely 12:00 on the clock, because of where you sit within your timezone and the tilt and ellipse of Earth's orbit. <strong>Day Length</strong> is the sunrise-to-sunset span, and the figure beneath it shows how much longer or shorter the day is than yesterday as the seasons turn.</p>
+
+            <h4>Moon</h4>
+            <p>The phase name and illumination percentage describe how much of the moon's disc is lit from our vantage point — new (0%) through first quarter (50%) to full (100%) and back. Because the moon is orbiting Earth, it rises and sets about <strong>50 minutes later each day</strong>, so those times drift steadily across the clock over the month.</p>
+
+            <h4>Tides</h4>
+            <p>Shown for coastal locations when the Tides toggle is on. Most coasts see two highs and two lows a day (semidiurnal), driven mainly by the moon's gravity with the sun adding to it. When the sun and moon line up (new and full moon) their pulls combine into larger <strong>spring tides</strong>; at the quarter moons they partly cancel into smaller <strong>neap tides</strong>. US locations use NOAA station predictions; elsewhere a global model fills in.</p>
+
+            <div class="explainer-related">
+                <div class="explainer-related-label">Related</div>
+                <button class="explainer-link" data-explain="conditions">Current conditions</button>
+                <button class="explainer-link" data-explain="forecast">How the forecast works</button>
+            </div>
+        `
+    },
+    precip: {
+        title: 'Precipitation History',
+        body: `
+            <p class="explainer-intro">How wet has it actually been lately? This section totals recent rain and snow and sets it against the local norm.</p>
+
+            <h4>Rolling totals</h4>
+            <p>Each tile sums measured precipitation over a trailing window — from the last 24 hours out to the last three months. Amounts follow your unit toggle (inches, millimetres, or microns), and snow is counted as its liquid-water equivalent.</p>
+
+            <h4>Compared to normal</h4>
+            <p>Beneath each total is the <strong>10-year average</strong> for that same calendar window, plus a colored figure showing how far above or below average the current period is running. It's a quick read on whether you're in an unusually wet or dry stretch, rather than just a raw number with no context.</p>
+
+            <h4>Where the numbers come from</h4>
+            <p>Recent totals use Open-Meteo's <strong>historical-forecast archive</strong> — the best forecast that was actually issued at the time, which tracks what fell far better than a model's after-the-fact reconstruction. The long-term averages come from Open-Meteo's reanalysis archive of past weather.</p>
+
+            <h4>Go deeper</h4>
+            <p>For day-by-day breakdowns and richer analysis, the link at the bottom of the section opens <strong>Hilary's Sprout</strong>, a companion app focused entirely on precipitation history for the same location.</p>
+
+            <div class="explainer-related">
+                <div class="explainer-related-label">Related</div>
+                <button class="explainer-link" data-explain="forecast">How the forecast works</button>
+                <button class="explainer-link" data-explain="conditions">Current conditions</button>
+            </div>
+        `
     }
 };
 
