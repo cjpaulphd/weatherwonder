@@ -908,6 +908,123 @@ body {
     cursor: pointer;
 }
 
+/* Info ("ⓘ") buttons that open a weather explainer modal */
+.info-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px;
+    line-height: 0;
+    transition: color 0.2s;
+}
+
+.info-btn:hover {
+    color: var(--accent-blue);
+}
+
+/* In a section header, keep the info button beside the title and push the
+   share button to the far right. */
+.section-header .info-btn {
+    margin-right: auto;
+}
+
+/* Info button appended to the current-conditions bar */
+.conditions-bar .info-btn {
+    vertical-align: middle;
+}
+
+/* Weather Explainer Modal */
+.explainer-content {
+    max-width: 460px;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 24px;
+    text-align: left;
+}
+
+.explainer-content h3 {
+    font-size: 19px;
+    margin-bottom: 4px;
+    padding-right: 28px;
+}
+
+.explainer-content h3:focus {
+    outline: none;
+}
+
+.explainer-body {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text-primary);
+}
+
+.explainer-body .explainer-intro {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.explainer-body h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 18px 0 6px;
+}
+
+.explainer-body p {
+    margin-bottom: 10px;
+}
+
+.explainer-body strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Inline term abbreviations (RH, DP, dBZ, …) */
+.explainer-body .term {
+    color: var(--accent-blue);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.explainer-related {
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid var(--bg-card);
+}
+
+.explainer-related-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.explainer-link {
+    display: inline-block;
+    background-color: var(--bg-card);
+    border: none;
+    border-radius: 14px;
+    padding: 6px 12px;
+    margin: 0 6px 6px 0;
+    color: var(--accent-blue);
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.explainer-link:hover {
+    background-color: var(--bg-primary);
+}
+
 /* Share Modal */
 .share-modal-content {
     text-align: center;

@@ -1589,7 +1589,15 @@ function renderConditionsBar() {
         return;
     }
 
-    el.innerHTML = parts.join('<span class="cond-sep">&middot;</span>');
+    // Info button explaining the metrics shown in this bar (RH/DP, feels-like,
+    // AQI, wind). Content is app-authored, so no escaping needed.
+    const infoBtn = '<button class="info-btn cond-info" data-explain="conditions" aria-label="About these conditions">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>' +
+        '</svg></button>';
+
+    el.innerHTML = parts.join('<span class="cond-sep">&middot;</span>') +
+        '<span class="cond-sep">&middot;</span>' + infoBtn;
 }
 
 // US state abbreviation lookup for "city, state" search parsing
@@ -4193,6 +4201,177 @@ function initializePullToRefresh() {
 // trap Tab within it, and restore focus to the triggering element on close.
 // Modals are opened/closed by toggling the `hidden` class from many call sites,
 // so we observe that class rather than wrapping every call site.
+// Weather Explainer content. Each entry is opened by an info ("ⓘ") button
+// carrying data-explain="<key>". The bodies are app-authored HTML (not from any
+// API or user input), so they are assigned to innerHTML without escaping. The
+// tone aims to be technical but plain-spoken — explaining both what the app
+// shows and the meteorology behind it. Cross-links at the bottom are plain
+// data-explain buttons, so the shared handler swaps content within the same
+// modal.
+const EXPLAINERS = {
+    conditions: {
+        title: 'Current Conditions',
+        body: `
+            <p class="explainer-intro">The bar under your location sums up what the air is doing right now. Here's what each figure means.</p>
+
+            <h4>Feels-Like</h4>
+            <p>The apparent temperature — what the air feels like on skin once humidity and wind are folded in. In warm weather it follows the <strong>heat index</strong>: humid air slows the evaporation of sweat, so your body sheds heat less efficiently and it feels hotter than the thermometer reads. In the cold it follows <strong>wind chill</strong>: moving air strips away the thin warm layer against your skin, so it feels colder. WeatherWonder shows it next to the temperature only when it diverges from the actual reading by more than a couple of degrees.</p>
+
+            <h4>Relative Humidity &amp; Dew Point</h4>
+            <p><span class="term">RH</span> (relative humidity) is how full the air is of water vapor, as a percentage of the most it could hold <em>at the current temperature</em>. Because that ceiling rises and falls with temperature, RH alone is a poor comfort gauge — 60% at dawn and 60% at midday describe very different air.</p>
+            <p><span class="term">DP</span> (dew point) is the more honest number: the temperature the air would have to cool to before its vapor starts condensing. It's an absolute measure of moisture, so it tracks how muggy it actually feels. A rough guide: dew points below ~55&deg;F feel dry and comfortable, the 60s feel sticky, and 70&deg;F and up is oppressive. WeatherWonder colors RH and DP on the same scale, keyed to the dew point.</p>
+
+            <h4>Air Quality Index</h4>
+            <p><span class="term">AQI</span> condenses pollutants — mainly fine particulates (PM2.5) and ozone — onto a single 0&ndash;500 scale, reported for whichever pollutant is currently worst. 0&ndash;50 (green) is good; 51&ndash;100 (yellow) is acceptable; above 100 the air starts to affect sensitive groups, and above 150 it affects everyone.</p>
+
+            <h4>Wind</h4>
+            <p>The arrow points the way the wind is blowing <em>toward</em>, labeled with the compass direction it comes <em>from</em> (the meteorological convention) and its sustained speed. Gusts can run well above the figure shown.</p>
+
+            <div class="explainer-related">
+                <div class="explainer-related-label">Related</div>
+                <button class="explainer-link" data-explain="forecast">How the forecast works</button>
+                <button class="explainer-link" data-explain="radar">Reading the radar</button>
+            </div>
+        `
+    },
+    forecast: {
+        title: 'How the Forecast Works',
+        body: `
+            <p class="explainer-intro">Every number past this hour is a model output, not a measurement. Knowing how those models behave tells you how much to trust them.</p>
+
+            <h4>Numerical weather prediction</h4>
+            <p>Forecasts come from physics simulations. The atmosphere is divided into a three-dimensional grid of cells, seeded with current observations from satellites, weather balloons, aircraft, and surface stations, then stepped forward in time by solving the equations that govern how air, heat, and moisture move. WeatherWonder's data comes from <strong>Open-Meteo</strong>, which blends several national models — including NOAA's GFS, the ECMWF, and Germany's ICON — each run on its own grid resolution and update schedule.</p>
+
+            <h4>Why confidence fades with time</h4>
+            <p>The atmosphere is chaotic: tiny errors in the starting conditions grow as the simulation runs forward. A day or two out, models are usually excellent. By day seven they capture the broad pattern — a warm spell, an approaching front — but not the hour it rains. Read the near term as reliable and the far end as a trend, and check back as it sharpens.</p>
+
+            <h4>Probability vs. amount</h4>
+            <p>These answer two different questions. <strong>Precipitation probability</strong> is the model's confidence that measurable precip falls at all; <strong>precipitation amount</strong> is how much it expects if it does. A 30% chance of a heavy downpour and an 80% chance of a passing sprinkle are both ordinary — read them together, which is why the forecast chart plots them as separate lines.</p>
+
+            <div class="explainer-related">
+                <div class="explainer-related-label">Related</div>
+                <button class="explainer-link" data-explain="radar">Reading the radar</button>
+                <button class="explainer-link" data-explain="conditions">Current conditions</button>
+            </div>
+        `
+    },
+    radar: {
+        title: 'Reading the Radar',
+        body: `
+            <p class="explainer-intro">Radar shows precipitation that's happening right now, bridging the gap between current conditions and the forecast.</p>
+
+            <h4>How Doppler radar sees rain</h4>
+            <p>A ground station sweeps a beam of microwave energy across the sky. Raindrops, snow, and hail scatter a little of it back; the station times the echo to locate it and measures its strength. Bigger, denser drops bounce back a stronger echo, so the radar infers intensity from how much energy returns — a quantity called <strong>reflectivity</strong>, measured in <span class="term">dBZ</span>.</p>
+
+            <h4>The color scale</h4>
+            <p>WeatherWonder maps reflectivity to color, from light green through yellow and orange to red. Green is drizzle or light rain; yellow and orange are steady to heavy rain; red marks the intense cores of downpours and thunderstorms, often carrying the most lightning and the chance of hail. The imagery comes from <strong>RainViewer</strong>, which composites feeds from national radar networks.</p>
+
+            <h4>What radar can't tell you</h4>
+            <p>The beam travels in a straight line while the Earth curves away beneath it, so far from the station it passes above low-level rain and can miss it. Close in, hills and buildings throw back false echoes (clutter). And the picture is a few minutes old by the time it's processed. For frame-by-frame animation and storm tracking, the <strong>RadarScope</strong> link below the map opens a dedicated app.</p>
+
+            <div class="explainer-related">
+                <div class="explainer-related-label">Related</div>
+                <button class="explainer-link" data-explain="forecast">How the forecast works</button>
+                <button class="explainer-link" data-explain="conditions">Current conditions</button>
+            </div>
+        `
+    },
+    astro: {
+        title: 'Sun, Moon & Tide',
+        body: `
+            <p class="explainer-intro">The table lists the day's sky events in chronological order, in the location's local time.</p>
+
+            <h4>Twilight</h4>
+            <p>Twilight is the stretch of partial light before sunrise and after sunset, graded by how far the sun sits <em>below</em> the horizon:</p>
+            <p><strong>Civil</strong> (0&ndash;6&deg; below) is the brightest stage — enough natural light to be out without artificial lighting, with only the brightest stars and planets showing. This is "dawn" and "dusk" in the everyday sense.</p>
+            <p><strong>Nautical</strong> (6&ndash;12&deg;) is when the sea horizon is still faintly visible against the sky — historically the window sailors used to sight stars against it for navigation. On land it looks dark.</p>
+            <p><strong>Astronomical</strong> (12&ndash;18&deg;) is the last faint trace of sunlight. Once the sun is 18&deg; down the sky is fully dark and the faintest objects are visible; beyond that is true night. So <strong>Astronomical Dawn</strong> is the very first light of the day, and <strong>Astronomical Dusk</strong> is the last.</p>
+
+            <h4>Sun</h4>
+            <p>Sunrise and sunset are the moments the sun's upper edge crosses the horizon. <strong>Solar noon</strong> is when it reaches its highest point in the sky — that's rarely 12:00 on the clock, because of where you sit within your timezone and the tilt and ellipse of Earth's orbit. <strong>Day Length</strong> is the sunrise-to-sunset span, and the figure beneath it shows how much longer or shorter the day is than yesterday as the seasons turn.</p>
+
+            <h4>Moon</h4>
+            <p>The phase name and illumination percentage describe how much of the moon's disc is lit from our vantage point — new (0%) through first quarter (50%) to full (100%) and back. Because the moon is orbiting Earth, it rises and sets about <strong>50 minutes later each day</strong>, so those times drift steadily across the clock over the month.</p>
+
+            <h4>Tides</h4>
+            <p>Shown for coastal locations when the Tides toggle is on. Most coasts see two highs and two lows a day (semidiurnal), driven mainly by the moon's gravity with the sun adding to it. When the sun and moon line up (new and full moon) their pulls combine into larger <strong>spring tides</strong>; at the quarter moons they partly cancel into smaller <strong>neap tides</strong>. US locations use NOAA station predictions; elsewhere a global model fills in.</p>
+
+            <div class="explainer-related">
+                <div class="explainer-related-label">Related</div>
+                <button class="explainer-link" data-explain="conditions">Current conditions</button>
+                <button class="explainer-link" data-explain="forecast">How the forecast works</button>
+            </div>
+        `
+    },
+    precip: {
+        title: 'Precipitation History',
+        body: `
+            <p class="explainer-intro">How wet has it actually been lately? This section totals recent rain and snow and sets it against the local norm.</p>
+
+            <h4>Rolling totals</h4>
+            <p>Each tile sums measured precipitation over a trailing window — from the last 24 hours out to the last three months. Amounts follow your unit toggle (inches, millimetres, or microns), and snow is counted as its liquid-water equivalent.</p>
+
+            <h4>Compared to normal</h4>
+            <p>Beneath each total is the <strong>10-year average</strong> for that same calendar window, plus a colored figure showing how far above or below average the current period is running. It's a quick read on whether you're in an unusually wet or dry stretch, rather than just a raw number with no context.</p>
+
+            <h4>Where the numbers come from</h4>
+            <p>Recent totals use Open-Meteo's <strong>historical-forecast archive</strong> — the best forecast that was actually issued at the time, which tracks what fell far better than a model's after-the-fact reconstruction. The long-term averages come from Open-Meteo's reanalysis archive of past weather.</p>
+
+            <h4>Go deeper</h4>
+            <p>For day-by-day breakdowns and richer analysis, the link at the bottom of the section opens <strong>Hilary's Sprout</strong>, a companion app focused entirely on precipitation history for the same location.</p>
+
+            <div class="explainer-related">
+                <div class="explainer-related-label">Related</div>
+                <button class="explainer-link" data-explain="forecast">How the forecast works</button>
+                <button class="explainer-link" data-explain="conditions">Current conditions</button>
+            </div>
+        `
+    }
+};
+
+// Open the explainer modal on a given topic. Also used by the in-modal
+// cross-links to swap content without closing.
+function openExplainer(key) {
+    const topic = EXPLAINERS[key];
+    if (!topic) return;
+    const modal = document.getElementById('explainer-modal');
+    const titleEl = document.getElementById('explainer-title');
+    const bodyEl = document.getElementById('explainer-body');
+    if (!modal || !titleEl || !bodyEl) return;
+
+    titleEl.textContent = topic.title;
+    bodyEl.innerHTML = topic.body;
+
+    const content = modal.querySelector('.explainer-content');
+    if (content) content.scrollTop = 0;
+
+    modal.classList.remove('hidden');
+    // Move focus to the heading synchronously so the shared focus-management
+    // observer sees focus already inside the modal and doesn't override it.
+    // This also lands keyboard/screen-reader users on the title, and resets
+    // focus sensibly when a cross-link swaps the content in place.
+    titleEl.focus();
+    trackEvent('explain-' + key);
+}
+
+function initializeExplainers() {
+    const modal = document.getElementById('explainer-modal');
+    if (!modal) return;
+
+    const closeBtn = document.getElementById('close-explainer');
+    if (closeBtn) closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.add('hidden');
+    });
+
+    // One delegated handler for every info button and in-modal cross-link.
+    document.addEventListener('click', (e) => {
+        const trigger = e.target.closest('[data-explain]');
+        if (!trigger) return;
+        openExplainer(trigger.getAttribute('data-explain'));
+    });
+}
+
 function initializeModalFocusManagement() {
     const modals = Array.from(document.querySelectorAll('.modal'));
     if (!modals.length) return;
@@ -4297,6 +4476,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeInstallButton,
         initializeIOSInstallModal,
         initializeShareAppModal,
+        initializeExplainers,
         initializeModalFocusManagement,
         initializeCIT2000,
         initializePullToRefresh
