@@ -2252,12 +2252,20 @@ const gridLinesPlugin = {
     }
 };
 
-// Register the plugin
-Chart.register(gridLinesPlugin);
+// Register the plugin. This runs at module-parse time, so guard against Chart
+// being unavailable (CDN blocked/down, or a bad "latest" build that failed to
+// define the global): a bare `Chart.register(...)` would throw a ReferenceError
+// that aborts the rest of app.js, leaving the whole app — forecast, radar,
+// tides, alerts — dead with no data. Degrade to "chart missing" instead.
+if (typeof Chart !== 'undefined') {
+    Chart.register(gridLinesPlugin);
+} else {
+    console.error('Chart.js failed to load; the forecast chart will be unavailable, but the rest of the app will still load.');
+}
 
 // Custom tooltip positioner — anchors the tooltip in the corner diagonally
 // opposite the cursor's quadrant so the highlighted point is never covered.
-if (Chart.Tooltip && Chart.Tooltip.positioners) {
+if (typeof Chart !== 'undefined' && Chart.Tooltip && Chart.Tooltip.positioners) {
     Chart.Tooltip.positioners.corner = function(elements, eventPosition) {
         const chart = this.chart;
         const area = chart.chartArea;
@@ -2322,6 +2330,10 @@ function getChartColors() {
 
 // Render the temperature/precipitation chart - starting from midnight today
 function renderChart(data) {
+    // If Chart.js is unavailable, skip the chart rather than throwing — the
+    // caller (loadWeather) renders the radar, alerts, and astro sections after
+    // this, and they must not be taken down by a missing chart library.
+    if (typeof Chart === 'undefined') return;
     const ctx = document.getElementById('forecast-chart').getContext('2d');
     const hourly = data.hourly;
 
