@@ -741,6 +741,52 @@ function initializeTideToggle() {
     }
 }
 
+// Storm & intensity detail toggle — reveals a precipitation-character row on
+// the hourly and daily forecast cards. Off by default so the cards stay clean;
+// the preference persists in localStorage.
+const PRECIP_DETAIL_KEY = 'weatherwonder_precip_detail';
+
+function isPrecipDetailOn() {
+    try {
+        return localStorage.getItem(PRECIP_DETAIL_KEY) === '1';
+    } catch (e) {
+        return false;
+    }
+}
+
+function savePrecipDetail(on) {
+    try {
+        localStorage.setItem(PRECIP_DETAIL_KEY, on ? '1' : '0');
+    } catch (e) {
+        console.error('Could not save precip detail preference:', e);
+    }
+}
+
+function updatePrecipDetailToggleUI() {
+    const btn = document.getElementById('precip-detail-toggle');
+    if (!btn) return;
+    const on = isPrecipDetailOn();
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+
+function initializePrecipDetailToggle() {
+    updatePrecipDetailToggleUI();
+    const btn = document.getElementById('precip-detail-toggle');
+    if (btn) {
+        btn.addEventListener('click', () => {
+            const next = !isPrecipDetailOn();
+            savePrecipDetail(next);
+            trackEvent('precip-detail-' + (next ? 'on' : 'off'));
+            updatePrecipDetailToggleUI();
+            if (weatherData) {
+                renderDailyForecast(weatherData);
+                renderHourlyForecast(weatherData);
+            }
+        });
+    }
+}
+
 // Chart line visibility — each forecast-chart line can be toggled on/off from
 // its legend entry. State persists in localStorage and applies across every
 // day-range view. Tide is handled separately via isTideLineOn().
@@ -1231,6 +1277,51 @@ function formatPrecip(mm, compact = false) {
     return `${inches.toFixed(2)}"`;
 }
 
+// Classify an hour's precipitation rate into a coarse intensity tier, using
+// standard meteorological thresholds: rain light < 2.5 mm/h, moderate
+// 2.5–7.6 mm/h, heavy > 7.6 mm/h; snow light < 1 cm/h, moderate 1–2.5 cm/h,
+// heavy > 2.5 cm/h. The tier describes the rate IF precipitation falls — it
+// says nothing about the probability, which the 💧% row covers.
+function getPrecipIntensity(precipMm, snowfallCm) {
+    if (snowfallCm > 0) {
+        if (snowfallCm > 2.5) return { label: 'Heavy', cls: 'heavy' };
+        if (snowfallCm >= 1) return { label: 'Moderate', cls: 'moderate' };
+        return { label: 'Light', cls: 'light' };
+    }
+    if (precipMm > 0) {
+        if (precipMm > 7.6) return { label: 'Heavy', cls: 'heavy' };
+        if (precipMm >= 2.5) return { label: 'Moderate', cls: 'moderate' };
+        return { label: 'Light', cls: 'light' };
+    }
+    return null;
+}
+
+// Storm signal for an hour. The model's own thunderstorm weather codes
+// (95/96/99) are the primary, vetted signal. High CAPE (the convective energy
+// available to fuel a storm) combined with a real precipitation chance flags
+// latent storm potential the deterministic code hasn't committed to — shown
+// with softer "risk" wording since CAPE alone is not a forecast of a storm.
+function getStormSignal(weatherCode, cape, precipProb) {
+    if (weatherCode >= 95) return { label: '⛈ Storm', cls: 'storm' };
+    if (cape >= 2000 && precipProb >= 40) return { label: '⚡ Storm risk', cls: 'storm-risk' };
+    return null;
+}
+
+// One short phrase describing a wet day's character, derived from how many of
+// its hours see precipitation vs. how much falls in total. Turns identical
+// daily sums into different, actionable reads: a brief soaking vs. all-day rain.
+function getDayPrecipCharacter(weatherCode, precipSumMm, precipHours, snowfallCm) {
+    if (weatherCode >= 95) return { label: '⛈ Storms', cls: 'storm' };
+    if (!(precipSumMm > 0) || !(precipHours > 0)) return null;
+    const snowy = snowfallCm >= 1;
+    if (precipHours <= 4) {
+        if (!snowy && precipSumMm / precipHours >= 2.5) return { label: 'Brief downpour', cls: 'heavy' };
+        return { label: snowy ? 'Brief snow' : 'Brief showers', cls: 'light' };
+    }
+    if (precipHours >= 10) return { label: snowy ? 'Steady snow' : 'Steady rain', cls: 'moderate' };
+    return { label: snowy ? 'Passing snow' : 'Passing showers', cls: 'light' };
+}
+
 // Format a tide height (stored internally in feet) per the active unit toggle,
 // matching the temperature/precip units: F → feet, C → metres, K → microns.
 function formatTideHeight(ft, compact = false) {
@@ -1346,13 +1437,15 @@ async function fetchWeatherData(lat, lon) {
             'wind_speed_10m',
             'wind_direction_10m',
             'uv_index',
-            'is_day'
+            'is_day',
+            'cape'
         ].join(','),
         daily: [
             'temperature_2m_max',
             'temperature_2m_min',
             'precipitation_probability_max',
             'precipitation_sum',
+            'precipitation_hours',
             'snowfall_sum',
             'weather_code',
             'wind_speed_10m_max',
@@ -1800,6 +1893,7 @@ function renderDailyForecast(data) {
 
     const daily = data.daily;
     const today = getMidnightToday();
+    const showPrecipDetail = isPrecipDetailOn();
 
     // Find the index for today
     // Note: daily.time values are "YYYY-MM-DD" strings. new Date("YYYY-MM-DD") parses
@@ -1860,6 +1954,20 @@ function renderDailyForecast(data) {
         const precipAmountHtml = precipAmtStr
             ? `<div class="precip-amount${kClass}">${precipAmtStr}</div>`
             : `<div class="precip-amount placeholder">&nbsp;</div>`;
+        // Day-character row ("Brief showers" vs "Steady rain"), only when the
+        // Storms toggle is on and the cards are wide enough (not the 10-day
+        // view). Last row in the card so a wrapped phrase can't misalign the
+        // rows above it across cards.
+        let precipCharacterHtml = '';
+        if (showPrecipDetail && !compact) {
+            const character = getDayPrecipCharacter(
+                dailyWeatherCode, daily.precipitation_sum[i],
+                daily.precipitation_hours ? daily.precipitation_hours[i] : 0,
+                daily.snowfall_sum[i]);
+            precipCharacterHtml = character
+                ? `<div class="precip-character ${character.cls}">${character.label}</div>`
+                : `<div class="precip-character placeholder">&nbsp;</div>`;
+        }
 
         if (compact) {
             const dayCode = tempGuardedCode(dailyWeatherCode, daily.temperature_2m_max[i]);
@@ -1886,6 +1994,7 @@ function renderDailyForecast(data) {
                 <div class="wind-info${kClass}">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
                 ${precipInfoHtml}
                 ${precipAmountHtml}
+                ${precipCharacterHtml}
             `;
         }
 
@@ -1904,6 +2013,7 @@ function renderHourlyForecast(data) {
     // Tide height per hour, shown in the cards only when the Tides toggle is on
     // (same on/off state as the chart tide line and the table rows).
     const showTide = isTideLineOn() && isCoastalLocation();
+    const showPrecipDetail = isPrecipDetailOn();
     let tideByTime = null;
     if (showTide) {
         tideByTime = {};
@@ -1977,6 +2087,16 @@ function renderHourlyForecast(data) {
         const precipAmountHtml = precipStr
             ? `<div class="precip-amount${hkClass}">${precipStr}</div>`
             : `<div class="precip-amount placeholder">&nbsp;</div>`;
+        // Storm/intensity row, only when the footer Storms toggle is on. Like
+        // the tide row, it reserves its slot on every card so values line up.
+        let precipDetailHtml = '';
+        if (showPrecipDetail) {
+            const tag = getStormSignal(weatherCode, hourly.cape ? hourly.cape[i] : 0, precipProb || 0)
+                || getPrecipIntensity(precip, snowfall);
+            precipDetailHtml = tag
+                ? `<div class="precip-detail ${tag.cls}">${tag.label}</div>`
+                : `<div class="precip-detail placeholder">&nbsp;</div>`;
+        }
         // The tide row only exists when the Tides toggle is on; then it reserves
         // a slot on every card so the tide values line up.
         let tideHtml = '';
@@ -1997,6 +2117,7 @@ function renderHourlyForecast(data) {
             </div>
             ${precipChanceHtml}
             ${precipAmountHtml}
+            ${precipDetailHtml}
             ${tideHtml}
         `;
 
@@ -4298,8 +4419,31 @@ const EXPLAINERS = {
 
             <div class="explainer-related">
                 <div class="explainer-related-label">Related</div>
+                <button class="explainer-link" data-explain="stormDetail">Storm &amp; intensity detail</button>
                 <button class="explainer-link" data-explain="radar">Reading the radar</button>
                 <button class="explainer-link" data-explain="conditions">Current conditions</button>
+            </div>
+        `
+    },
+    stormDetail: {
+        title: 'Storm & Intensity Detail',
+        body: `
+            <p class="explainer-intro">The <strong>⛈️ Storms</strong> toggle in the footer adds one extra row to the forecast cards describing how hard precipitation is likely to fall — and whether thunderstorms are in play.</p>
+
+            <h4>Intensity tiers</h4>
+            <p>On the hourly cards, wet hours are labeled <strong>Light</strong> (barely wets the pavement), <strong>Moderate</strong> (umbrella weather), or <strong>Heavy</strong> (wipers on full, water ponding). The tiers use standard meteorological rate thresholds — for rain, "heavy" means more than 0.3&nbsp;inches (7.6&nbsp;mm) in the hour; snow is tiered by its own snowfall rate.</p>
+            <p>Read the tier <em>together with</em> the 💧 percentage: the tier says how hard it would rain, the percentage says how likely it is to rain at all. A 30% chance of Heavy is a very different plan-changer than an 80% chance of Light.</p>
+
+            <h4>Storm signals</h4>
+            <p><strong>⛈ Storm</strong> means the forecast model itself is calling for a thunderstorm that hour. <strong>⚡ Storm risk</strong> is softer: the atmosphere holds a large amount of convective energy (CAPE — the fuel storms feed on) and there's a real chance of precipitation, but the model hasn't committed to a storm. Treat it as "worth keeping an eye on the radar," not a promise of thunder.</p>
+
+            <h4>Day character</h4>
+            <p>On the daily cards, the same toggle adds a phrase built from <em>how many hours</em> of the day see precipitation: <strong>Brief showers</strong> or a <strong>Brief downpour</strong> (a few wet hours), <strong>Passing showers</strong> (on and off), or <strong>Steady rain</strong> (most of the day). Two days with the same total can feel completely different — this row tells them apart.</p>
+
+            <div class="explainer-related">
+                <div class="explainer-related-label">Related</div>
+                <button class="explainer-link" data-explain="forecast">How the forecast works</button>
+                <button class="explainer-link" data-explain="radar">Reading the radar</button>
             </div>
         `
     },
@@ -4515,6 +4659,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeTempToggle,
         initializeTimeToggle,
         initializeTideToggle,
+        initializePrecipDetailToggle,
         initializeChartRangeToggle,
         updateLocationDisplay,
         initializeModal,

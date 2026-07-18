@@ -21,6 +21,7 @@
     --uv-violet: #b388ff;
     --snow-color: #e91e63;
     --rain-color: #2196f3;
+    --storm-amber: #ffca28;
 }
 
 [data-theme="light"] {
@@ -39,6 +40,7 @@
     --uv-violet: #6200ea;
     --snow-color: #c2185b;
     --rain-color: #1565c0;
+    --storm-amber: #b26a00;
 }
 
 /* Visible focus indicator for keyboard navigation (not shown for mouse/touch) */
@@ -782,6 +784,45 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Storm/intensity detail rows (footer Storms toggle). Tier colors escalate
+   muted → blue → orange; storm signals use the amber accent. */
+.hourly-card .precip-detail {
+    font-size: 10px;
+    margin-top: 2px;
+    white-space: nowrap;
+}
+
+.daily-card .precip-character {
+    font-size: 9px;
+    line-height: 1.2;
+}
+
+.hourly-card .precip-detail.light,
+.daily-card .precip-character.light {
+    color: var(--text-secondary);
+}
+
+.hourly-card .precip-detail.moderate,
+.daily-card .precip-character.moderate {
+    color: var(--precip-blue);
+}
+
+.hourly-card .precip-detail.heavy,
+.daily-card .precip-character.heavy {
+    color: var(--wind-orange);
+}
+
+.hourly-card .precip-detail.storm,
+.hourly-card .precip-detail.storm-risk,
+.daily-card .precip-character.storm {
+    color: var(--storm-amber);
+}
+
+.hourly-card .precip-detail.storm,
+.daily-card .precip-character.storm {
+    font-weight: 600;
 }
 
 .hourly-card .windchill {
@@ -1667,6 +1708,11 @@ body {
 .tide-toggle.active {
     color: var(--tide-purple);
     border-color: var(--tide-purple);
+}
+
+.precip-detail-toggle.active {
+    color: var(--storm-amber);
+    border-color: var(--storm-amber);
 }
 
 .share-app-btn {
