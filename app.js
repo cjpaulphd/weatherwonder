@@ -2414,10 +2414,14 @@ const gridLinesPlugin = {
         });
 
         // Hour-of-day markers — only when the visible range is short enough
-        // for the chart to have room for them. 3 days: every 6h. 5 days: noon only.
+        // for the chart to have room for them. 1 day: every hour. 3 days:
+        // every 6h. 5 days: noon only. Labels sit near the top of the chart
+        // (below the "now" label, which is drawn afterward at the same edge).
         const days = (typeof getChartDays === 'function') ? getChartDays() : 7;
         let hourTicks = null;
-        if (days <= 3) {
+        if (days === 1) {
+            hourTicks = Array.from({ length: 24 }, (_, h) => h);
+        } else if (days <= 3) {
             hourTicks = [6, 12, 18];
         } else if (days <= 5) {
             hourTicks = [12];
@@ -2448,7 +2452,7 @@ const gridLinesPlugin = {
                 ctx.moveTo(x, chartArea.top);
                 ctx.lineTo(x, chartArea.bottom);
                 ctx.stroke();
-                ctx.fillText(hourLabel(date.getHours()), x, chartArea.bottom - 3);
+                ctx.fillText(hourLabel(date.getHours()), x, chartArea.top + 20);
             });
         }
 
