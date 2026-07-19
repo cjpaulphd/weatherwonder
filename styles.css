@@ -313,6 +313,10 @@ body {
     background-color: var(--bg-primary);
 }
 
+.menu-section .menu-item + .menu-item {
+    margin-top: 8px;
+}
+
 /* Last Updated */
 .last-updated {
     text-align: center;
@@ -1810,6 +1814,21 @@ body {
     text-decoration: underline;
 }
 
+/* Button styled to sit inline with the footer's text links */
+.footer-link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    font-size: 10px;
+    color: var(--accent-blue);
+    cursor: pointer;
+}
+
+.footer-link-btn:hover {
+    text-decoration: underline;
+}
+
 /* iOS Install Instructions Modal */
 .ios-install-content {
     text-align: center;
@@ -1877,6 +1896,102 @@ body {
     width: 100%;
     padding: 14px;
     font-size: 15px;
+}
+
+/* Welcome / Getting Started Modal */
+.welcome-content {
+    text-align: center;
+    padding: 28px 24px 24px;
+    max-width: 420px;
+    max-height: 88vh;
+    overflow-y: auto;
+}
+
+.welcome-logo {
+    margin-bottom: 10px;
+}
+
+.welcome-content h3 {
+    margin-bottom: 6px;
+}
+
+.welcome-content h3:focus {
+    outline: none;
+}
+
+.welcome-subtitle {
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.welcome-powered {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 18px;
+}
+
+.welcome-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 18px;
+    text-align: left;
+}
+
+.welcome-step {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px;
+    background-color: var(--bg-primary);
+    border-radius: 10px;
+}
+
+.welcome-step-number {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--accent-blue);
+    color: var(--bg-primary);
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.welcome-step-text {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-primary);
+}
+
+.welcome-info-glyph {
+    color: var(--accent-blue);
+    font-weight: 600;
+}
+
+.welcome-settings {
+    margin-bottom: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--bg-card);
+}
+
+.welcome-settings-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+
+.welcome-settings-row {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
 }
 
 /* Share App Modal */

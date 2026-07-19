@@ -121,6 +121,10 @@
                     <span>📍</span>
                     <span>Change Location</span>
                 </button>
+                <button id="menu-welcome" class="menu-item">
+                    <span>👋</span>
+                    <span>Welcome &amp; Settings</span>
+                </button>
             </div>
         </nav>
 
@@ -338,7 +342,7 @@
                 &middot; <a href="https://tidesandcurrents.noaa.gov/" target="_blank" rel="noopener">NOAA Tides</a>
             </div>
             <div class="footer-license">
-                <a href="https://github.com/cjpaulphd/weatherwonder" target="_blank" rel="noopener">MIT License</a> &middot; Open Source &middot; <a href="https://github.com/cjpaulphd/weatherwonder/issues" target="_blank" rel="noopener">Feedback</a>
+                <a href="https://github.com/cjpaulphd/weatherwonder" target="_blank" rel="noopener">MIT License</a> &middot; Open Source &middot; <a href="https://github.com/cjpaulphd/weatherwonder/issues" target="_blank" rel="noopener">Feedback</a> &middot; <button id="welcome-footer-link" class="footer-link-btn">Welcome Guide</button>
             </div>
             <button id="cit2000-btn" class="theme-toggle cit2000-btn">
                 <span class="theme-toggle-icon">🌈</span>
@@ -346,6 +350,57 @@
             </button>
             <div id="cit2000-banner" class="cit2000-banner hidden">Pahooootie</div>
         </footer>
+
+        <!-- Welcome / Getting Started Modal (auto-opens once for new users;
+             reachable later from the footer link and the side-menu entry) -->
+        <div id="welcome-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+            <div class="modal-content welcome-content">
+                <svg class="welcome-logo" width="56" height="56" viewBox="0 0 512 512" aria-hidden="true">
+                    <rect width="512" height="512" rx="108" fill="var(--bg-card)"/>
+                    <path d="M72 148 L128 364 L184 220 L240 364 L296 148" fill="none" stroke="var(--accent-blue)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M216 180 L272 396 L328 252 L384 396 L440 180" fill="none" stroke="var(--accent-blue)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+                </svg>
+                <h3 id="welcome-title" tabindex="-1">Welcome to WeatherWonder!</h3>
+                <p class="welcome-subtitle">Your complete weather dashboard &mdash; forecast, radar, alerts, and sky data.</p>
+                <p class="welcome-powered">Built on free, open weather data from Open-Meteo, RainViewer, and the National Weather Service. No account, no ads, no tracking.</p>
+                <div class="welcome-steps">
+                    <div class="welcome-step">
+                        <div class="welcome-step-number">1</div>
+                        <div class="welcome-step-text"><strong>Set your location</strong> &mdash; tap the location name at the top any time to search for a city or ZIP, or share your GPS.</div>
+                    </div>
+                    <div class="welcome-step">
+                        <div class="welcome-step-number">2</div>
+                        <div class="welcome-step-text"><strong>Save your places</strong> &mdash; tap the ☆ beside the location name to favorite it. Favorites live in the ☰ menu for one-tap switching.</div>
+                    </div>
+                    <div class="welcome-step">
+                        <div class="welcome-step-number">3</div>
+                        <div class="welcome-step-text"><strong>Dig deeper</strong> &mdash; every section has an <span class="welcome-info-glyph" aria-hidden="true">ⓘ</span><span class="sr-only">info</span> button explaining how to read it, from radar colors to twilight times.</div>
+                    </div>
+                </div>
+                <div class="welcome-settings">
+                    <div class="welcome-settings-label">Quick Settings</div>
+                    <div class="welcome-settings-row">
+                        <button id="welcome-theme-toggle" class="theme-toggle" title="Switch theme">
+                            <span class="theme-toggle-icon" id="welcome-theme-icon">🌙</span>
+                            <span id="welcome-theme-label">Dark</span>
+                        </button>
+                        <button id="welcome-temp-toggle" class="theme-toggle" title="Switch temperature units">
+                            <span class="theme-toggle-icon">🌡️</span>
+                            <span id="welcome-temp-label">°F</span>
+                        </button>
+                        <button id="welcome-time-toggle" class="theme-toggle" title="Switch time format">
+                            <span class="theme-toggle-icon">🕐</span>
+                            <span id="welcome-time-label">12hr</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-buttons">
+                    <button id="welcome-set-location" class="btn-primary">📍 Set My Location</button>
+                    <button id="welcome-dismiss" class="btn-secondary">Get Started</button>
+                </div>
+                <button id="close-welcome" class="close-btn" aria-label="Close">&times;</button>
+            </div>
+        </div>
 
         <!-- iOS Install Instructions Modal -->
         <div id="ios-install-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Add to Home Screen">
