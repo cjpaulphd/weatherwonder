@@ -2015,6 +2015,35 @@ function renderDailyForecast(data) {
 // likely (≥50%) chance of precipitation from the hourly forecast. One short
 // line; hidden entirely via CSS when empty. All content is internally
 // generated, so no escaping is needed.
+// Day-of-week label for the outlook strip: just the weekday name (e.g.
+// "Mon"), since within the 11-day forecast window that's unambiguous. The
+// day-of-month is appended only when the date is more than a week out,
+// where a bare weekday name could otherwise mean either of two Mondays.
+const OUTLOOK_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function outlookDayLabel(date, now) {
+    const todayMid = new Date(now);
+    todayMid.setHours(0, 0, 0, 0);
+    const dateMid = new Date(date);
+    dateMid.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((dateMid - todayMid) / 86400000);
+    const name = OUTLOOK_DAY_NAMES[date.getDay()];
+    return diffDays > 7 ? `${name} ${date.getDate()}` : name;
+}
+
+// Time for the outlook strip, always a zero-padded 4-digit hour:minute (e.g.
+// "03:15 PM" / "15:15") so it doesn't jog side to side as the leading hour
+// digit changes.
+function outlookTimeLabel(date) {
+    if (getTimeFormat() === '24') {
+        return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    }
+    const h = date.getHours();
+    const suffix = h >= 12 ? 'p' : 'a';
+    const hour12 = (h % 12 || 12).toString().padStart(2, '0');
+    const min = date.getMinutes().toString().padStart(2, '0');
+    return `${hour12}:${min}${suffix}`;
+}
+
 function renderPrecipOutlook(data) {
     const el = document.getElementById('precip-outlook');
     if (!el) return;
@@ -2043,7 +2072,7 @@ function renderPrecipOutlook(data) {
                     }
                 }
                 html = ease >= 0
-                    ? `${emoji('🌧')} Raining now, easing around ${formatTime(new Date(m15.time[ease]))}`
+                    ? `${emoji('🌧')} Raining now, easing @ ${outlookTimeLabel(new Date(m15.time[ease]))}`
                     : `${emoji('🌧')} Raining now, continuing through the next 2 hours`;
             } else {
                 let start = -1;
@@ -2053,7 +2082,7 @@ function renderPrecipOutlook(data) {
                 if (start >= 0) {
                     const startDate = new Date(m15.time[start]);
                     const mins = Math.max(1, Math.round((startDate - now) / 60000));
-                    html = `${emoji('🌦')} Rain starting around ${formatTime(startDate)} (~${mins} min)`;
+                    html = `${emoji('🌦')} Rain starting @ ${outlookTimeLabel(startDate)} (~${mins} min)`;
                 }
             }
         }
@@ -2071,12 +2100,10 @@ function renderPrecipOutlook(data) {
             const d = new Date(hourly.time[next]);
             const snow = hourly.snowfall[next] > 0;
             const what = snow ? 'snow' : 'rain';
-            const day = getDayName(d, true);
-            const when = day === 'TODAY' ? `around ${formatHour(d)}` : `${day} ~${formatHour(d)}`;
-            html = `${emoji(snow ? '❄' : '💧')} Next ${what} ${when} · ${hourly.precipitation_probability[next]}%`;
+            html = `${emoji(snow ? '❄' : '💧')} Next ${what} ${outlookDayLabel(d, now)} @ ${outlookTimeLabel(d)} · ${hourly.precipitation_probability[next]}% chance`;
         } else {
             const last = new Date(hourly.time[hourly.time.length - 1]);
-            html = `${emoji('☀')} No rain expected through ${getDayName(last, true)}`;
+            html = `${emoji('☀')} No rain expected through ${outlookDayLabel(last, now)}`;
         }
     }
 
