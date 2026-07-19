@@ -2082,7 +2082,7 @@ function renderPrecipOutlook(data) {
                 if (start >= 0) {
                     const startDate = new Date(m15.time[start]);
                     const mins = Math.max(1, Math.round((startDate - now) / 60000));
-                    html = `${emoji('🌦')} Rain starting @ ${outlookTimeLabel(startDate)} (~${mins} min)`;
+                    html = `${emoji('🌦')} Forecast rain starting soon @ ${outlookTimeLabel(startDate)} (~${mins} min)`;
                 }
             }
         }
