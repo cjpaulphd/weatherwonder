@@ -782,6 +782,7 @@ function initializePrecipDetailToggle() {
             updatePrecipDetailToggleUI();
             if (weatherData) {
                 renderDailyForecast(weatherData);
+                renderPrecipOutlook(weatherData);
                 renderHourlyForecast(weatherData);
                 // The toggle also switches the chart's intensity-colored fill
                 renderChart(weatherData);
@@ -2047,6 +2048,12 @@ function outlookTimeLabel(date) {
 function renderPrecipOutlook(data) {
     const el = document.getElementById('precip-outlook');
     if (!el) return;
+    // Opt-in alongside the rest of the storm/intensity detail; hidden (via
+    // the :empty CSS rule) when the Storms toggle is off.
+    if (!isPrecipDetailOn()) {
+        el.innerHTML = '';
+        return;
+    }
     const now = getLocationNow();
     const emoji = (e) => `<span aria-hidden="true">${e}</span>`;
     let html = '';
@@ -3005,6 +3012,7 @@ function renderChart(data) {
                 updatePrecipDetailToggleUI();
                 if (weatherData) {
                     renderDailyForecast(weatherData);
+                    renderPrecipOutlook(weatherData);
                     renderHourlyForecast(weatherData);
                 }
             } else {
