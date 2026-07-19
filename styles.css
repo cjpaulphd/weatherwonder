@@ -786,8 +786,8 @@ body {
     white-space: nowrap;
 }
 
-/* Short-term rain outlook strip between the daily cards and the chart.
-   Sized to match the conditions bar under the location name. */
+/* Short-term rain outlook strip, directly under the conditions bar and
+   sized to match it. */
 .precip-outlook {
     display: flex;
     justify-content: center;
@@ -796,7 +796,7 @@ body {
     font-size: 11px;
     font-weight: 600;
     color: var(--text-secondary);
-    padding: 8px 16px 2px;
+    padding: 0 16px 6px;
     text-align: center;
 }
 
