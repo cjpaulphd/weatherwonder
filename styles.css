@@ -21,7 +21,7 @@
     --uv-violet: #b388ff;
     --snow-color: #e91e63;
     --rain-color: #2196f3;
-    --storm-amber: #ffca28;
+    --storm-indigo: #9fa8da;
 }
 
 [data-theme="light"] {
@@ -40,7 +40,7 @@
     --uv-violet: #6200ea;
     --snow-color: #c2185b;
     --rain-color: #1565c0;
-    --storm-amber: #b26a00;
+    --storm-indigo: #3949ab;
 }
 
 /* Visible focus indicator for keyboard navigation (not shown for mouse/touch) */
@@ -805,7 +805,7 @@ body {
 }
 
 /* Storm/intensity detail rows (footer Storms toggle). Tier colors escalate
-   muted → blue → orange; storm signals use the amber accent. */
+   muted → blue → orange; storm signals use the indigo accent. */
 .hourly-card .precip-detail {
     font-size: 10px;
     margin-top: 2px;
@@ -835,7 +835,7 @@ body {
 .hourly-card .precip-detail.storm,
 .hourly-card .precip-detail.storm-risk,
 .daily-card .precip-character.storm {
-    color: var(--storm-amber);
+    color: var(--storm-indigo);
 }
 
 .hourly-card .precip-detail.storm,
@@ -1729,8 +1729,8 @@ body {
 }
 
 .precip-detail-toggle.active {
-    color: var(--storm-amber);
-    border-color: var(--storm-amber);
+    color: var(--storm-indigo);
+    border-color: var(--storm-indigo);
 }
 
 .share-app-btn {

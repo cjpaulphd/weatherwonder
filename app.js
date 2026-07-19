@@ -2495,7 +2495,7 @@ function getChartColors() {
     const tidePurple = styles.getPropertyValue('--tide-purple').trim();
     const windOrange = styles.getPropertyValue('--wind-orange').trim();
     const uvViolet = styles.getPropertyValue('--uv-violet').trim();
-    const stormAmber = styles.getPropertyValue('--storm-amber').trim();
+    const stormIndigo = styles.getPropertyValue('--storm-indigo').trim();
 
     // Parse hex color to rgba with alpha
     function hexToRgba(hex, alpha) {
@@ -2533,8 +2533,8 @@ function getChartColors() {
         moderateBg: hexToRgba(precipBlue, 0.3),
         heavyBorder: windOrange,
         heavyBg: hexToRgba(windOrange, 0.35),
-        stormBorder: stormAmber,
-        stormBg: hexToRgba(stormAmber, 0.4)
+        stormBorder: stormIndigo,
+        stormBg: hexToRgba(stormIndigo, 0.4)
     };
 }
 
@@ -2681,7 +2681,7 @@ function renderChart(data) {
     // range is short enough to read hour-level detail (1D/3D), color the
     // precip-amount line and fill by the same tiers as the cards — green
     // light, blue moderate, orange heavy — with thunderstorm-coded hours in
-    // the storm amber. Longer ranges keep the flat green: at 5+ days the
+    // the storm indigo. Longer ranges keep the flat green: at 5+ days the
     // segments are too narrow to read as anything but noise.
     const stormFill = isPrecipDetailOn() && getChartDays() <= 3;
     let precipSegBorders = null;
@@ -4569,7 +4569,7 @@ const EXPLAINERS = {
             <p>On the daily cards, the same toggle adds a phrase built from <em>how many hours</em> of the day see precipitation: <strong>Brief showers</strong> or a <strong>Brief downpour</strong> (a few wet hours), <strong>Passing showers</strong> (on and off), or <strong>Steady rain</strong> (most of the day). Two days with the same total can feel completely different — this row tells them apart.</p>
 
             <h4>On the chart</h4>
-            <p>In the 1-day and 3-day chart views, the toggle also colors the precipitation-amount fill by the same tiers — green for light, blue for moderate, orange for heavy, amber for thunderstorm hours. Longer ranges keep the flat green, where hour-wide slices would be too narrow to read.</p>
+            <p>In the 1-day and 3-day chart views, the toggle also colors the precipitation-amount fill by the same tiers — green for light, blue for moderate, orange for heavy, indigo for thunderstorm hours. Longer ranges keep the flat green, where hour-wide slices would be too narrow to read.</p>
 
             <div class="explainer-related">
                 <div class="explainer-related-label">Related</div>
