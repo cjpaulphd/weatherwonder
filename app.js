@@ -4711,6 +4711,114 @@ function initializeExplainers() {
     });
 }
 
+// Welcome / getting-started modal. Auto-opens once for brand-new users and
+// stays reachable from the footer "Welcome Guide" link and the side-menu
+// "Welcome & Settings" entry. Doubles as a quick-settings panel: its toggle
+// buttons proxy the footer toggles so every save/re-render side effect stays
+// in one place.
+const WELCOME_SEEN_KEY = 'weatherwonder_welcome_seen';
+
+function hasSeenWelcome() {
+    try {
+        return localStorage.getItem(WELCOME_SEEN_KEY) === '1';
+    } catch (e) {
+        // No storage means no way to remember a dismissal — treat as seen so
+        // the modal doesn't nag on every load.
+        return true;
+    }
+}
+
+function markWelcomeSeen() {
+    try {
+        localStorage.setItem(WELCOME_SEEN_KEY, '1');
+    } catch (e) {}
+}
+
+// The quick-settings buttons show the CURRENT value (settings semantics),
+// unlike the footer toggles which show the value you'd switch to.
+function updateWelcomeSettingsUI() {
+    const theme = getEffectiveTheme();
+    const themeIcon = document.getElementById('welcome-theme-icon');
+    const themeLabel = document.getElementById('welcome-theme-label');
+    if (themeIcon) themeIcon.textContent = theme === 'light' ? '☀️' : '🌙';
+    if (themeLabel) themeLabel.textContent = theme === 'light' ? 'Light' : 'Dark';
+
+    const unit = getTempUnit();
+    const tempLabel = document.getElementById('welcome-temp-label');
+    if (tempLabel) tempLabel.textContent = unit === 'K' ? 'K' : '°' + unit;
+
+    const timeLabel = document.getElementById('welcome-time-label');
+    if (timeLabel) timeLabel.textContent = getTimeFormat() + 'hr';
+}
+
+function openWelcome() {
+    const modal = document.getElementById('welcome-modal');
+    if (!modal) return;
+    updateWelcomeSettingsUI();
+    const content = modal.querySelector('.welcome-content');
+    if (content) content.scrollTop = 0;
+    modal.classList.remove('hidden');
+    // Focus the heading synchronously so the shared focus-management observer
+    // sees focus already inside the modal (same pattern as openExplainer).
+    const titleEl = document.getElementById('welcome-title');
+    if (titleEl) titleEl.focus();
+    markWelcomeSeen();
+    trackEvent('welcome-open');
+}
+
+function initializeWelcome() {
+    const modal = document.getElementById('welcome-modal');
+    if (!modal) return;
+    const close = () => modal.classList.add('hidden');
+
+    const closeBtn = document.getElementById('close-welcome');
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    const dismissBtn = document.getElementById('welcome-dismiss');
+    if (dismissBtn) dismissBtn.addEventListener('click', close);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) close();
+    });
+
+    const setLocationBtn = document.getElementById('welcome-set-location');
+    if (setLocationBtn) setLocationBtn.addEventListener('click', () => {
+        close();
+        clearDisambiguation();
+        document.getElementById('location-modal').classList.remove('hidden');
+        document.getElementById('location-input').focus();
+        trackEvent('welcome-set-location');
+    });
+
+    [
+        ['welcome-theme-toggle', 'theme-toggle'],
+        ['welcome-temp-toggle', 'temp-toggle'],
+        ['welcome-time-toggle', 'time-toggle']
+    ].forEach(([welcomeId, footerId]) => {
+        const btn = document.getElementById(welcomeId);
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+            const footerBtn = document.getElementById(footerId);
+            if (footerBtn) footerBtn.click();
+            updateWelcomeSettingsUI();
+        });
+    });
+
+    const footerLink = document.getElementById('welcome-footer-link');
+    if (footerLink) footerLink.addEventListener('click', openWelcome);
+    const menuWelcome = document.getElementById('menu-welcome');
+    if (menuWelcome) menuWelcome.addEventListener('click', () => {
+        closeMenu();
+        openWelcome();
+    });
+
+    // Auto-open for genuinely new users only. Anyone who used the app before
+    // this feature existed already has a saved location or favorites — mark
+    // them as seen silently instead of interrupting a familiar dashboard.
+    if (!hasSeenWelcome()) {
+        if (getLastLocation() || getFavorites().length) markWelcomeSeen();
+        else openWelcome();
+    }
+}
+
 function initializeModalFocusManagement() {
     const modals = Array.from(document.querySelectorAll('.modal'));
     if (!modals.length) return;
@@ -4818,6 +4926,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeShareAppModal,
         initializeExplainers,
         initializeModalFocusManagement,
+        initializeWelcome,
         initializeCIT2000,
         initializePullToRefresh
     ];
