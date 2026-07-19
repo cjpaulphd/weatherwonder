@@ -1235,11 +1235,14 @@ body {
 }
 
 /* Legend */
+/* Two-row column-flow grid: consecutive legend entries stack into vertical
+   pairs (Temp/Feels Like, Precip %/Precip Amt, Wind/Storms, UV/Tide). */
 .chart-legend {
-    display: flex;
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(2, auto);
     justify-content: center;
-    flex-wrap: wrap;
-    gap: 8px 12px;
+    gap: 2px 10px;
     padding: 8px 0;
     font-size: 10px;
     color: var(--text-secondary);
@@ -1315,6 +1318,13 @@ body {
 
 .legend-color.uv {
     background-color: var(--uv-violet);
+}
+
+/* Storms toggle swatch: the intensity ramp the colored fill uses */
+.legend-color.storm {
+    background-image: linear-gradient(to right,
+        var(--precip-green), var(--precip-blue),
+        var(--wind-orange), var(--storm-indigo));
 }
 
 /* Chart day-range toggle */

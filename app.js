@@ -2935,12 +2935,17 @@ function renderChart(data) {
     // day-range view and reload. Tide reuses the footer's isTideLineOn() flag
     // and is only offered for coastal locations. Wind and tide stay selectable
     // on every view, but default off when switching into a 5/7/10-day view.
+    // Order matters: the legend is a two-row column-flow grid, so consecutive
+    // pairs stack into columns — Temp/Feels Like, Precip %/Precip Amt,
+    // Wind/Storms, UV/Tide. Storms mirrors the footer toggle (same state),
+    // shown here so the toggle stays discoverable next to what it affects.
     const items = [
         { key: 'temp', cls: 'temp', label: 'Temp', on: isChartLineVisible('temp') },
         { key: 'feelsLike', cls: 'feels', label: 'Feels Like', on: isChartLineVisible('feelsLike') },
         { key: 'precipProb', cls: 'precip-prob', label: 'Precip %', on: isChartLineVisible('precipProb') },
         { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') },
         { key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') },
+        { key: 'storms', cls: 'storm', label: 'Storms', on: isPrecipDetailOn() },
         { key: 'uv', cls: 'uv', label: 'UV', on: isChartLineVisible('uv') }
     ];
     if (isCoastalLocation()) {
@@ -2964,6 +2969,17 @@ function renderChart(data) {
                 // Keep the table and hourly cards in sync with the toggle.
                 renderAstroData();
                 if (weatherData) renderHourlyForecast(weatherData);
+            } else if (key === 'storms') {
+                // Same state as the footer Storms toggle: card detail rows
+                // plus the intensity-colored chart fill.
+                const next = !isPrecipDetailOn();
+                savePrecipDetail(next);
+                trackEvent('precip-detail-' + (next ? 'on' : 'off'));
+                updatePrecipDetailToggleUI();
+                if (weatherData) {
+                    renderDailyForecast(weatherData);
+                    renderHourlyForecast(weatherData);
+                }
             } else {
                 const next = toggleChartLine(key);
                 trackEvent('chart-line-' + key + '-' + (next ? 'on' : 'off'));
