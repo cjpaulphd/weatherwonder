@@ -786,6 +786,24 @@ body {
     white-space: nowrap;
 }
 
+/* Short-term rain outlook strip between the daily cards and the chart.
+   Sized to match the conditions bar under the location name. */
+.precip-outlook {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 8px 16px 2px;
+    text-align: center;
+}
+
+.precip-outlook:empty {
+    display: none;
+}
+
 /* Storm/intensity detail rows (footer Storms toggle). Tier colors escalate
    muted → blue → orange; storm signals use the amber accent. */
 .hourly-card .precip-detail {
