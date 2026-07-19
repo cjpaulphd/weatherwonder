@@ -1702,9 +1702,16 @@ body {
 
 .footer-toggles {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
     gap: 6px;
     margin-bottom: 14px;
+}
+
+.footer-toggles-row {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
     flex-wrap: wrap;
 }
 

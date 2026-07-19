@@ -782,6 +782,7 @@ function initializePrecipDetailToggle() {
             updatePrecipDetailToggleUI();
             if (weatherData) {
                 renderDailyForecast(weatherData);
+                renderPrecipOutlook(weatherData);
                 renderHourlyForecast(weatherData);
                 // The toggle also switches the chart's intensity-colored fill
                 renderChart(weatherData);
@@ -1962,7 +1963,7 @@ function renderDailyForecast(data) {
             ? `<div class="precip-amount${kClass}">${precipAmtStr}</div>`
             : `<div class="precip-amount placeholder">&nbsp;</div>`;
         // Day-character row ("Brief showers" vs "Steady rain"), only when the
-        // Storms toggle is on and the cards are wide enough (not the 10-day
+        // Stormcast toggle is on and the cards are wide enough (not the 10-day
         // view). Last row in the card so a wrapped phrase can't misalign the
         // rows above it across cards.
         let precipCharacterHtml = '';
@@ -2047,6 +2048,12 @@ function outlookTimeLabel(date) {
 function renderPrecipOutlook(data) {
     const el = document.getElementById('precip-outlook');
     if (!el) return;
+    // Opt-in alongside the rest of the storm/intensity detail; hidden (via
+    // the :empty CSS rule) when the Stormcast toggle is off.
+    if (!isPrecipDetailOn()) {
+        el.innerHTML = '';
+        return;
+    }
     const now = getLocationNow();
     const emoji = (e) => `<span aria-hidden="true">${e}</span>`;
     let html = '';
@@ -2082,7 +2089,7 @@ function renderPrecipOutlook(data) {
                 if (start >= 0) {
                     const startDate = new Date(m15.time[start]);
                     const mins = Math.max(1, Math.round((startDate - now) / 60000));
-                    html = `${emoji('🌦')} Rain starting @ ${outlookTimeLabel(startDate)} (~${mins} min)`;
+                    html = `${emoji('🌦')} Forecast rain starting soon @ ${outlookTimeLabel(startDate)} (~${mins} min)`;
                 }
             }
         }
@@ -2100,7 +2107,7 @@ function renderPrecipOutlook(data) {
             const d = new Date(hourly.time[next]);
             const snow = hourly.snowfall[next] > 0;
             const what = snow ? 'snow' : 'rain';
-            html = `${emoji(snow ? '❄' : '💧')} Next ${what} ${outlookDayLabel(d, now)} @ ${outlookTimeLabel(d)} · ${hourly.precipitation_probability[next]}% chance`;
+            html = `${emoji(snow ? '❄' : '💧')} Forecast next ${what} ${outlookDayLabel(d, now)} @ ${outlookTimeLabel(d)} · ${hourly.precipitation_probability[next]}% chance`;
         } else {
             const last = new Date(hourly.time[hourly.time.length - 1]);
             html = `${emoji('☀')} No rain expected through ${outlookDayLabel(last, now)}`;
@@ -2195,7 +2202,7 @@ function renderHourlyForecast(data) {
         const precipAmountHtml = precipStr
             ? `<div class="precip-amount${hkClass}">${precipStr}</div>`
             : `<div class="precip-amount placeholder">&nbsp;</div>`;
-        // Storm/intensity row, only when the footer Storms toggle is on. Like
+        // Storm/intensity row, only when the footer Stormcast toggle is on. Like
         // the tide row, it reserves its slot on every card so values line up.
         let precipDetailHtml = '';
         if (showPrecipDetail) {
@@ -2708,7 +2715,7 @@ function renderChart(data) {
 
     const colors = getChartColors();
 
-    // Intensity-colored precip fill: when the Storms toggle is on and the
+    // Intensity-colored precip fill: when the Stormcast toggle is on and the
     // range is short enough to read hour-level detail (1D/3D), color the
     // precip-amount line and fill by the same tiers as the cards — green
     // light, blue moderate, orange heavy — with thunderstorm-coded hours in
@@ -2968,7 +2975,7 @@ function renderChart(data) {
     // on every view, but default off when switching into a 5/7/10-day view.
     // Order matters: the legend is a two-row column-flow grid, so consecutive
     // pairs stack into columns — Temp/Feels Like, Precip %/Precip Amt,
-    // Wind/Storms, UV/Tide. Storms mirrors the footer toggle (same state),
+    // Wind/Stormcast, UV/Tide. Stormcast mirrors the footer toggle (same state),
     // shown here so the toggle stays discoverable next to what it affects.
     const items = [
         { key: 'temp', cls: 'temp', label: 'Temp', on: isChartLineVisible('temp') },
@@ -2976,7 +2983,7 @@ function renderChart(data) {
         { key: 'precipProb', cls: 'precip-prob', label: 'Precip %', on: isChartLineVisible('precipProb') },
         { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') },
         { key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') },
-        { key: 'storms', cls: 'storm', label: 'Storms', on: isPrecipDetailOn() },
+        { key: 'storms', cls: 'storm', label: 'Stormcast', on: isPrecipDetailOn() },
         { key: 'uv', cls: 'uv', label: 'UV', on: isChartLineVisible('uv') }
     ];
     if (isCoastalLocation()) {
@@ -3001,7 +3008,7 @@ function renderChart(data) {
                 renderAstroData();
                 if (weatherData) renderHourlyForecast(weatherData);
             } else if (key === 'storms') {
-                // Same state as the footer Storms toggle: card detail rows
+                // Same state as the footer Stormcast toggle: card detail rows
                 // plus the intensity-colored chart fill.
                 const next = !isPrecipDetailOn();
                 savePrecipDetail(next);
@@ -3009,6 +3016,7 @@ function renderChart(data) {
                 updatePrecipDetailToggleUI();
                 if (weatherData) {
                     renderDailyForecast(weatherData);
+                    renderPrecipOutlook(weatherData);
                     renderHourlyForecast(weatherData);
                 }
             } else {
@@ -4603,7 +4611,7 @@ const EXPLAINERS = {
     stormDetail: {
         title: 'Storm & Intensity Detail',
         body: `
-            <p class="explainer-intro">The <strong>⛈️ Storms</strong> toggle in the footer adds one extra row to the forecast cards describing how hard precipitation is likely to fall — and whether thunderstorms are in play.</p>
+            <p class="explainer-intro">The <strong>⛈️ Stormcast</strong> toggle in the footer adds one extra row to the forecast cards describing how hard precipitation is likely to fall — and whether thunderstorms are in play.</p>
 
             <h4>Intensity tiers</h4>
             <p>On the hourly cards, wet hours are labeled <strong>Light</strong> (barely wets the pavement), <strong>Moderate</strong> (umbrella weather), or <strong>Heavy</strong> (wipers on full, water ponding). The tiers use standard meteorological rate thresholds — for rain, "heavy" means more than 0.3&nbsp;inches (7.6&nbsp;mm) in the hour; snow is tiered by its own snowfall rate.</p>
