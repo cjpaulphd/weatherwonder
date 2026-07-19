@@ -2100,7 +2100,7 @@ function renderPrecipOutlook(data) {
             const d = new Date(hourly.time[next]);
             const snow = hourly.snowfall[next] > 0;
             const what = snow ? 'snow' : 'rain';
-            html = `${emoji(snow ? '❄' : '💧')} Next ${what} ${outlookDayLabel(d, now)} @ ${outlookTimeLabel(d)} · ${hourly.precipitation_probability[next]}% chance`;
+            html = `${emoji(snow ? '❄' : '💧')} Forecast next ${what} ${outlookDayLabel(d, now)} @ ${outlookTimeLabel(d)} · ${hourly.precipitation_probability[next]}% chance`;
         } else {
             const last = new Date(hourly.time[hourly.time.length - 1]);
             html = `${emoji('☀')} No rain expected through ${outlookDayLabel(last, now)}`;
