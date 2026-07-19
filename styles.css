@@ -21,6 +21,7 @@
     --uv-violet: #b388ff;
     --snow-color: #e91e63;
     --rain-color: #2196f3;
+    --storm-indigo: #9fa8da;
 }
 
 [data-theme="light"] {
@@ -39,6 +40,7 @@
     --uv-violet: #6200ea;
     --snow-color: #c2185b;
     --rain-color: #1565c0;
+    --storm-indigo: #3949ab;
 }
 
 /* Visible focus indicator for keyboard navigation (not shown for mouse/touch) */
@@ -784,6 +786,63 @@ body {
     white-space: nowrap;
 }
 
+/* Short-term rain outlook strip, directly under the conditions bar and
+   sized to match it. */
+.precip-outlook {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 0 16px 6px;
+    text-align: center;
+}
+
+.precip-outlook:empty {
+    display: none;
+}
+
+/* Storm/intensity detail rows (footer Storms toggle). Tier colors escalate
+   muted → blue → orange; storm signals use the indigo accent. */
+.hourly-card .precip-detail {
+    font-size: 10px;
+    margin-top: 2px;
+    white-space: nowrap;
+}
+
+.daily-card .precip-character {
+    font-size: 9px;
+    line-height: 1.2;
+}
+
+.hourly-card .precip-detail.light,
+.daily-card .precip-character.light {
+    color: var(--text-secondary);
+}
+
+.hourly-card .precip-detail.moderate,
+.daily-card .precip-character.moderate {
+    color: var(--precip-blue);
+}
+
+.hourly-card .precip-detail.heavy,
+.daily-card .precip-character.heavy {
+    color: var(--wind-orange);
+}
+
+.hourly-card .precip-detail.storm,
+.hourly-card .precip-detail.storm-risk,
+.daily-card .precip-character.storm {
+    color: var(--storm-indigo);
+}
+
+.hourly-card .precip-detail.storm,
+.daily-card .precip-character.storm {
+    font-weight: 600;
+}
+
 .hourly-card .windchill {
     font-size: 10px;
     color: var(--accent-blue);
@@ -1176,11 +1235,14 @@ body {
 }
 
 /* Legend */
+/* Two-row column-flow grid: consecutive legend entries stack into vertical
+   pairs (Temp/Feels Like, Precip %/Precip Amt, Wind/Storms, UV/Tide). */
 .chart-legend {
-    display: flex;
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(2, auto);
     justify-content: center;
-    flex-wrap: wrap;
-    gap: 8px 12px;
+    gap: 2px 10px;
     padding: 8px 0;
     font-size: 10px;
     color: var(--text-secondary);
@@ -1256,6 +1318,13 @@ body {
 
 .legend-color.uv {
     background-color: var(--uv-violet);
+}
+
+/* Storms toggle swatch: the intensity ramp the colored fill uses */
+.legend-color.storm {
+    background-image: linear-gradient(to right,
+        var(--precip-green), var(--precip-blue),
+        var(--wind-orange), var(--storm-indigo));
 }
 
 /* Chart day-range toggle */
@@ -1667,6 +1736,11 @@ body {
 .tide-toggle.active {
     color: var(--tide-purple);
     border-color: var(--tide-purple);
+}
+
+.precip-detail-toggle.active {
+    color: var(--storm-indigo);
+    border-color: var(--storm-indigo);
 }
 
 .share-app-btn {
