@@ -2034,10 +2034,14 @@ function outlookDayLabel(date, now) {
 // "03:15 PM" / "15:15") so it doesn't jog side to side as the leading hour
 // digit changes.
 function outlookTimeLabel(date) {
-    const opts = { hour: '2-digit', minute: '2-digit' };
-    return getTimeFormat() === '24'
-        ? date.toLocaleTimeString('en-GB', opts)
-        : date.toLocaleTimeString('en-US', opts);
+    if (getTimeFormat() === '24') {
+        return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    }
+    const h = date.getHours();
+    const suffix = h >= 12 ? 'p' : 'a';
+    const hour12 = (h % 12 || 12).toString().padStart(2, '0');
+    const min = date.getMinutes().toString().padStart(2, '0');
+    return `${hour12}:${min}${suffix}`;
 }
 
 function renderPrecipOutlook(data) {
