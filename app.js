@@ -3411,83 +3411,146 @@ async function fetchPrecipHistory(lat, lon) {
         timezone: 'auto'
     });
 
-    // Use the Historical Forecast API rather than the regular Forecast API. The
-    // regular one's past_days returns the current model's *reconstruction* of
-    // past hours, which for precipitation frequently shows near-zero on days
-    // that actually had rain. The historical-forecast endpoint archives the
-    // best-available forecast issued at the time, so totals match reality.
+    // Open-Meteo's Historical Forecast API combines the initial hours of
+    // successive operational model runs into a continuous time series. It is
+    // Open-Meteo's recommended product for representing recent past conditions,
+    // but precipitation values remain model estimates rather than rain-gauge
+    // measurements.
     const response = await fetch(`https://historical-forecast-api.open-meteo.com/v1/forecast?${params}`);
     if (!response.ok) throw new Error('Failed to fetch precipitation history');
     return response.json();
 }
 
-// Fetch historical precipitation averages from Open-Meteo Archive API
-// Returns 10-year average precipitation for the same 30-day and 90-day calendar windows
+// Format a Date's local calendar components as YYYY-MM-DD. toISOString()
+// expresses the date in UTC, which can shift to a different calendar day
+// than intended when the browser's offset differs from the requested
+// location's — use this instead for any locally-meaningful calendar date.
+function formatLocalDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// Request a 10-year daily precipitation series from Open-Meteo's Historical
+// Weather (reanalysis) archive. ERA5-Land is requested first because the
+// goal is a temporally consistent year-to-year baseline rather than the
+// best individual reconstruction for each day; some coastal or unusual
+// coordinates aren't covered by ERA5-Land, so on failure this retries once
+// against the default reanalysis blend before giving up.
+async function requestHistoricalAverage(params, useEra5Land = true) {
+    const requestParams = new URLSearchParams(params);
+    if (useEra5Land) requestParams.set('models', 'era5_land');
+
+    let response;
+    try {
+        response = await fetch(`https://archive-api.open-meteo.com/v1/archive?${requestParams}`);
+    } catch (err) {
+        if (useEra5Land) return requestHistoricalAverage(params, false);
+        throw err;
+    }
+
+    if (!response.ok) {
+        if (useEra5Land) return requestHistoricalAverage(params, false);
+        throw new Error('Failed to fetch historical precipitation');
+    }
+
+    const data = await response.json();
+
+    if (
+        !data.daily ||
+        !Array.isArray(data.daily.time) ||
+        !Array.isArray(data.daily.precipitation_sum)
+    ) {
+        if (useEra5Land) return requestHistoricalAverage(params, false);
+        throw new Error('Historical precipitation response was incomplete');
+    }
+
+    return data;
+}
+
+// Fetch a 10-year modeled average precipitation for the 30- and 90-calendar-date
+// windows ending "today" in the selected location's timezone. Returns null (rather
+// than throwing) on failure so the caller can still render recent totals without
+// the comparison.
 async function fetchHistoricalPrecipAvg(lat, lon) {
-    const now = new Date();
+    const now = getLocationNow();
     const endYear = now.getFullYear() - 1; // most recent full year with reliable archive data
     const startYear = endYear - 9; // 10 years of data
 
-    // Define the calendar window: 90 days back from today's month/day
-    // Use the 3-month window (which contains the 1-month window)
-    const threeMonthsAgo = new Date(now);
-    threeMonthsAgo.setDate(threeMonthsAgo.getDate() - 90);
-    const oneMonthAgo = new Date(now);
-    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+    // Both endpoints of each window are inclusive, so a 30-date window starts
+    // 29 days before its end date (not 30), and a 90-date window starts 89
+    // days before its end date.
+    const ninetyDayStart = new Date(now);
+    ninetyDayStart.setDate(ninetyDayStart.getDate() - 89);
 
-    const fmt = d => d.toISOString().split('T')[0];
-
-    // Build start/end for the full 10-year span
-    const archiveStart = new Date(startYear, threeMonthsAgo.getMonth(), threeMonthsAgo.getDate());
+    const archiveStart = new Date(startYear, ninetyDayStart.getMonth(), ninetyDayStart.getDate());
     const archiveEnd = new Date(endYear, now.getMonth(), now.getDate());
 
-    const params = new URLSearchParams({
+    const params = {
         latitude: lat,
         longitude: lon,
         daily: 'precipitation_sum',
-        start_date: fmt(archiveStart),
-        end_date: fmt(archiveEnd),
+        start_date: formatLocalDate(archiveStart),
+        end_date: formatLocalDate(archiveEnd),
         timezone: 'auto'
-    });
+    };
 
-    const response = await fetch(`https://archive-api.open-meteo.com/v1/archive?${params}`);
-    if (!response.ok) throw new Error('Failed to fetch historical precipitation');
-    const data = await response.json();
+    let data;
+    try {
+        data = await requestHistoricalAverage(params, true);
+    } catch (err) {
+        console.error('Historical precipitation average unavailable:', err);
+        return null;
+    }
 
     const daily = data.daily;
-    const oneMonthTotals = [];
-    const threeMonthTotals = [];
+    const thirtyDayTotals = [];
+    const ninetyDayTotals = [];
 
-    // For each year, sum precipitation in the matching calendar windows
+    // Require at least 90% coverage of each window's calendar dates before
+    // trusting a year's total, so a year with substantial missing data is
+    // excluded rather than having its gaps silently treated as zero rainfall.
+    const THIRTY_DAY_MIN_VALID = 27;
+    const NINETY_DAY_MIN_VALID = 81;
+
     for (let year = startYear; year <= endYear; year++) {
         const yearEnd = new Date(year, now.getMonth(), now.getDate());
-        const yearOneMonthStart = new Date(yearEnd);
-        yearOneMonthStart.setDate(yearOneMonthStart.getDate() - 30);
-        const yearThreeMonthStart = new Date(yearEnd);
-        yearThreeMonthStart.setDate(yearThreeMonthStart.getDate() - 90);
+        const yearThirtyStart = new Date(yearEnd);
+        yearThirtyStart.setDate(yearThirtyStart.getDate() - 29);
+        const yearNinetyStart = new Date(yearEnd);
+        yearNinetyStart.setDate(yearNinetyStart.getDate() - 89);
 
-        let oneMonthSum = 0;
-        let threeMonthSum = 0;
+        let thirtySum = 0, thirtyCount = 0;
+        let ninetySum = 0, ninetyCount = 0;
 
         for (let i = 0; i < daily.time.length; i++) {
             const d = new Date(daily.time[i] + 'T00:00:00');
-            if (d >= yearThreeMonthStart && d <= yearEnd) {
-                threeMonthSum += daily.precipitation_sum[i] || 0;
-                if (d >= yearOneMonthStart) {
-                    oneMonthSum += daily.precipitation_sum[i] || 0;
-                }
+            if (d < yearNinetyStart || d > yearEnd) continue;
+
+            const value = daily.precipitation_sum[i];
+            if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+
+            ninetySum += value;
+            ninetyCount++;
+            if (d >= yearThirtyStart) {
+                thirtySum += value;
+                thirtyCount++;
             }
         }
 
-        oneMonthTotals.push(oneMonthSum);
-        threeMonthTotals.push(threeMonthSum);
+        if (thirtyCount >= THIRTY_DAY_MIN_VALID) thirtyDayTotals.push(thirtySum);
+        if (ninetyCount >= NINETY_DAY_MIN_VALID) ninetyDayTotals.push(ninetySum);
     }
 
-    const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+    const avg = values =>
+        values.length
+            ? values.reduce((sum, value) => sum + value, 0) / values.length
+            : null;
 
     return {
-        oneMonthAvg: avg(oneMonthTotals),   // in mm
-        threeMonthAvg: avg(threeMonthTotals) // in mm
+        thirtyDayAvg: avg(thirtyDayTotals),   // in mm, or null if no valid years
+        ninetyDayAvg: avg(ninetyDayTotals)    // in mm, or null if no valid years
     };
 }
 
@@ -3507,8 +3570,8 @@ function renderPrecipHistory(data, histAvg) {
         { label: '48 Hours', hours: 48 },
         { label: '72 Hours', hours: 72 },
         { label: '7 Days', hours: 168 },
-        { label: '1 Month', hours: 720, avgKey: 'oneMonthAvg' },
-        { label: '3 Months', hours: 2160, avgKey: 'threeMonthAvg' }
+        { label: '30 Days', hours: 720, avgKey: 'thirtyDayAvg' },
+        { label: '90 Days', hours: 2160, avgKey: 'ninetyDayAvg' }
     ];
 
     // Find the last hour that's <= now (in the location's timezone)
@@ -3540,7 +3603,7 @@ function renderPrecipHistory(data, histAvg) {
             formatted = `${inches.toFixed(2)}"`;
         }
 
-        // Build historical average comparison HTML for 1 Month and 3 Months
+        // Build historical average comparison HTML for the 30-Day and 90-Day periods
         let avgHtml = '';
         if (period.avgKey && histAvg && histAvg[period.avgKey] != null) {
             const avgMm = histAvg[period.avgKey];
@@ -3566,7 +3629,7 @@ function renderPrecipHistory(data, histAvg) {
                 }
             }
 
-            avgHtml = `<div class="precip-history-avg${isKelvin ? ' kelvin-units' : ''}">vs. ${avgFormatted} 10-yr avg</div>${diffHtml}`;
+            avgHtml = `<div class="precip-history-avg${isKelvin ? ' kelvin-units' : ''}">vs. ${avgFormatted} 10-yr modeled avg</div>${diffHtml}`;
         }
 
         return { label: period.label, value: formatted, avgHtml };
@@ -4609,20 +4672,42 @@ const EXPLAINERS = {
     conditions: {
         title: 'Current Conditions',
         body: `
-            <p class="explainer-intro">The bar under your location sums up what the air is doing right now. Here's what each figure means.</p>
+            <p class="explainer-intro">WeatherWonder displays the latest available Open-Meteo model estimate for the selected location. These values represent a forecast grid cell rather than a measurement at your exact position, so conditions may differ because of elevation, terrain, buildings, shade, or proximity to water.</p>
 
-            <h4>Feels-Like</h4>
-            <p>The apparent temperature — what the air feels like on skin once humidity and wind are folded in. In warm weather it follows the <strong>heat index</strong>: humid air slows the evaporation of sweat, so your body sheds heat less efficiently and it feels hotter than the thermometer reads. In the cold it follows <strong>wind chill</strong>: moving air strips away the thin warm layer against your skin, so it feels colder. WeatherWonder shows it next to the temperature only when it diverges from the actual reading by more than a couple of degrees.</p>
+            <h4>Temperature and Feels-Like Temperature</h4>
+            <p>Air temperature is the modeled temperature approximately 2 meters above the ground.</p>
+            <p>Feels-like temperature, also called apparent temperature, estimates human thermal exposure by accounting for factors such as wind, humidity, and solar radiation. Humid conditions can reduce evaporative cooling, while wind can increase heat loss in cold conditions. Apparent temperature is an index, not a thermometer measurement.</p>
+            <p>WeatherWonder displays the feels-like value when it differs from the air temperature by more than 2 degrees in the selected unit.</p>
 
-            <h4>Relative Humidity &amp; Dew Point</h4>
-            <p><span class="term">RH</span> (relative humidity) is how full the air is of water vapor, as a percentage of the most it could hold <em>at the current temperature</em>. Because that ceiling rises and falls with temperature, RH alone is a poor comfort gauge — 60% at dawn and 60% at midday describe very different air.</p>
-            <p><span class="term">DP</span> (dew point) is the more honest number: the temperature the air would have to cool to before its vapor starts condensing. It's an absolute measure of moisture, so it tracks how muggy it actually feels. A rough guide: dew points below ~55&deg;F feel dry and comfortable, the 60s feel sticky, and 70&deg;F and up is oppressive. WeatherWonder colors RH and DP on the same scale, keyed to the dew point.</p>
+            <h4>Relative Humidity and Dew Point</h4>
+            <p>Relative humidity indicates how close the air is to saturation at its current temperature. Because warmer air can hold more water vapor, relative humidity can change substantially as temperature changes even when the amount of moisture in the air remains similar.</p>
+            <p>Dew point is the temperature to which air would need to cool to become saturated. It is generally more useful than relative humidity for assessing how humid the air will feel.</p>
+            <p>As a general warm-season comfort guide:</p>
+            <ul>
+                <li>Below 55&deg;F: generally comfortable</li>
+                <li>55&ndash;64&deg;F: increasingly humid</li>
+                <li>65&ndash;69&deg;F: humid</li>
+                <li>70&deg;F or higher: very humid or oppressive</li>
+            </ul>
+            <p>Individual comfort varies, especially with sunlight, wind, exertion, clothing, and acclimatization. WeatherWonder's humidity color is based on dew point rather than relative humidity.</p>
 
             <h4>Air Quality Index</h4>
-            <p><span class="term">AQI</span> condenses pollutants — mainly fine particulates (PM2.5) and ozone — onto a single 0&ndash;500 scale, reported for whichever pollutant is currently worst. 0&ndash;50 (green) is good; 51&ndash;100 (yellow) is acceptable; above 100 the air starts to affect sensitive groups, and above 150 it affects everyone.</p>
+            <p>The U.S. Air Quality Index, or AQI, summarizes estimated concentrations of several pollutants, including fine particles, coarse particles, ozone, carbon monoxide, nitrogen dioxide, and sulfur dioxide. The displayed AQI is determined by the pollutant with the highest individual index.</p>
+            <ul>
+                <li>0&ndash;50: Good</li>
+                <li>51&ndash;100: Moderate</li>
+                <li>101&ndash;150: Unhealthy for sensitive groups</li>
+                <li>151&ndash;200: Unhealthy</li>
+                <li>201&ndash;300: Very unhealthy</li>
+                <li>301&ndash;500: Hazardous</li>
+            </ul>
+            <p>WeatherWonder's AQI is a regional model estimate, not a reading from a local air-quality monitor. People who are sensitive to air pollution should consult official local monitoring and public-health guidance before changing outdoor plans.</p>
 
             <h4>Wind</h4>
-            <p>The arrow points the way the wind is blowing <em>toward</em>, labeled with the compass direction it comes <em>from</em> (the meteorological convention) and its sustained speed. Gusts can run well above the figure shown.</p>
+            <p>Wind direction describes where the wind is coming from. The arrow shows the direction in which the air is moving.</p>
+            <p>The displayed speed is the modeled wind approximately 10 meters above the ground for the indicated hour. It does not include wind gusts, which may be substantially stronger. Trees, buildings, ridgelines, valleys, and other terrain can produce large local differences.</p>
+
+            <p>Data and limitations: <a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener noreferrer">Open-Meteo Forecast</a> and <a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener noreferrer">Air Quality</a> APIs, with AQI categories from the <a href="https://www.airnow.gov/aqi/aqi-basics/" target="_blank" rel="noopener noreferrer">U.S. EPA</a>. Values are model estimates for the selected grid cells.</p>
 
             <div class="explainer-related">
                 <div class="explainer-related-label">Related</div>
@@ -4634,16 +4719,40 @@ const EXPLAINERS = {
     forecast: {
         title: 'How the Forecast Works',
         body: `
-            <p class="explainer-intro">Every number past this hour is a model output, not a measurement. Knowing how those models behave tells you how much to trust them.</p>
+            <p class="explainer-intro">A weather forecast is a model-based estimate of future atmospheric conditions, not a guarantee. Near-term hours are most useful for planning timing; later days are more useful for identifying broad patterns and possible changes.</p>
 
-            <h4>Numerical weather prediction</h4>
-            <p>Forecasts come from physics simulations. The atmosphere is divided into a three-dimensional grid of cells, seeded with current observations from satellites, weather balloons, aircraft, and surface stations, then stepped forward in time by solving the equations that govern how air, heat, and moisture move. WeatherWonder's data comes from <strong>Open-Meteo</strong>, which blends several national models — including NOAA's GFS, the ECMWF, and Germany's ICON — each run on its own grid resolution and update schedule.</p>
+            <h4>Forecast Models</h4>
+            <p>Open-Meteo's Best Match system selects model data appropriate to the location and forecast horizon. WeatherWonder does not rely on a fixed blend of the same models everywhere.</p>
+            <p>Different models use different spatial resolutions, update schedules, physical assumptions, and methods for representing terrain and atmospheric processes. As a result, forecasts can change when new observations are incorporated and a new model run becomes available.</p>
 
-            <h4>Why confidence fades with time</h4>
-            <p>The atmosphere is chaotic: tiny errors in the starting conditions grow as the simulation runs forward. A day or two out, models are usually excellent. By day seven they capture the broad pattern — a warm spell, an approaching front — but not the hour it rains. Read the near term as reliable and the far end as a trend, and check back as it sharpens.</p>
+            <h4>Forecast Uncertainty</h4>
+            <p>Forecast uncertainty generally increases with time. Temperature and large-scale weather patterns are often more predictable than the exact location or timing of thunderstorms, fog, showers, snow bands, or terrain-driven weather.</p>
+            <p>For decisions sensitive to timing:</p>
+            <ul>
+                <li>Review consecutive forecast updates rather than relying on one model run.</li>
+                <li>Use radar to assess precipitation already occurring nearby.</li>
+                <li>Consult official watches, warnings, and advisories for hazardous weather.</li>
+                <li>Allow additional margin when thunderstorms, freezing conditions, strong winds, or flooding would create serious consequences.</li>
+            </ul>
 
-            <h4>Probability vs. amount</h4>
-            <p>These answer two different questions. <strong>Precipitation probability</strong> is the model's confidence that measurable precip falls at all; <strong>precipitation amount</strong> is how much it expects if it does. A 30% chance of a heavy downpour and an 80% chance of a passing sprinkle are both ordinary — read them together, which is why the forecast chart plots them as separate lines.</p>
+            <h4>Precipitation Probability and Amount</h4>
+            <p>Hourly precipitation probability is the modeled probability that more than 0.1 millimeter of precipitation will occur during the preceding hour at the forecast location.</p>
+            <p>The precipitation amount is the model's estimated total accumulation during that hour, including rain and the liquid-water equivalent of frozen precipitation. It is not an estimate of "how much will fall if precipitation occurs."</p>
+            <p>Read probability and amount together:</p>
+            <ul>
+                <li>High probability and low amount: precipitation is relatively likely but expected to be minor.</li>
+                <li>High probability and high amount: precipitation is both likely and potentially consequential.</li>
+                <li>Low probability and high amount: a lower-confidence event that could still have significant effects.</li>
+                <li>Low probability and low amount: limited evidence for meaningful precipitation.</li>
+            </ul>
+            <p>On WeatherWonder's daily cards, the precipitation percentage is the highest hourly probability during that day, while the displayed amount is the sum of the hourly forecast amounts.</p>
+
+            <h4>Other Forecast Variables</h4>
+            <p>Temperature is the modeled air temperature. Feels-like temperature estimates human thermal exposure.</p>
+            <p>Wind is the modeled speed approximately 10 meters above the ground and does not include gusts.</p>
+            <p>The UV Index estimates the potential for ultraviolet exposure. Protection becomes increasingly important at values of 3 or higher, particularly around solar noon.</p>
+
+            <p>Data and limitations: <a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener noreferrer">Open-Meteo Forecast API</a> using its Best Match model selection. Forecast values are estimates for a model grid cell and may not capture highly localized conditions.</p>
 
             <div class="explainer-related">
                 <div class="explainer-related-label">Related</div>
@@ -4654,22 +4763,50 @@ const EXPLAINERS = {
         `
     },
     stormDetail: {
-        title: 'Storm & Intensity Detail',
+        title: 'Storm and Intensity Detail',
         body: `
-            <p class="explainer-intro">The <strong>⛈️ Stormcast</strong> toggle — in the Daily Forecast header, or the chart legend — adds one extra row to the forecast cards describing how hard precipitation is likely to fall, and whether thunderstorms are in play.</p>
+            <p class="explainer-intro">Stormcast is a WeatherWonder interpretation layer designed to make precipitation timing and intensity easier to scan. Its categories are derived from forecast variables and should not be treated as standardized meteorological classifications, official warnings, or evidence that a storm will occur.</p>
 
-            <h4>Intensity tiers</h4>
-            <p>On the hourly cards, wet hours are labeled <strong>Light</strong> (barely wets the pavement), <strong>Moderate</strong> (umbrella weather), or <strong>Heavy</strong> (wipers on full, water ponding). The tiers use standard meteorological rate thresholds — for rain, "heavy" means more than 0.3&nbsp;inches (7.6&nbsp;mm) in the hour; snow is tiered by its own snowfall rate.</p>
-            <p>Read the tier <em>together with</em> the 💧 percentage: the tier says how hard it would rain, the percentage says how likely it is to rain at all. A 30% chance of Heavy is a very different plan-changer than an 80% chance of Light.</p>
+            <h4>Precipitation Intensity</h4>
+            <p>WeatherWonder classifies forecast rain using the hourly modeled accumulation:</p>
+            <ul>
+                <li>Light: less than 2.5 mm per hour</li>
+                <li>Moderate: 2.5&ndash;7.6 mm per hour</li>
+                <li>Heavy: more than 7.6 mm per hour</li>
+            </ul>
+            <p>Forecast snowfall is classified using the modeled hourly snowfall depth:</p>
+            <ul>
+                <li>Light: less than 1 cm per hour</li>
+                <li>Moderate: 1&ndash;2.5 cm per hour</li>
+                <li>Heavy: more than 2.5 cm per hour</li>
+            </ul>
+            <p>These thresholds are display conventions used by WeatherWonder. Meteorological agencies and applications use differing definitions, particularly for snow.</p>
+            <p>The intensity category describes the modeled rate if that forecast is realized. Precipitation probability should be considered separately because an intense modeled event may still have a relatively low probability.</p>
 
-            <h4>Storm signals</h4>
-            <p><strong>⛈ Storm</strong> means the forecast model itself is calling for a thunderstorm that hour. <strong>⚡ Storm risk</strong> is softer: the atmosphere holds a large amount of convective energy (CAPE — the fuel storms feed on) and there's a real chance of precipitation, but the model hasn't committed to a storm. Treat it as "worth keeping an eye on the radar," not a promise of thunder.</p>
+            <h4>Storm and Storm-Risk Signals</h4>
+            <p>WeatherWonder displays Storm when the forecast weather code identifies a thunderstorm.</p>
+            <p>It displays Storm risk when no thunderstorm code is present but both of the following app-defined criteria are met:</p>
+            <ul>
+                <li>CAPE of at least 2,000 joules per kilogram</li>
+                <li>Precipitation probability of at least 40 percent</li>
+            </ul>
+            <p>CAPE measures atmospheric buoyancy that may be available to support convection. High CAPE alone does not produce a thunderstorm; storms also require sufficient moisture, a lifting mechanism, and an atmospheric structure that permits organized convection.</p>
+            <p>Storm risk is therefore a screening indicator, not a severe-weather forecast. Consult National Weather Service alerts and local radar whenever thunderstorms could affect safety.</p>
 
-            <h4>Day character</h4>
-            <p>On the daily cards, the same toggle adds a phrase built from <em>how many hours</em> of the day see precipitation: <strong>Brief showers</strong> or a <strong>Brief downpour</strong> (a few wet hours), <strong>Passing showers</strong> (on and off), or <strong>Steady rain</strong> (most of the day). Two days with the same total can feel completely different — this row tells them apart.</p>
+            <h4>Daily Precipitation Character</h4>
+            <p>WeatherWonder summarizes the number of forecast hours with precipitation as follows:</p>
+            <ul>
+                <li>Brief: precipitation during 4 or fewer hours</li>
+                <li>Passing: precipitation during 5&ndash;9 hours</li>
+                <li>Steady: precipitation during 10 or more hours</li>
+                <li>Brief downpour: 4 or fewer precipitation hours averaging at least 2.5 mm per wet hour</li>
+            </ul>
+            <p>These labels summarize forecast duration and average intensity. They do not indicate that precipitation will be continuous, precisely timed, or uniform across the area.</p>
 
-            <h4>On the chart</h4>
-            <p>In the 1-day and 3-day chart views, the toggle also colors the precipitation-amount fill by the same tiers — green for light, blue for moderate, orange for heavy, indigo for thunderstorm hours. Longer ranges keep the flat green, where hour-wide slices would be too narrow to read.</p>
+            <h4>Chart Interpretation</h4>
+            <p>In the one-day and three-day views, precipitation shading reflects WeatherWonder's intensity categories. Longer-range charts use a single precipitation color because detailed timing and intensity become less reliable farther into the forecast.</p>
+
+            <p>Data and limitations: WeatherWonder-derived classifications based on <a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener noreferrer">Open-Meteo</a> forecast variables. Stormcast is not an official alerting product.</p>
 
             <div class="explainer-related">
                 <div class="explainer-related-label">Related</div>
@@ -4681,72 +4818,136 @@ const EXPLAINERS = {
     radar: {
         title: 'Reading the Radar',
         body: `
-            <p class="explainer-intro">Radar shows precipitation that's happening right now, bridging the gap between current conditions and the forecast.</p>
+            <p class="explainer-intro">The radar map shows the most recent composite-reflectivity image available from RainViewer. The timestamp identifies the radar frame being displayed. Radar is an observation of precipitation-related echoes aloft, not a forecast, and the image may be several minutes old.</p>
 
-            <h4>How Doppler radar sees rain</h4>
-            <p>A ground station sweeps a beam of microwave energy across the sky. Raindrops, snow, and hail scatter a little of it back; the station times the echo to locate it and measures its strength. Bigger, denser drops bounce back a stronger echo, so the radar infers intensity from how much energy returns — a quantity called <strong>reflectivity</strong>, measured in <span class="term">dBZ</span>.</p>
+            <h4>What Radar Measures</h4>
+            <p>Weather radar sends pulses of microwave energy into the atmosphere and measures the energy reflected back toward the radar. Reflectivity is expressed in dBZ.</p>
+            <p>Higher reflectivity generally indicates a greater concentration of large or numerous particles such as raindrops, snowflakes, ice, or hail. Reflectivity does not directly measure rainfall at the ground.</p>
 
-            <h4>The color scale</h4>
-            <p>WeatherWonder maps reflectivity to color, from light green through yellow and orange to red. Green is drizzle or light rain; yellow and orange are steady to heavy rain; red marks the intense cores of downpours and thunderstorms, often carrying the most lightning and the chance of hail. The imagery comes from <strong>RainViewer</strong>, which composites feeds from national radar networks.</p>
+            <h4>Interpreting the Colors</h4>
+            <p>In WeatherWonder's radar palette, cooler colors generally represent weaker echoes and warmer colors represent stronger echoes.</p>
+            <p>Stronger echoes may indicate heavier precipitation, hail, melting snow, or mixtures of different particle types. Reflectivity color alone cannot confirm:</p>
+            <ul>
+                <li>Whether lightning is occurring</li>
+                <li>Whether hail is reaching the ground</li>
+                <li>The exact rainfall rate</li>
+                <li>Whether precipitation is reaching the surface</li>
+            </ul>
+            <p>Official warnings, lightning data, dual-polarization products, and ground reports provide information that a simple reflectivity image cannot.</p>
 
-            <h4>What radar can't tell you</h4>
-            <p>The beam travels in a straight line while the Earth curves away beneath it, so far from the station it passes above low-level rain and can miss it. Close in, hills and buildings throw back false echoes (clutter). And the picture is a few minutes old by the time it's processed. For frame-by-frame animation and storm tracking, the <strong>RadarScope</strong> link below the map opens a dedicated app.</p>
+            <h4>Using Radar for Decisions</h4>
+            <p>Check the image timestamp before interpreting the map. Radar is most useful when viewed as an animation because movement, growth, weakening, and storm structure are often more informative than a single frame.</p>
+            <p>The distance circle provides a geographic reference; it does not indicate guaranteed radar coverage or forecast how far a storm will travel.</p>
+            <p>For hazardous or rapidly developing weather, consult National Weather Service alerts and a full-featured radar application rather than relying on this summary image alone.</p>
+
+            <h4>Radar Limitations</h4>
+            <p>Radar beams rise above the ground as they travel away from a radar site. Distant radar may therefore detect precipitation high in the atmosphere while missing shallow precipitation near the surface.</p>
+            <p>Mountains and buildings can block or distort the beam. Ground clutter, insects, anomalous propagation, and other non-weather targets can produce false echoes. Some precipitation evaporates before reaching the ground, while intense precipitation can reduce radar visibility behind a storm.</p>
+
+            <p>Data and limitations: <a href="https://www.rainviewer.com/api.html" target="_blank" rel="noopener noreferrer">RainViewer</a> composite reflectivity, interpreted using <a href="https://www.weather.gov/jetstream/radar" target="_blank" rel="noopener noreferrer">National Weather Service</a> radar guidance. The map is a recent radar observation, not a precipitation forecast or official warning product.</p>
 
             <div class="explainer-related">
                 <div class="explainer-related-label">Related</div>
-                <button class="explainer-link" data-explain="forecast">How the forecast works</button>
                 <button class="explainer-link" data-explain="conditions">Current conditions</button>
+                <button class="explainer-link" data-explain="forecast">How the forecast works</button>
+                <button class="explainer-link" data-explain="stormDetail">Storm &amp; intensity detail</button>
             </div>
         `
     },
     astro: {
-        title: 'Sun, Moon & Tide',
+        title: 'Sun, Moon, and Tide',
         body: `
-            <p class="explainer-intro">The table lists the day's sky events in chronological order, in the location's local time.</p>
+            <p class="explainer-intro">Sun and moon times are calculated astronomical estimates for the selected coordinates. Tide information is available for coastal locations and represents predicted or modeled water levels rather than direct observations.</p>
 
             <h4>Twilight</h4>
-            <p>Twilight is the stretch of partial light before sunrise and after sunset, graded by how far the sun sits <em>below</em> the horizon:</p>
-            <p><strong>Civil</strong> (0&ndash;6&deg; below) is the brightest stage — enough natural light to be out without artificial lighting, with only the brightest stars and planets showing. This is "dawn" and "dusk" in the everyday sense.</p>
-            <p><strong>Nautical</strong> (6&ndash;12&deg;) is when the sea horizon is still faintly visible against the sky — historically the window sailors used to sight stars against it for navigation. On land it looks dark.</p>
-            <p><strong>Astronomical</strong> (12&ndash;18&deg;) is the last faint trace of sunlight. Once the sun is 18&deg; down the sky is fully dark and the faintest objects are visible; beyond that is true night. So <strong>Astronomical Dawn</strong> is the very first light of the day, and <strong>Astronomical Dusk</strong> is the last.</p>
+            <p>Twilight is divided according to how far the center of the sun is below the ideal horizon:</p>
+            <ul>
+                <li>Civil twilight: 0&ndash;6 degrees below the horizon. Outdoor activity is often possible without artificial lighting.</li>
+                <li>Nautical twilight: 6&ndash;12 degrees below the horizon. The horizon may remain distinguishable at sea.</li>
+                <li>Astronomical twilight: 12&ndash;18 degrees below the horizon. Beyond this point, the sky is considered fully dark for most astronomical purposes.</li>
+            </ul>
 
-            <h4>Sun</h4>
-            <p>Sunrise and sunset are the moments the sun's upper edge crosses the horizon. <strong>Solar noon</strong> is when it reaches its highest point in the sky — that's rarely 12:00 on the clock, because of where you sit within your timezone and the tilt and ellipse of Earth's orbit. <strong>Day Length</strong> is the sunrise-to-sunset span, and the figure beneath it shows how much longer or shorter the day is than yesterday as the seasons turn.</p>
+            <h4>Sunrise, Sunset, and Solar Noon</h4>
+            <p>Calculated sunrise and sunset occur when the apparent upper edge of the sun crosses an ideal, unobstructed horizon. Local terrain, buildings, trees, elevation, and atmospheric refraction can cause the visible sunrise or sunset to occur at a different time.</p>
+            <p>Solar noon is the time when the sun reaches its highest point in the sky for that date and location. It does not necessarily occur at 12:00 p.m. by the clock.</p>
 
-            <h4>Moon</h4>
-            <p>The phase name and illumination percentage describe how much of the moon's disc is lit from our vantage point — new (0%) through first quarter (50%) to full (100%) and back. Because the moon is orbiting Earth, it rises and sets about <strong>50 minutes later each day</strong>, so those times drift steadily across the clock over the month.</p>
+            <h4>Day Length and Seasons</h4>
+            <p>Day length changes throughout the year because Earth's axis is tilted about 23.5 degrees relative to its orbit around the sun. As Earth travels around the sun, each hemisphere alternately tilts toward or away from it.</p>
+            <p>When your location is tilted toward the sun, the sun takes a longer path across the sky, producing longer days and higher sun angles&mdash;this is summer. When it is tilted away, the sun's path is shorter and lower, resulting in shorter days and lower sun angles&mdash;this is winter. Around the equinoxes in spring and fall, day and night are nearly equal in length.</p>
+            <p>The amount of change in day length depends on latitude. Near the equator, day length varies little over the year, while higher latitudes experience much larger seasonal swings, including very long summer days and very short winter days.</p>
 
-            <h4>Tides</h4>
-            <p>Shown for coastal locations when the Tides toggle is on. Most coasts see two highs and two lows a day (semidiurnal), driven mainly by the moon's gravity with the sun adding to it. When the sun and moon line up (new and full moon) their pulls combine into larger <strong>spring tides</strong>; at the quarter moons they partly cancel into smaller <strong>neap tides</strong>. US locations use NOAA station predictions; elsewhere a global model fills in.</p>
+            <h4>Moon Information</h4>
+            <p>Moon phase describes the geometric relationship among the sun, Earth, and moon. Illumination is the estimated percentage of the moon's visible disk that is sunlit.</p>
+            <p>Moonrise and moonset vary with latitude, season, and lunar position. The moon rises approximately 50 minutes later from one day to the next on average, but the daily difference can vary substantially. At some locations and dates, the moon may not rise or set during the local calendar day.</p>
+
+            <h4>Moon Phases</h4>
+            <p>The moon does not produce its own light; it reflects sunlight. As the moon orbits Earth, we see different portions of its sunlit half, creating the familiar cycle of phases over about 29.5 days.</p>
+            <p>The main phases are:</p>
+            <ul>
+                <li>New moon: The moon is between Earth and the sun, and its sunlit side faces away from us, making it largely invisible.</li>
+                <li>First quarter: About one week later, half of the visible disk is illuminated, appearing as a half moon.</li>
+                <li>Full moon: Earth is between the sun and the moon, and the entire visible disk is illuminated.</li>
+                <li>Last (third) quarter: Another half moon appears as the cycle continues back toward new moon.</li>
+            </ul>
+            <p>Between these primary phases, the moon appears as crescents when less than half is illuminated or gibbous when more than half is illuminated. The phase affects how bright the night sky appears and can influence visibility for outdoor activities and astronomy.</p>
+
+            <h4>Tide Information</h4>
+            <p>For supported U.S. locations, WeatherWonder uses predictions from the nearest suitable NOAA tide station within approximately 40 kilometers. Heights are referenced to Mean Lower Low Water, or MLLW, unless otherwise indicated.</p>
+            <p>For other coastal locations, WeatherWonder uses modeled hourly sea-level height relative to mean sea level from Open-Meteo Marine. These values are not equivalent to a local tide-gauge observation.</p>
+            <p>Astronomical tides are driven primarily by the gravitational effects of the moon and sun. Spring tides produce a larger tidal range near new and full moons; neap tides produce a smaller range near first- and third-quarter moons.</p>
+            <p>Actual water levels may differ from predictions because of wind, atmospheric pressure, waves, currents, river discharge, storm surge, and local coastal geometry. Do not use WeatherWonder tide information for navigation, flood safety, or other decisions requiring official observations and predictions.</p>
+
+            <p>Data and limitations: Sun and moon calculations use <a href="https://github.com/mourner/suncalc" target="_blank" rel="noopener noreferrer">SunCalc</a>. U.S. tide predictions use <a href="https://tidesandcurrents.noaa.gov/" target="_blank" rel="noopener noreferrer">NOAA CO-OPS</a>; other coastal estimates use <a href="https://open-meteo.com/en/docs/marine-weather-api" target="_blank" rel="noopener noreferrer">Open-Meteo Marine</a>.</p>
 
             <div class="explainer-related">
                 <div class="explainer-related-label">Related</div>
                 <button class="explainer-link" data-explain="conditions">Current conditions</button>
                 <button class="explainer-link" data-explain="forecast">How the forecast works</button>
+                <button class="explainer-link" data-explain="precip">Precipitation history</button>
             </div>
         `
     },
     precip: {
         title: 'Precipitation History',
         body: `
-            <p class="explainer-intro">How wet has it actually been lately? This section totals recent rain and snow and sets it against the local norm.</p>
+            <p class="explainer-intro">This section summarizes modeled estimates of past precipitation. It should not be interpreted as a rain-gauge record or a measurement at the selected point.</p>
 
-            <h4>Rolling totals</h4>
-            <p>Each tile sums measured precipitation over a trailing window — from the last 24 hours out to the last three months. Amounts follow your unit toggle (inches, millimetres, or microns), and snow is counted as its liquid-water equivalent.</p>
+            <h4>Rolling Totals</h4>
+            <p>WeatherWonder calculates estimated precipitation totals for the preceding:</p>
+            <ul>
+                <li>24 hours</li>
+                <li>48 hours</li>
+                <li>72 hours</li>
+                <li>7 days</li>
+                <li>30 days</li>
+                <li>90 days</li>
+            </ul>
+            <p>The totals include modeled rain, showers, and the liquid-water equivalent of frozen precipitation.</p>
 
-            <h4>Compared to normal</h4>
-            <p>Beneath each total is the <strong>10-year average</strong> for that same calendar window, plus a colored figure showing how far above or below average the current period is running. It's a quick read on whether you're in an unusually wet or dry stretch, rather than just a raw number with no context.</p>
+            <h4>Comparison with Recent-Average Conditions</h4>
+            <p>The 30-day and 90-day periods are compared with a 10-year modeled average for the corresponding calendar windows. A positive percentage indicates wetter estimated conditions; a negative percentage indicates drier estimated conditions.</p>
+            <p>A 10-year average provides recent context but is not a formal 30-year climate normal. It may also be influenced by unusually wet or dry years within the comparison period.</p>
 
-            <h4>Where the numbers come from</h4>
-            <p>Recent totals use Open-Meteo's <strong>historical-forecast archive</strong> — the best forecast that was actually issued at the time, which tracks what fell far better than a model's after-the-fact reconstruction. The long-term averages come from Open-Meteo's reanalysis archive of past weather.</p>
+            <h4>Data Sources</h4>
+            <p>Recent rolling totals use Open-Meteo's Historical Forecast API. This product combines the initial hours of successive operational model runs into a continuous hourly time series. The models incorporate recent observations during initialization, but the resulting precipitation values remain model estimates rather than rain-gauge measurements.</p>
+            <p>The 10-year comparisons use Open-Meteo Historical Weather reanalysis, normally ERA5-Land for a consistent year-to-year baseline. Reanalysis combines observations with numerical models to produce spatially complete estimates of past atmospheric conditions.</p>
+            <p>The recent totals and historical averages come from different model products and may have different systematic biases. The percentages should therefore be interpreted as contextual estimates rather than precise climate anomalies.</p>
+            <p>Both products can understate or overstate localized precipitation, particularly during thunderstorms, in complex terrain, or where precipitation varies sharply over short distances.</p>
 
-            <h4>Go deeper</h4>
-            <p>For day-by-day breakdowns and richer analysis, the link at the bottom of the section opens <strong>Hilary's Sprout</strong>, a companion app focused entirely on precipitation history for the same location.</p>
+            <h4>Appropriate Use</h4>
+            <p>Use these totals to evaluate broad recent wetness or dryness, vegetation and soil-moisture context, and general precipitation patterns.</p>
+            <p>For site-specific verification&mdash;such as documenting flooding, drought, facility conditions, or rainfall at a particular property&mdash;use a calibrated rain gauge or nearby official observation network.</p>
+
+            <p>Data and limitations: Recent totals use <a href="https://open-meteo.com/en/docs/historical-forecast-api" target="_blank" rel="noopener noreferrer">Open-Meteo Historical Forecast</a> data. Comparisons use <a href="https://open-meteo.com/en/docs/historical-weather-api" target="_blank" rel="noopener noreferrer">Open-Meteo Historical Weather</a> reanalysis, preferably ERA5-Land. These are modeled estimates, not local measurements.</p>
+
+            <h4>Go Deeper</h4>
+            <p>For day-by-day breakdowns and additional analysis, the link at the bottom of the section opens Hilary's Sprout, a companion application focused on precipitation history for the same location.</p>
 
             <div class="explainer-related">
                 <div class="explainer-related-label">Related</div>
                 <button class="explainer-link" data-explain="forecast">How the forecast works</button>
                 <button class="explainer-link" data-explain="conditions">Current conditions</button>
+                <button class="explainer-link" data-explain="astro">Sun, moon, and tide</button>
             </div>
         `
     }
