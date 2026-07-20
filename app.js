@@ -144,7 +144,7 @@ function applyCIT2000(on) {
 
 // Set the astro section header. It reflects both CIT2000 mode and whether
 // tides are currently shown — the "Tide"/"Waves" word toggles with the tide
-// buttons (footer + chart legend).
+// buttons (header shortcut + chart legend).
 function updateAstroHeader() {
     const section = document.getElementById('astro-section');
     if (!section) return;
@@ -710,36 +710,44 @@ function getTodayTideExtremes() {
     return events;
 }
 
+// The tide toggle currently lives in one place — the icon+label shortcut
+// beside the "Sun, Moon, and Tide" header — but is addressed generically via
+// data-tide-toggle so any future duplicate (like the chart legend's own
+// "Tide" entry, which is rebuilt fresh each render instead) stays in sync
+// for free.
 function updateTideToggleUI() {
-    const btn = document.getElementById('tide-toggle');
     // Keep the section header's "Tide"/"Waves" word in sync with the toggle.
     updateAstroHeader();
-    if (!btn) return;
     const coastal = isCoastalLocation();
-    // Only offer the toggle where there's actually tide data to show.
-    btn.classList.toggle('hidden', !coastal);
     const on = coastal && isTideLineOn();
-    btn.classList.toggle('active', on);
-    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    document.querySelectorAll('[data-tide-toggle]').forEach(btn => {
+        // Only offer the toggle where there's actually tide data to show.
+        btn.classList.toggle('hidden', !coastal);
+        btn.classList.toggle('active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+}
+
+// Flips the tide-line preference and refreshes every surface that reflects
+// it: the toggle button(s), the chart's tide line, the hourly cards' tide
+// row, and the Sun/Moon/Tide table.
+function toggleTideLine() {
+    const next = !isTideLineOn();
+    saveTideLine(next);
+    trackEvent('tide-' + (next ? 'on' : 'off'));
+    updateTideToggleUI();
+    if (weatherData) {
+        renderChart(weatherData);
+        renderHourlyForecast(weatherData);
+    }
+    renderAstroData();
 }
 
 function initializeTideToggle() {
     updateTideToggleUI();
-    const btn = document.getElementById('tide-toggle');
-    if (btn) {
-        btn.addEventListener('click', () => {
-            const next = !isTideLineOn();
-            saveTideLine(next);
-            trackEvent('tide-' + (next ? 'on' : 'off'));
-            updateTideToggleUI();
-            if (weatherData) {
-                renderChart(weatherData);
-                renderHourlyForecast(weatherData);
-            }
-            // Tides also appear/disappear in the Sun, Moon, and Tide table.
-            renderAstroData();
-        });
-    }
+    document.querySelectorAll('[data-tide-toggle]').forEach(btn => {
+        btn.addEventListener('click', toggleTideLine);
+    });
 }
 
 // Storm & intensity detail toggle — reveals a precipitation-character row on
@@ -763,32 +771,40 @@ function savePrecipDetail(on) {
     }
 }
 
+// Any button carrying data-precip-detail-toggle (currently just the
+// icon-only shortcut in the Daily Forecast section header) reflects the
+// Stormcast on/off state; the chart legend's "Stormcast" entry is rebuilt
+// fresh from isPrecipDetailOn() on every chart render, so it doesn't need
+// this attribute to stay in sync.
 function updatePrecipDetailToggleUI() {
-    const btn = document.getElementById('precip-detail-toggle');
-    if (!btn) return;
     const on = isPrecipDetailOn();
-    btn.classList.toggle('active', on);
-    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    document.querySelectorAll('[data-precip-detail-toggle]').forEach(btn => {
+        btn.classList.toggle('active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+}
+
+// Flips the Stormcast preference and refreshes every surface that reflects
+// it: the toggle button(s), the card detail rows, the outlook strip, and the
+// chart's intensity-colored fill.
+function togglePrecipDetail() {
+    const next = !isPrecipDetailOn();
+    savePrecipDetail(next);
+    trackEvent('precip-detail-' + (next ? 'on' : 'off'));
+    updatePrecipDetailToggleUI();
+    if (weatherData) {
+        renderDailyForecast(weatherData);
+        renderPrecipOutlook(weatherData);
+        renderHourlyForecast(weatherData);
+        renderChart(weatherData);
+    }
 }
 
 function initializePrecipDetailToggle() {
     updatePrecipDetailToggleUI();
-    const btn = document.getElementById('precip-detail-toggle');
-    if (btn) {
-        btn.addEventListener('click', () => {
-            const next = !isPrecipDetailOn();
-            savePrecipDetail(next);
-            trackEvent('precip-detail-' + (next ? 'on' : 'off'));
-            updatePrecipDetailToggleUI();
-            if (weatherData) {
-                renderDailyForecast(weatherData);
-                renderPrecipOutlook(weatherData);
-                renderHourlyForecast(weatherData);
-                // The toggle also switches the chart's intensity-colored fill
-                renderChart(weatherData);
-            }
-        });
-    }
+    document.querySelectorAll('[data-precip-detail-toggle]').forEach(btn => {
+        btn.addEventListener('click', togglePrecipDetail);
+    });
 }
 
 // Chart line visibility — each forecast-chart line can be toggled on/off from
@@ -2202,7 +2218,7 @@ function renderHourlyForecast(data) {
         const precipAmountHtml = precipStr
             ? `<div class="precip-amount${hkClass}">${precipStr}</div>`
             : `<div class="precip-amount placeholder">&nbsp;</div>`;
-        // Storm/intensity row, only when the footer Stormcast toggle is on. Like
+        // Storm/intensity row, only when the Stormcast toggle is on. Like
         // the tide row, it reserves its slot on every card so values line up.
         let precipDetailHtml = '';
         if (showPrecipDetail) {
@@ -2970,13 +2986,14 @@ function renderChart(data) {
 
     // Each legend entry is a toggle button that shows/hides its line. The
     // on/off state persists in localStorage, so it carries across every
-    // day-range view and reload. Tide reuses the footer's isTideLineOn() flag
+    // day-range view and reload. Tide reuses the shared isTideLineOn() flag
     // and is only offered for coastal locations. Wind and tide stay selectable
     // on every view, but default off when switching into a 5/7/10-day view.
     // Order matters: the legend is a two-row column-flow grid, so consecutive
     // pairs stack into columns — Temp/Feels Like, Precip %/Precip Amt,
-    // Wind/Stormcast, UV/Tide. Stormcast mirrors the footer toggle (same state),
-    // shown here so the toggle stays discoverable next to what it affects.
+    // Wind/Stormcast, UV/Tide. Stormcast and Tide mirror their respective
+    // section-header shortcuts (same state), shown here so the toggles stay
+    // discoverable next to what they affect.
     const items = [
         { key: 'temp', cls: 'temp', label: 'Temp', on: isChartLineVisible('temp') },
         { key: 'feelsLike', cls: 'feels', label: 'Feels Like', on: isChartLineVisible('feelsLike') },
@@ -2999,30 +3016,19 @@ function renderChart(data) {
     legend.querySelectorAll('.legend-item').forEach(btn => {
         btn.addEventListener('click', () => {
             const key = btn.dataset.line;
+            // Tide and Stormcast are shared toggles with their own render
+            // paths (including the chart), so they return early rather than
+            // falling through to the plain chart-line tail below.
             if (key === 'tide') {
-                const next = !isTideLineOn();
-                saveTideLine(next);
-                trackEvent('tide-' + (next ? 'on' : 'off'));
-                updateTideToggleUI();
-                // Keep the table and hourly cards in sync with the toggle.
-                renderAstroData();
-                if (weatherData) renderHourlyForecast(weatherData);
-            } else if (key === 'storms') {
-                // Same state as the footer Stormcast toggle: card detail rows
-                // plus the intensity-colored chart fill.
-                const next = !isPrecipDetailOn();
-                savePrecipDetail(next);
-                trackEvent('precip-detail-' + (next ? 'on' : 'off'));
-                updatePrecipDetailToggleUI();
-                if (weatherData) {
-                    renderDailyForecast(weatherData);
-                    renderPrecipOutlook(weatherData);
-                    renderHourlyForecast(weatherData);
-                }
-            } else {
-                const next = toggleChartLine(key);
-                trackEvent('chart-line-' + key + '-' + (next ? 'on' : 'off'));
+                toggleTideLine();
+                return;
             }
+            if (key === 'storms') {
+                togglePrecipDetail();
+                return;
+            }
+            const next = toggleChartLine(key);
+            trackEvent('chart-line-' + key + '-' + (next ? 'on' : 'off'));
             if (weatherData) renderChart(weatherData);
         });
     });
@@ -3316,8 +3322,8 @@ function renderAstroData() {
         rows.push({ label: `🌙 Moon (${moonInfo})`, value: '—', moon: true });
     }
 
-    // High/low tide rows are shown only when the Tides toggle is on (footer
-    // button / chart legend), so the toggle adds or removes them from the table.
+    // High/low tide rows are shown only when the Tide toggle is on (header
+    // shortcut / chart legend), so the toggle adds or removes them from the table.
     if (isTideLineOn()) {
         getTodayTideExtremes().forEach(t => {
             rows.push({
@@ -4611,7 +4617,7 @@ const EXPLAINERS = {
     stormDetail: {
         title: 'Storm & Intensity Detail',
         body: `
-            <p class="explainer-intro">The <strong>⛈️ Stormcast</strong> toggle in the footer adds one extra row to the forecast cards describing how hard precipitation is likely to fall — and whether thunderstorms are in play.</p>
+            <p class="explainer-intro">The <strong>⛈️ Stormcast</strong> toggle — in the Daily Forecast header, or the chart legend — adds one extra row to the forecast cards describing how hard precipitation is likely to fall, and whether thunderstorms are in play.</p>
 
             <h4>Intensity tiers</h4>
             <p>On the hourly cards, wet hours are labeled <strong>Light</strong> (barely wets the pavement), <strong>Moderate</strong> (umbrella weather), or <strong>Heavy</strong> (wipers on full, water ponding). The tiers use standard meteorological rate thresholds — for rain, "heavy" means more than 0.3&nbsp;inches (7.6&nbsp;mm) in the hour; snow is tiered by its own snowfall rate.</p>

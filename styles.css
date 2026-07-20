@@ -1004,6 +1004,56 @@ body {
     margin-right: auto;
 }
 
+/* Icon + label toggle shortcut in a section header (Daily Forecast's
+   Stormcast, Sun/Moon/Tide's Tide). Unlike .info-btn it carries a visible
+   border/background so its on/off state reads clearly — including for the
+   emoji icon, which ignores CSS `color` so the border/background do the
+   work of signaling "on" instead. */
+.header-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--bg-secondary);
+    -webkit-tap-highlight-color: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.4;
+    border-radius: 12px;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.header-toggle-btn.hidden {
+    display: none;
+}
+
+.header-toggle-icon {
+    font-size: 12px;
+    line-height: 1;
+}
+
+.header-toggle-btn:hover {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.stormcast-header-toggle.active {
+    background-color: var(--bg-secondary);
+    border-color: var(--storm-indigo);
+    color: var(--storm-indigo);
+}
+
+.tide-header-toggle.active {
+    background-color: var(--bg-secondary);
+    border-color: var(--tide-purple);
+    color: var(--tide-purple);
+}
+
 /* Info button appended to the current-conditions bar */
 .conditions-bar .info-btn {
     vertical-align: middle;
@@ -1702,16 +1752,9 @@ body {
 
 .footer-toggles {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 14px;
-}
-
-.footer-toggles-row {
-    display: flex;
     justify-content: center;
     gap: 6px;
+    margin-bottom: 14px;
     flex-wrap: wrap;
 }
 
@@ -1737,21 +1780,6 @@ body {
 .theme-toggle-icon {
     font-size: 16px;
     line-height: 1;
-}
-
-/* Tide line toggle — only shown for coastal locations (see app.js) */
-.tide-toggle.hidden {
-    display: none;
-}
-
-.tide-toggle.active {
-    color: var(--tide-purple);
-    border-color: var(--tide-purple);
-}
-
-.precip-detail-toggle.active {
-    color: var(--storm-indigo);
-    border-color: var(--storm-indigo);
 }
 
 .share-app-btn {
