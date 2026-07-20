@@ -2230,7 +2230,7 @@ body {
 /* CIT2000 Toggle Button — base inherits from .theme-toggle */
 
 /* "Do you have your micrometer?" unit toggle — only visible in CIT2000 mode,
-   shown right under the conditions bar and above the daily forecast. */
+   shown below the daily forecast chart and above the hourly forecast. */
 .micrometer-toggle {
     display: none;
 }
