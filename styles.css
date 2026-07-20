@@ -1118,6 +1118,24 @@ body {
     margin-bottom: 10px;
 }
 
+.explainer-body ul {
+    margin: 0 0 10px;
+    padding-left: 20px;
+}
+
+.explainer-body li {
+    margin-bottom: 4px;
+}
+
+.explainer-body a {
+    color: var(--accent-blue);
+    text-decoration: underline;
+}
+
+.explainer-body a:hover {
+    text-decoration: none;
+}
+
 .explainer-body strong {
     color: var(--text-primary);
     font-weight: 600;
