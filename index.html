@@ -166,6 +166,9 @@
                         <line x1="12" y1="8" x2="12.01" y2="8"></line>
                     </svg>
                 </button>
+                <button id="daily-stormcast-toggle" class="header-toggle-btn" data-precip-detail-toggle aria-pressed="false" title="Toggle Stormcast: precipitation intensity and storm detail" aria-label="Toggle Stormcast detail">
+                    <span aria-hidden="true">⛈️</span>
+                </button>
                 <button class="share-btn" id="share-daily-btn" aria-label="Share">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
@@ -325,7 +328,7 @@
                         <span class="theme-toggle-icon">🌊</span>
                         <span id="tide-toggle-label">Tides</span>
                     </button>
-                    <button id="precip-detail-toggle" class="theme-toggle precip-detail-toggle" aria-pressed="false" title="Show precipitation intensity and storm detail on the forecast cards">
+                    <button id="precip-detail-toggle" class="theme-toggle precip-detail-toggle" data-precip-detail-toggle aria-pressed="false" title="Show precipitation intensity and storm detail on the forecast cards">
                         <span class="theme-toggle-icon">⛈️</span>
                         <span>Stormcast</span>
                     </button>

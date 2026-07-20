@@ -763,32 +763,39 @@ function savePrecipDetail(on) {
     }
 }
 
+// Two buttons share the Stormcast on/off state: the footer toggle and the
+// icon-only shortcut in the Daily Forecast section header. Both carry
+// data-precip-detail-toggle so they can be kept in sync without hardcoding
+// either id here.
 function updatePrecipDetailToggleUI() {
-    const btn = document.getElementById('precip-detail-toggle');
-    if (!btn) return;
     const on = isPrecipDetailOn();
-    btn.classList.toggle('active', on);
-    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    document.querySelectorAll('[data-precip-detail-toggle]').forEach(btn => {
+        btn.classList.toggle('active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+}
+
+// Flips the Stormcast preference and refreshes every surface that reflects
+// it: both toggle buttons, the card detail rows, the outlook strip, and the
+// chart's intensity-colored fill.
+function togglePrecipDetail() {
+    const next = !isPrecipDetailOn();
+    savePrecipDetail(next);
+    trackEvent('precip-detail-' + (next ? 'on' : 'off'));
+    updatePrecipDetailToggleUI();
+    if (weatherData) {
+        renderDailyForecast(weatherData);
+        renderPrecipOutlook(weatherData);
+        renderHourlyForecast(weatherData);
+        renderChart(weatherData);
+    }
 }
 
 function initializePrecipDetailToggle() {
     updatePrecipDetailToggleUI();
-    const btn = document.getElementById('precip-detail-toggle');
-    if (btn) {
-        btn.addEventListener('click', () => {
-            const next = !isPrecipDetailOn();
-            savePrecipDetail(next);
-            trackEvent('precip-detail-' + (next ? 'on' : 'off'));
-            updatePrecipDetailToggleUI();
-            if (weatherData) {
-                renderDailyForecast(weatherData);
-                renderPrecipOutlook(weatherData);
-                renderHourlyForecast(weatherData);
-                // The toggle also switches the chart's intensity-colored fill
-                renderChart(weatherData);
-            }
-        });
-    }
+    document.querySelectorAll('[data-precip-detail-toggle]').forEach(btn => {
+        btn.addEventListener('click', togglePrecipDetail);
+    });
 }
 
 // Chart line visibility — each forecast-chart line can be toggled on/off from
@@ -3004,17 +3011,11 @@ function renderChart(data) {
                 renderAstroData();
                 if (weatherData) renderHourlyForecast(weatherData);
             } else if (key === 'storms') {
-                // Same state as the footer Stormcast toggle: card detail rows
-                // plus the intensity-colored chart fill.
-                const next = !isPrecipDetailOn();
-                savePrecipDetail(next);
-                trackEvent('precip-detail-' + (next ? 'on' : 'off'));
-                updatePrecipDetailToggleUI();
-                if (weatherData) {
-                    renderDailyForecast(weatherData);
-                    renderPrecipOutlook(weatherData);
-                    renderHourlyForecast(weatherData);
-                }
+                // Same state as the footer/header Stormcast toggles.
+                // togglePrecipDetail() already re-renders the chart, so skip
+                // the shared tail call below to avoid rendering it twice.
+                togglePrecipDetail();
+                return;
             } else {
                 const next = toggleChartLine(key);
                 trackEvent('chart-line-' + key + '-' + (next ? 'on' : 'off'));

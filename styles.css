@@ -1000,6 +1000,36 @@ body {
     margin-right: auto;
 }
 
+/* Icon-only toggle button in a section header (currently just the Daily
+   Forecast section's Stormcast shortcut). Unlike .info-btn it carries a
+   visible border/background so its on/off state reads without relying on
+   tinting the emoji glyph, which ignores CSS color. */
+.header-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    border: 1px solid transparent;
+    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 14px;
+    line-height: 1.4;
+    border-radius: 10px;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.header-toggle-btn:hover {
+    background-color: var(--bg-secondary);
+}
+
+.header-toggle-btn.active {
+    background-color: var(--bg-secondary);
+    border-color: var(--storm-indigo);
+}
+
 /* Info button appended to the current-conditions bar */
 .conditions-bar .info-btn {
     vertical-align: middle;
