@@ -1728,16 +1728,9 @@ body {
 
 .footer-toggles {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 14px;
-}
-
-.footer-toggles-row {
-    display: flex;
     justify-content: center;
     gap: 6px;
+    margin-bottom: 14px;
     flex-wrap: wrap;
 }
 
@@ -1773,11 +1766,6 @@ body {
 .tide-toggle.active {
     color: var(--tide-purple);
     border-color: var(--tide-purple);
-}
-
-.precip-detail-toggle.active {
-    color: var(--storm-indigo);
-    border-color: var(--storm-indigo);
 }
 
 .share-app-btn {

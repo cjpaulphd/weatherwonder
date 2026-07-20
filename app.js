@@ -763,10 +763,11 @@ function savePrecipDetail(on) {
     }
 }
 
-// Two buttons share the Stormcast on/off state: the footer toggle and the
-// icon-only shortcut in the Daily Forecast section header. Both carry
-// data-precip-detail-toggle so they can be kept in sync without hardcoding
-// either id here.
+// Any button carrying data-precip-detail-toggle (currently just the
+// icon-only shortcut in the Daily Forecast section header) reflects the
+// Stormcast on/off state; the chart legend's "Stormcast" entry is rebuilt
+// fresh from isPrecipDetailOn() on every chart render, so it doesn't need
+// this attribute to stay in sync.
 function updatePrecipDetailToggleUI() {
     const on = isPrecipDetailOn();
     document.querySelectorAll('[data-precip-detail-toggle]').forEach(btn => {
@@ -776,7 +777,7 @@ function updatePrecipDetailToggleUI() {
 }
 
 // Flips the Stormcast preference and refreshes every surface that reflects
-// it: both toggle buttons, the card detail rows, the outlook strip, and the
+// it: the toggle button(s), the card detail rows, the outlook strip, and the
 // chart's intensity-colored fill.
 function togglePrecipDetail() {
     const next = !isPrecipDetailOn();
@@ -2209,7 +2210,7 @@ function renderHourlyForecast(data) {
         const precipAmountHtml = precipStr
             ? `<div class="precip-amount${hkClass}">${precipStr}</div>`
             : `<div class="precip-amount placeholder">&nbsp;</div>`;
-        // Storm/intensity row, only when the footer Stormcast toggle is on. Like
+        // Storm/intensity row, only when the Stormcast toggle is on. Like
         // the tide row, it reserves its slot on every card so values line up.
         let precipDetailHtml = '';
         if (showPrecipDetail) {
@@ -4608,7 +4609,7 @@ const EXPLAINERS = {
     stormDetail: {
         title: 'Storm & Intensity Detail',
         body: `
-            <p class="explainer-intro">The <strong>⛈️ Stormcast</strong> toggle in the footer adds one extra row to the forecast cards describing how hard precipitation is likely to fall — and whether thunderstorms are in play.</p>
+            <p class="explainer-intro">The <strong>⛈️ Stormcast</strong> toggle — in the Daily Forecast header, or the chart legend — adds one extra row to the forecast cards describing how hard precipitation is likely to fall, and whether thunderstorms are in play.</p>
 
             <h4>Intensity tiers</h4>
             <p>On the hourly cards, wet hours are labeled <strong>Light</strong> (barely wets the pavement), <strong>Moderate</strong> (umbrella weather), or <strong>Heavy</strong> (wipers on full, water ponding). The tiers use standard meteorological rate thresholds — for rain, "heavy" means more than 0.3&nbsp;inches (7.6&nbsp;mm) in the hour; snow is tiered by its own snowfall rate.</p>
