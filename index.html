@@ -137,9 +137,6 @@
         <!-- Short-term rain outlook (nowcast / next likely rain) -->
         <div id="precip-outlook" class="precip-outlook"></div>
 
-        <!-- Micrometer Unit Toggle (CIT2000 only) — toggles K/µm units on/off -->
-        <button id="micrometer-toggle" class="micrometer-toggle" aria-pressed="false">Do you have your micrometer?</button>
-
         <!-- Weather Alert Banners (NWS API) -->
         <div id="alert-container" class="alert-container hidden"></div>
         <!-- Fallback Alert Banner (local detection) -->
@@ -199,6 +196,9 @@
                 <button class="chart-range-btn" data-days="10" aria-pressed="false">10D</button>
             </div>
         </section>
+
+        <!-- Micrometer Unit Toggle (CIT2000 only) — toggles K/µm units on/off -->
+        <button id="micrometer-toggle" class="micrometer-toggle" aria-pressed="false">Do you have your micrometer?</button>
 
         <!-- Hourly Forecast Section -->
         <section class="forecast-section" id="hourly-section">
