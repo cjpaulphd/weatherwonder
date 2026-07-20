@@ -1000,34 +1000,54 @@ body {
     margin-right: auto;
 }
 
-/* Icon-only toggle button in a section header (currently just the Daily
-   Forecast section's Stormcast shortcut). Unlike .info-btn it carries a
-   visible border/background so its on/off state reads without relying on
-   tinting the emoji glyph, which ignores CSS color. */
+/* Icon + label toggle shortcut in a section header (Daily Forecast's
+   Stormcast, Sun/Moon/Tide's Tide). Unlike .info-btn it carries a visible
+   border/background so its on/off state reads clearly — including for the
+   emoji icon, which ignores CSS `color` so the border/background do the
+   work of signaling "on" instead. */
 .header-toggle-btn {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    gap: 4px;
     -webkit-appearance: none;
     appearance: none;
     background: transparent;
-    border: 1px solid transparent;
+    border: 1px solid var(--bg-secondary);
     -webkit-tap-highlight-color: transparent;
+    color: var(--text-secondary);
     cursor: pointer;
-    padding: 2px 6px;
-    font-size: 14px;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: 500;
     line-height: 1.4;
-    border-radius: 10px;
-    transition: background-color 0.2s, border-color 0.2s;
+    border-radius: 12px;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.header-toggle-btn.hidden {
+    display: none;
+}
+
+.header-toggle-icon {
+    font-size: 12px;
+    line-height: 1;
 }
 
 .header-toggle-btn:hover {
     background-color: var(--bg-secondary);
+    color: var(--text-primary);
 }
 
-.header-toggle-btn.active {
+.stormcast-header-toggle.active {
     background-color: var(--bg-secondary);
     border-color: var(--storm-indigo);
+    color: var(--storm-indigo);
+}
+
+.tide-header-toggle.active {
+    background-color: var(--bg-secondary);
+    border-color: var(--tide-purple);
+    color: var(--tide-purple);
 }
 
 /* Info button appended to the current-conditions bar */
@@ -1756,16 +1776,6 @@ body {
 .theme-toggle-icon {
     font-size: 16px;
     line-height: 1;
-}
-
-/* Tide line toggle — only shown for coastal locations (see app.js) */
-.tide-toggle.hidden {
-    display: none;
-}
-
-.tide-toggle.active {
-    color: var(--tide-purple);
-    border-color: var(--tide-purple);
 }
 
 .share-app-btn {

@@ -166,8 +166,9 @@
                         <line x1="12" y1="8" x2="12.01" y2="8"></line>
                     </svg>
                 </button>
-                <button id="daily-stormcast-toggle" class="header-toggle-btn" data-precip-detail-toggle aria-pressed="false" title="Toggle Stormcast: precipitation intensity and storm detail" aria-label="Toggle Stormcast detail">
-                    <span aria-hidden="true">⛈️</span>
+                <button id="daily-stormcast-toggle" class="header-toggle-btn stormcast-header-toggle" data-precip-detail-toggle aria-pressed="false" title="Toggle Stormcast: precipitation intensity and storm detail">
+                    <span class="header-toggle-icon" aria-hidden="true">⛈️</span>
+                    <span>Stormcast</span>
                 </button>
                 <button class="share-btn" id="share-daily-btn" aria-label="Share">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -286,6 +287,10 @@
                         <line x1="12" y1="8" x2="12.01" y2="8"></line>
                     </svg>
                 </button>
+                <button id="astro-tide-toggle" class="header-toggle-btn tide-header-toggle hidden" data-tide-toggle aria-pressed="false" title="Show tide line on the forecast chart (coastal locations only)">
+                    <span class="header-toggle-icon" aria-hidden="true">🌊</span>
+                    <span>Tide</span>
+                </button>
             </div>
             <div id="astro-data" class="astro-container">
                 <div class="loading">Loading astronomical data</div>
@@ -320,10 +325,6 @@
                 <button id="time-toggle" class="theme-toggle">
                     <span class="theme-toggle-icon">🕐</span>
                     <span id="time-toggle-label">24hr</span>
-                </button>
-                <button id="tide-toggle" class="theme-toggle tide-toggle hidden" aria-pressed="false" title="Show tide line on the forecast chart (coastal locations only)">
-                    <span class="theme-toggle-icon">🌊</span>
-                    <span id="tide-toggle-label">Tides</span>
                 </button>
             </div>
             <div class="footer-tagline">
