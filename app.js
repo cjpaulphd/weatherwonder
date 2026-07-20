@@ -655,10 +655,36 @@ function saveTideLine(on) {
     tideLineOn = !!on;
 }
 
-// Is the current location coastal? True when we have usable tide heights.
-function isCoastalLocation() {
+// A usable hourly tide series — the per-hour heights that power the chart
+// curve and the hourly-card tide values. NOAA subordinate (high/low-only)
+// stations have extremes but no series, so this is false for them.
+function hasTideSeries() {
     return !!(tideData && Array.isArray(tideData.heightsFt) &&
         tideData.heightsFt.some(v => v != null));
+}
+
+// Any usable tide information for this location: an hourly series, high/low
+// extremes, or both. A coastal location may have valid high/low events even
+// without an hourly series.
+function hasTideData() {
+    if (!tideData) return false;
+    return hasTideSeries() ||
+        (Array.isArray(tideData.extremes) && tideData.extremes.length > 0);
+}
+
+// Source-aware terminology. NOAA station predictions are true tides; the
+// Open-Meteo Marine fallback reports a modeled sea-level height, so it is
+// labeled "Sea Level" / "High Water" / "Low Water" instead of the NOAA
+// "Tide" / "High Tide" / "Low Tide".
+function isMarineTideSource() {
+    return !!(tideData && tideData.source === 'open-meteo');
+}
+function tideSeriesLabel() {
+    return isMarineTideSource() ? 'Sea Level' : 'Tide';
+}
+function tideExtremeLabel(type) {
+    if (isMarineTideSource()) return type === 'High' ? 'High Water' : 'Low Water';
+    return type === 'High' ? 'High Tide' : 'Low Tide';
 }
 
 // Find today's high/low tide events, in chronological order. Returns [] for
@@ -668,7 +694,7 @@ function isCoastalLocation() {
 // around each extreme to recover a sub-hour time (and the true peak height).
 // Times are local wall-clock (no UTC offset), so format them WITHOUT a tz.
 function getTodayTideExtremes() {
-    if (!isCoastalLocation()) return [];
+    if (!hasTideData()) return [];
     const ln = getLocationNow();
     const pad = n => String(n).padStart(2, '0');
     const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -718,7 +744,9 @@ function getTodayTideExtremes() {
 function updateTideToggleUI() {
     // Keep the section header's "Tide"/"Waves" word in sync with the toggle.
     updateAstroHeader();
-    const coastal = isCoastalLocation();
+    // Offer the toggle wherever there's any tide info (a series OR high/low
+    // events), so high/low-only stations still expose their events.
+    const coastal = hasTideData();
     const on = coastal && isTideLineOn();
     document.querySelectorAll('[data-tide-toggle]').forEach(btn => {
         // Only offer the toggle where there's actually tide data to show.
@@ -948,18 +976,7 @@ function detectLocaleDefaults() {
 // Helper to re-update location display temperature after unit change
 function reloadLocationTemp() {
     if (!weatherData) return;
-    const now = getLocationNow();
-    let currentTemp = null;
-    let feelsLike = null;
-    for (let i = 0; i < weatherData.hourly.time.length; i++) {
-        const hourDate = new Date(weatherData.hourly.time[i]);
-        if (hourDate >= now) {
-            const idx = i > 0 ? i - 1 : 0;
-            currentTemp = formatTempValue(weatherData.hourly.temperature_2m[idx]);
-            feelsLike = formatTempValue(weatherData.hourly.apparent_temperature[idx]);
-            break;
-        }
-    }
+    const { currentTemp, feelsLike } = applyCurrentConditions();
     updateLocationDisplay(currentTemp, feelsLike);
     renderConditionsBar();
 }
@@ -996,11 +1013,12 @@ function formatHour(date, tz) {
     return `${hour12}${suffix}`;
 }
 
-// Build the "Updated ..." timestamp label.
+// Build the "Refreshed ..." timestamp label. This marks when WeatherWonder
+// finished loading its data, not a common issuance time across providers.
 // When the viewed location is in a different timezone from the user's device,
 // shows both times with abbreviations and the hour offset, e.g.
-//   "Updated 5:11 AM ET · 9:11 PM NZST (+16hr)"
-// When timezones match, shows just "Updated 5:11 AM".
+//   "Refreshed 5:11 AM ET · 9:11 PM NZST (+16hr)"
+// When timezones match, shows just "Refreshed 5:11 AM".
 function formatUpdatedTimestamp(date) {
     const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const locationTz = getLocationTimezone();
@@ -1008,7 +1026,7 @@ function formatUpdatedTimestamp(date) {
     const localTime = formatTime(date);
 
     if (!locationTz || browserTz === locationTz) {
-        return `Updated ${localTime}`;
+        return `Refreshed ${localTime}`;
     }
 
     // Get short timezone abbreviations (e.g. "EST", "NZST")
@@ -1035,7 +1053,7 @@ function formatUpdatedTimestamp(date) {
     const mins = absMin % 60;
     const diffLabel = mins === 0 ? `${sign}${hrs}hr` : `${sign}${hrs}:${mins.toString().padStart(2, '0')}`;
 
-    return `Updated ${localTime} ${localAbbr} \u00B7 ${locationTime} ${locationAbbr} (${diffLabel})`;
+    return `Refreshed ${localTime} ${localAbbr} \u00B7 ${locationTime} ${locationAbbr} (${diffLabel})`;
 }
 
 // Theme management with localStorage
@@ -1236,17 +1254,29 @@ function isSnow(code) {
     return [71, 73, 75, 77, 85, 86].includes(code);
 }
 
-// Map a snow weather code to its nearest rain equivalent.
-// Used when temperature is above freezing but Open-Meteo still returns a snow code.
-const SNOW_TO_RAIN = { 71: 61, 73: 63, 75: 65, 77: 51, 85: 80, 86: 82 };
+// Check if a code is rain, drizzle, or a rain shower (including freezing forms).
+// Used with isSnow() to detect a half-day period that mixes rain and snow.
+function isRainCode(code) {
+    return [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code);
+}
 
-// Return the weather code to use for icon display, substituting a rain code when
-// the weather code indicates snow but the temperature is above 2°C (35.6°F).
-function tempGuardedCode(code, tempCelsius) {
-    if (isSnow(code) && tempCelsius !== null && tempCelsius > 2) {
-        return SNOW_TO_RAIN[code] ?? 63;
-    }
-    return code;
+// Explicit significance ranking for WMO weather codes (lower = more
+// significant), used to summarize an AM/PM half-day. This replaces the old
+// assumption that the numerically highest code is the best summary — that
+// mis-ranked, e.g., fog (45–48) above heavy rain (65). Precipitation type is
+// determined by the code itself, never by temperature.
+function weatherCodeCategory(code) {
+    if (code >= 95) return 1;                        // Thunderstorm (95, 96, 99)
+    if ([56, 57, 66, 67].includes(code)) return 2;   // Freezing rain / freezing drizzle
+    if ([75, 86].includes(code)) return 3;           // Heavy snow / heavy snow showers
+    if ([65, 82].includes(code)) return 4;           // Heavy rain / heavy rain showers
+    if ([71, 73, 77, 85].includes(code)) return 5;   // Other snow / snow showers
+    if ([61, 63, 80, 81].includes(code)) return 6;   // Other rain / rain showers
+    if ([45, 48].includes(code)) return 7;           // Fog / rime fog
+    if ([51, 53, 55].includes(code)) return 8;       // Drizzle
+    if (code === 3) return 9;                         // Overcast
+    if (code === 1 || code === 2) return 10;         // Partly cloudy
+    return 11;                                        // Clear (0) and anything else
 }
 
 // Format temperature (returns just the number in current unit)
@@ -1445,6 +1475,21 @@ async function fetchWeatherData(lat, lon) {
     const params = new URLSearchParams({
         latitude: lat,
         longitude: lon,
+        // Dedicated current-conditions block. Open-Meteo returns a single
+        // best-available snapshot for "now" rather than making us pick the
+        // nearest hourly index ourselves.
+        current: [
+            'temperature_2m',
+            'apparent_temperature',
+            'relative_humidity_2m',
+            'dew_point_2m',
+            'weather_code',
+            'wind_speed_10m',
+            'wind_direction_10m',
+            'wind_gusts_10m',
+            'precipitation',
+            'is_day'
+        ].join(','),
         hourly: [
             'temperature_2m',
             'apparent_temperature',
@@ -1456,6 +1501,7 @@ async function fetchWeatherData(lat, lon) {
             'weather_code',
             'wind_speed_10m',
             'wind_direction_10m',
+            'wind_gusts_10m',
             'uv_index',
             'is_day',
             'cape'
@@ -1555,7 +1601,9 @@ async function getNoaaTideStations() {
     return noaaStationsCache;
 }
 
-// Find the nearest NOAA tide station within ~40 km, or null.
+// Find the nearest NOAA tide station within ~40 km. Returns { station,
+// distanceKm } so the provenance line can report how far away it is, or null
+// when none is close enough.
 async function findNearestNoaaStation(lat, lon) {
     const stations = await getNoaaTideStations();
     let best = null, bestKm = Infinity;
@@ -1564,14 +1612,15 @@ async function findNearestNoaaStation(lat, lon) {
         const km = haversineKm(lat, lon, s.lat, s.lng);
         if (km < bestKm) { bestKm = km; best = s; }
     }
-    return best && bestKm <= 40 ? best : null;
+    return best && bestKm <= 40 ? { station: best, distanceKm: bestKm } : null;
 }
 
 // Fetch tide predictions from NOAA for the nearest station. Returns the
 // normalized tide object, or null when no station is close enough.
 async function fetchNoaaTideData(lat, lon) {
-    const station = await findNearestNoaaStation(lat, lon);
-    if (!station) return null;
+    const nearest = await findNearestNoaaStation(lat, lon);
+    if (!nearest) return null;
+    const { station, distanceKm } = nearest;
 
     const ln = getLocationNow();
     const pad = n => String(n).padStart(2, '0');
@@ -1585,23 +1634,54 @@ async function fetchNoaaTideData(lat, lon) {
     const seriesUrl = `${NOAA_TIDE_DATAGETTER}?product=predictions&interval=h&begin_date=${begin}&end_date=${end}${common}`;
     const hiloUrl = `${NOAA_TIDE_DATAGETTER}?product=predictions&interval=hilo&begin_date=${begin}&end_date=${end}${common}`;
 
-    const [seriesResp, hiloResp] = await Promise.all([fetch(seriesUrl), fetch(hiloUrl)]);
-    if (!seriesResp.ok || !hiloResp.ok) return null;
-    const series = await seriesResp.json();
-    const hilo = await hiloResp.json();
-    if (!series.predictions || !series.predictions.length) return null;
+    // Fetch the two products independently: NOAA subordinate stations often
+    // provide high/low predictions but not an hourly series, so one request
+    // failing must not discard the other.
+    const [seriesRes, hiloRes] = await Promise.allSettled([fetch(seriesUrl), fetch(hiloUrl)]);
 
     // NOAA "t" is local station wall-clock "YYYY-MM-DD HH:mm" (no offset).
     const toIso = t => t.replace(' ', 'T');
-    const times = series.predictions.map(p => toIso(p.t));
-    const heightsFt = series.predictions.map(p => parseFloat(p.v));
-    const extremes = (hilo.predictions || []).map(p => ({
-        type: p.type === 'H' ? 'High' : 'Low',
-        date: new Date(toIso(p.t)),
-        heightFt: parseFloat(p.v)
-    }));
 
-    return { times, heightsFt, extremes, source: 'noaa', stationName: station.name };
+    let times = [];
+    let heightsFt = [];
+    if (seriesRes.status === 'fulfilled' && seriesRes.value.ok) {
+        try {
+            const series = await seriesRes.value.json();
+            if (series.predictions && series.predictions.length) {
+                times = series.predictions.map(p => toIso(p.t));
+                heightsFt = series.predictions.map(p => parseFloat(p.v));
+            }
+        } catch (e) { /* leave series empty */ }
+    }
+
+    let extremes = null;
+    if (hiloRes.status === 'fulfilled' && hiloRes.value.ok) {
+        try {
+            const hilo = await hiloRes.value.json();
+            if (hilo.predictions && hilo.predictions.length) {
+                extremes = hilo.predictions.map(p => ({
+                    type: p.type === 'H' ? 'High' : 'Low',
+                    date: new Date(toIso(p.t)),
+                    heightFt: parseFloat(p.v)
+                }));
+            }
+        } catch (e) { /* leave extremes null */ }
+    }
+
+    const hasSeries = heightsFt.some(v => Number.isFinite(v));
+    const hasExtremes = Array.isArray(extremes) && extremes.length > 0;
+    // No usable NOAA predictions at all → null so the caller falls back to
+    // Open-Meteo Marine.
+    if (!hasSeries && !hasExtremes) return null;
+
+    return {
+        times: hasSeries ? times : [],
+        heightsFt: hasSeries ? heightsFt : [],
+        extremes: hasExtremes ? extremes : null,
+        source: 'noaa',
+        stationName: station.name,
+        stationDistanceKm: distanceKm
+    };
 }
 
 // Fetch hourly tide heights from Open-Meteo's Marine API (global model).
@@ -1613,7 +1693,11 @@ async function fetchOpenMeteoTideData(lat, lon) {
         longitude: lon,
         hourly: 'sea_level_height_msl',
         timezone: 'auto',
-        forecast_days: 11
+        // The marine grid doesn't cover the full 11-day atmospheric horizon, so
+        // request only 8 days; partial/null values are still handled gracefully.
+        // cell_selection: 'sea' picks the nearest marine cell for coastal points.
+        cell_selection: 'sea',
+        forecast_days: 8
     });
     const response = await fetch(`${MARINE_API}?${params}`);
     if (!response.ok) return null;
@@ -1655,6 +1739,15 @@ function getDewpointColor(dewpointC) {
     return '#ff5252';               // Oppressive - red
 }
 
+// A gust is worth showing only when it's genuinely stronger than the sustained
+// wind — at least 18 mph and at least 5 mph above the sustained speed. Below
+// that it's noise that would only clutter the compact wind display. Thresholds
+// are in mph (the API's native wind unit), independent of the display unit.
+function isMaterialGust(windSpeed, windGust) {
+    return typeof windGust === 'number' && typeof windSpeed === 'number' &&
+        windGust >= 18 && (windGust - windSpeed) >= 5;
+}
+
 // Get color for wind speed (mph)
 function getWindColor(mph) {
     if (mph <= 5) return 'var(--text-secondary)';  // Calm - muted
@@ -1665,14 +1758,58 @@ function getWindColor(mph) {
 }
 
 // Store current conditions for re-rendering on unit change
-let currentConditions = { aqi: null, humidity: null, dewpoint: null, windSpeed: null, windDir: null };
+let currentConditions = { aqi: null, humidity: null, dewpoint: null, windSpeed: null, windDir: null, windGust: null };
+
+// The hourly index whose time is the last one at or before "now" in the
+// location's timezone. Used only as a fallback when Open-Meteo's dedicated
+// current-conditions block (or an individual variable within it) is missing.
+function getNearestHourlyIndex() {
+    const times = weatherData.hourly.time;
+    const now = getLocationNow();
+    let idx = 0;
+    for (let i = 0; i < times.length; i++) {
+        if (new Date(times[i]) <= now) idx = i;
+        else break;
+    }
+    return idx;
+}
+
+// Populate currentConditions (humidity, dew point, wind, gust) and return the
+// header temperature and feels-like, preferring Open-Meteo's dedicated
+// `current` snapshot and falling back to the nearest hourly value for any
+// variable the current block doesn't supply.
+function applyCurrentConditions() {
+    if (!weatherData) return { currentTemp: null, feelsLike: null };
+    const cur = weatherData.current || {};
+    const hourly = weatherData.hourly;
+    const idx = getNearestHourlyIndex();
+    // Prefer the current value when it's a finite number; otherwise fall back
+    // to the nearest hour. `null`/`undefined`/NaN all trip the fallback.
+    const pick = (curVal, hourlyArr) =>
+        (typeof curVal === 'number' && Number.isFinite(curVal))
+            ? curVal
+            : (hourlyArr ? hourlyArr[idx] : null);
+
+    const tempC = pick(cur.temperature_2m, hourly.temperature_2m);
+    const feelsC = pick(cur.apparent_temperature, hourly.apparent_temperature);
+    currentConditions.humidity = pick(cur.relative_humidity_2m, hourly.relative_humidity_2m);
+    currentConditions.dewpoint = pick(cur.dew_point_2m, hourly.dew_point_2m);
+    currentConditions.windSpeed = pick(cur.wind_speed_10m, hourly.wind_speed_10m);
+    currentConditions.windDir = pick(cur.wind_direction_10m, hourly.wind_direction_10m);
+    currentConditions.windGust = pick(cur.wind_gusts_10m, hourly.wind_gusts_10m);
+
+    return {
+        currentTemp: tempC == null ? null : formatTempValue(tempC),
+        feelsLike: feelsC == null ? null : formatTempValue(feelsC)
+    };
+}
 
 // Render conditions bar (AQI, humidity, wind) on a single compact line
 function renderConditionsBar() {
     const el = document.getElementById('conditions-bar');
     if (!el) return;
 
-    const { aqi, humidity, dewpoint, windSpeed, windDir } = currentConditions;
+    const { aqi, humidity, dewpoint, windSpeed, windDir, windGust } = currentConditions;
     const parts = [];
 
     if (aqi != null) {
@@ -1695,11 +1832,15 @@ function renderConditionsBar() {
     }
 
     if (windSpeed != null && windDir != null) {
-        const color = getWindColor(windSpeed);
+        // Append a gust only when it's materially stronger than the sustained
+        // wind; when shown, color by the larger of the two speeds.
+        const showGust = isMaterialGust(windSpeed, windGust);
+        const color = getWindColor(showGust ? Math.max(windSpeed, windGust) : windSpeed);
         const dir = getWindDirection(windDir);
         const arrow = String.fromCharCode(8593); // ↑
         const rotation = windDir + 180; // Point arrow in direction wind is going
-        parts.push(`<span style="color:${color}"><span class="cond-wind-icon" style="display:inline-block;transform:rotate(${rotation}deg)">${arrow}</span> ${dir} ${formatWindSpeed(windSpeed)}</span>`);
+        const gustStr = showGust ? ` &middot; G ${formatWindSpeed(windGust)}` : '';
+        parts.push(`<span style="color:${color}"><span class="cond-wind-icon" style="display:inline-block;transform:rotate(${rotation}deg)">${arrow}</span> ${dir} ${formatWindSpeed(windSpeed)}${gustStr}</span>`);
     }
 
     if (parts.length === 0) {
@@ -1866,45 +2007,65 @@ function clearDisambiguation() {
     }
 }
 
-// Get AM/PM weather codes (and temperatures) from hourly data for a specific date
+// Summarize the AM (6am–noon) and PM (noon–6pm) half-days for a date into a
+// single most-significant weather code each, using the explicit category
+// ranking, with precipitation probability then amount as tie-breakers within a
+// category. Also reports whether each half-day mixes rain and snow codes, for
+// the compact dual icon. Precipitation type comes from the codes, not the
+// temperature.
 function getAmPmWeatherCodes(data, targetDate) {
     const hourly = data.hourly;
     const targetDay = new Date(targetDate);
     targetDay.setHours(0, 0, 0, 0);
 
-    let amCode = null;
-    let pmCode = null;
-    let amTemp = null;
-    let pmTemp = null;
+    let am = null, pm = null; // { code, cat, prob, amt }
+    let amHasRain = false, amHasSnow = false;
+    let pmHasRain = false, pmHasSnow = false;
 
-    // Aggregate each half-day into a single "most significant" condition rather
-    // than sampling one point hour. WMO weather codes increase roughly with
-    // severity (clear 0 → cloud 1-3 → fog 45-48 → rain 51-67 → snow 71-86 →
-    // thunder 95-99), so the highest code in the window is a reasonable summary
-    // of what the period feels like. The temperature is captured at that same
-    // hour so tempGuardedCode() can still swap a warm snow code for rain.
+    // A candidate beats the current pick if it's a more significant category,
+    // or the same category with a higher precip probability, or same category
+    // and probability with a higher precip amount.
+    const better = (cand, cur) => {
+        if (!cur) return true;
+        if (cand.cat !== cur.cat) return cand.cat < cur.cat;
+        if (cand.prob !== cur.prob) return cand.prob > cur.prob;
+        return cand.amt > cur.amt;
+    };
+
     for (let i = 0; i < hourly.time.length; i++) {
         const hourDate = new Date(hourly.time[i]);
         const hourDay = new Date(hourDate);
         hourDay.setHours(0, 0, 0, 0);
+        if (hourDay.getTime() !== targetDay.getTime()) continue;
 
-        if (hourDay.getTime() === targetDay.getTime()) {
-            const hour = hourDate.getHours();
-            const code = hourly.weather_code[i];
-            // AM: morning, 6am–noon
-            if (hour >= 6 && hour < 12 && (amCode === null || code > amCode)) {
-                amCode = code;
-                amTemp = hourly.temperature_2m[i];
-            }
-            // PM: afternoon, noon–6pm
-            if (hour >= 12 && hour < 18 && (pmCode === null || code > pmCode)) {
-                pmCode = code;
-                pmTemp = hourly.temperature_2m[i];
-            }
+        const hour = hourDate.getHours();
+        const code = hourly.weather_code[i];
+        const cand = {
+            code,
+            cat: weatherCodeCategory(code),
+            prob: hourly.precipitation_probability[i] || 0,
+            amt: hourly.precipitation[i] || 0
+        };
+        const rainy = isRainCode(code);
+        const snowy = isSnow(code);
+
+        if (hour >= 6 && hour < 12) {
+            if (better(cand, am)) am = cand;
+            if (rainy) amHasRain = true;
+            if (snowy) amHasSnow = true;
+        } else if (hour >= 12 && hour < 18) {
+            if (better(cand, pm)) pm = cand;
+            if (rainy) pmHasRain = true;
+            if (snowy) pmHasSnow = true;
         }
     }
 
-    return { amCode, pmCode, amTemp, pmTemp };
+    return {
+        amCode: am ? am.code : null,
+        pmCode: pm ? pm.code : null,
+        amMixed: amHasRain && amHasSnow,
+        pmMixed: pmHasRain && pmHasSnow
+    };
 }
 
 // Render daily forecast cards - starting from today (current day)
@@ -1945,8 +2106,8 @@ function renderDailyForecast(data) {
         const windSpeed = daily.wind_speed_10m_max[i];
         const windDir = daily.wind_direction_10m_dominant[i];
 
-        // Get AM/PM weather codes from hourly data
-        const { amCode, pmCode, amTemp, pmTemp } = getAmPmWeatherCodes(data, date);
+        // Get AM/PM summary codes (and mixed rain/snow flags) from hourly data.
+        const { amCode, pmCode, amMixed, pmMixed } = getAmPmWeatherCodes(data, date);
 
         // Changed to min/max order
         const lowTemp = formatTempValue(daily.temperature_2m_min[i]);
@@ -1954,16 +2115,20 @@ function renderDailyForecast(data) {
 
         let precipClass = hasSnow ? 'snow' : '';
 
-        // Use AM/PM icons if available, otherwise fall back to daily icon.
-        // Guard snow codes against the actual temperature at that hour: if it's
-        // above 2°C (35.6°F), substitute the nearest rain equivalent so that a
-        // brief overnight snow transition doesn't show a snowflake on a warm day.
-        const rawAmCode = amCode !== null ? amCode : dailyWeatherCode;
-        const rawPmCode = pmCode !== null ? pmCode : dailyWeatherCode;
-        const guardedAmCode = tempGuardedCode(rawAmCode, amTemp ?? daily.temperature_2m_min[i]);
-        const guardedPmCode = tempGuardedCode(rawPmCode, pmTemp ?? daily.temperature_2m_max[i]);
-        const amIcon = getWeatherIcon(guardedAmCode);
-        const pmIcon = getWeatherIcon(guardedPmCode);
+        // Use AM/PM icons if available, otherwise fall back to the daily icon.
+        // Codes are used exactly as reported by Open-Meteo — no temperature
+        // override. A half-day that mixes rain and snow gets a compact dual
+        // icon with an accessible "Rain and snow during the period" label.
+        const amCodeFinal = amCode !== null ? amCode : dailyWeatherCode;
+        const pmCodeFinal = pmCode !== null ? pmCode : dailyWeatherCode;
+        const mixedIcon = '🌧️❄️';
+        const mixedLabel = 'Rain and snow during the period';
+        const amIconHtml = amMixed
+            ? `<div class="am-icon mixed" title="Morning" role="img" aria-label="Morning: ${mixedLabel}">${mixedIcon}</div>`
+            : `<div class="am-icon" title="Morning" role="img" aria-label="Morning: ${getWeatherDesc(amCodeFinal)}">${getWeatherIcon(amCodeFinal)}</div>`;
+        const pmIconHtml = pmMixed
+            ? `<div class="pm-icon mixed" title="Afternoon" role="img" aria-label="Afternoon: ${mixedLabel}">${mixedIcon}</div>`
+            : `<div class="pm-icon" title="Afternoon" role="img" aria-label="Afternoon: ${getWeatherDesc(pmCodeFinal)}">${getWeatherIcon(pmCodeFinal)}</div>`;
 
         const kClass = getTempUnit() === 'K' ? ' kelvin-units' : '';
         const compact = days >= 10;
@@ -1994,7 +2159,8 @@ function renderDailyForecast(data) {
         }
 
         if (compact) {
-            const dayCode = tempGuardedCode(dailyWeatherCode, daily.temperature_2m_max[i]);
+            // Compact daily cards use the daily Open-Meteo code unchanged.
+            const dayCode = dailyWeatherCode;
             const dayIcon = getWeatherIcon(dayCode);
             const windRotation = windDir + 180;
             card.innerHTML = `
@@ -2011,8 +2177,8 @@ function renderDailyForecast(data) {
             card.innerHTML = `
                 <div class="day-name">${getDayName(date, true)}</div>
                 <div class="weather-icons">
-                    <div class="am-icon" title="Morning" role="img" aria-label="Morning: ${getWeatherDesc(guardedAmCode)}">${amIcon}</div>
-                    <div class="pm-icon" title="Afternoon" role="img" aria-label="Afternoon: ${getWeatherDesc(guardedPmCode)}">${pmIcon}</div>
+                    ${amIconHtml}
+                    ${pmIconHtml}
                 </div>
                 <div class="temp-range">${lowTemp} | ${highTemp} ${getTempUnitLabel()}</div>
                 <div class="wind-info${kClass}">${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}</div>
@@ -2026,12 +2192,13 @@ function renderDailyForecast(data) {
     }
 }
 
-// Render the short-term rain outlook strip above the forecast chart: a
-// ~2-hour nowcast from the 15-minute precipitation series ("rain starting
+// Render the short-term precipitation outlook strip above the forecast chart:
+// a ~2-hour nowcast from the 15-minute precipitation series ("Rain expected
 // around 3:15 PM"), or — when nothing is imminent — the next hour with a
-// likely (≥50%) chance of precipitation from the hourly forecast. One short
-// line; hidden entirely via CSS when empty. All content is internally
-// generated, so no escaping is needed.
+// likely (≥50%) chance of precipitation from the hourly forecast ("Next likely
+// rain Tue at 2:00 PM · 60%"). One short line; hidden entirely via CSS when
+// empty. All content is internally generated, so no escaping is needed.
+//
 // Day-of-week label for the outlook strip: just the weekday name (e.g.
 // "Mon"), since within the 11-day forecast window that's unambiguous. The
 // day-of-month is appended only when the date is more than a week out,
@@ -2047,19 +2214,16 @@ function outlookDayLabel(date, now) {
     return diffDays > 7 ? `${name} ${date.getDate()}` : name;
 }
 
-// Time for the outlook strip, always a zero-padded 4-digit hour:minute (e.g.
-// "03:15 PM" / "15:15") so it doesn't jog side to side as the leading hour
-// digit changes.
-function outlookTimeLabel(date) {
-    if (getTimeFormat() === '24') {
-        return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    }
-    const h = date.getHours();
-    const suffix = h >= 12 ? 'p' : 'a';
-    const hour12 = (h % 12 || 12).toString().padStart(2, '0');
-    const min = date.getMinutes().toString().padStart(2, '0');
-    return `${hour12}:${min}${suffix}`;
-}
+// Minimum precipitation for a 15-minute nowcast interval to count as
+// materially wet. A presentation threshold, not a meteorological one: it keeps
+// a trace value (drizzle a hundredth of a millimeter, model noise) from
+// triggering a "rain expected" message. In millimeters, matching the API.
+const MIN_NOWCAST_PRECIP_MM = 0.05;
+
+// "Likely" is an hourly precipitation probability of at least this percent.
+// Used internally to pick the next notable hour; not surfaced as a definition
+// in the main interface.
+const OUTLOOK_LIKELY_PROB = 50;
 
 function renderPrecipOutlook(data) {
     const el = document.getElementById('precip-outlook');
@@ -2071,8 +2235,29 @@ function renderPrecipOutlook(data) {
         return;
     }
     const now = getLocationNow();
+    const hourly = data.hourly;
     const emoji = (e) => `<span aria-hidden="true">${e}</span>`;
     let html = '';
+
+    // A 15-minute interval is materially wet only when its precipitation is a
+    // finite number at or above the presentation threshold.
+    const wet = (v) => Number.isFinite(v) && v >= MIN_NOWCAST_PRECIP_MM;
+
+    // The hourly index covering a given instant (last hour at or before it),
+    // used to tell whether precipitation at that time is snow.
+    const hourIndexFor = (date) => {
+        let idx = 0;
+        for (let i = 0; i < hourly.time.length; i++) {
+            if (new Date(hourly.time[i]) <= date) idx = i;
+            else break;
+        }
+        return idx;
+    };
+    // Snow if the covering hour reports snowfall or carries a snow weather code.
+    const snowAt = (date) => {
+        const i = hourIndexFor(date);
+        return (hourly.snowfall && hourly.snowfall[i] > 0) || isSnow(hourly.weather_code[i]);
+    };
 
     // Nowcast: scan the next ~2 hours of 15-minute steps.
     const m15 = data.minutely_15;
@@ -2083,50 +2268,55 @@ function renderPrecipOutlook(data) {
         }
         if (idx >= 0) {
             const horizon = Math.min(idx + 9, m15.precipitation.length);
-            if (m15.precipitation[idx] > 0) {
-                // Raining now — find when it eases (two consecutive dry steps
-                // so a single dry gap between cells doesn't read as an end).
+            if (wet(m15.precipitation[idx])) {
+                // Materially wet now — find when it eases (two consecutive dry
+                // steps so a single dry gap between cells doesn't read as an end).
                 let ease = -1;
                 for (let i = idx + 1; i < horizon; i++) {
-                    if (m15.precipitation[i] <= 0 &&
-                        (i + 1 >= m15.precipitation.length || m15.precipitation[i + 1] <= 0)) {
+                    if (!wet(m15.precipitation[i]) &&
+                        (i + 1 >= m15.precipitation.length || !wet(m15.precipitation[i + 1]))) {
                         ease = i;
                         break;
                     }
                 }
+                const snow = snowAt(now);
+                const word = snow ? 'Snow' : 'Rain';
+                const ic = snow ? '❄' : '🌧';
                 html = ease >= 0
-                    ? `${emoji('🌧')} Raining now, easing @ ${outlookTimeLabel(new Date(m15.time[ease]))}`
-                    : `${emoji('🌧')} Raining now, continuing through the next 2 hours`;
+                    ? `${emoji(ic)} ${word} expected through ${formatTime(new Date(m15.time[ease]))}`
+                    : `${emoji(ic)} ${word} expected now`;
             } else {
+                // Dry now — find the first materially-wet step within the window.
                 let start = -1;
                 for (let i = idx + 1; i < horizon; i++) {
-                    if (m15.precipitation[i] > 0) { start = i; break; }
+                    if (wet(m15.precipitation[i])) { start = i; break; }
                 }
                 if (start >= 0) {
                     const startDate = new Date(m15.time[start]);
-                    const mins = Math.max(1, Math.round((startDate - now) / 60000));
-                    html = `${emoji('🌦')} Forecast rain starting soon @ ${outlookTimeLabel(startDate)} (~${mins} min)`;
+                    const snow = snowAt(startDate);
+                    const word = snow ? 'Snow' : 'Rain';
+                    const ic = snow ? '🌨' : '🌦';
+                    html = `${emoji(ic)} ${word} expected around ${formatTime(startDate)}`;
                 }
             }
         }
     }
 
-    // Nothing imminent: point at the next likely rain in the hourly forecast.
+    // Nothing imminent: point at the next likely (≥50%) hour in the forecast.
     if (!html) {
-        const hourly = data.hourly;
         let next = -1;
         for (let i = 0; i < hourly.time.length; i++) {
             if (new Date(hourly.time[i]) < now) continue;
-            if (hourly.precipitation_probability[i] >= 50) { next = i; break; }
+            if (hourly.precipitation_probability[i] >= OUTLOOK_LIKELY_PROB) { next = i; break; }
         }
         if (next >= 0) {
             const d = new Date(hourly.time[next]);
-            const snow = hourly.snowfall[next] > 0;
+            const snow = snowAt(d);
             const what = snow ? 'snow' : 'rain';
-            html = `${emoji(snow ? '❄' : '💧')} Forecast next ${what} ${outlookDayLabel(d, now)} @ ${outlookTimeLabel(d)} · ${hourly.precipitation_probability[next]}% chance`;
+            html = `${emoji(snow ? '❄' : '💧')} Next likely ${what} ${outlookDayLabel(d, now)} at ${formatTime(d)} · ${hourly.precipitation_probability[next]}%`;
         } else {
             const last = new Date(hourly.time[hourly.time.length - 1]);
-            html = `${emoji('☀')} No rain expected through ${outlookDayLabel(last, now)}`;
+            html = `${emoji('☀')} No likely rain through ${outlookDayLabel(last, now)}`;
         }
     }
 
@@ -2143,7 +2333,7 @@ function renderHourlyForecast(data) {
 
     // Tide height per hour, shown in the cards only when the Tides toggle is on
     // (same on/off state as the chart tide line and the table rows).
-    const showTide = isTideLineOn() && isCoastalLocation();
+    const showTide = isTideLineOn() && hasTideSeries();
     const showPrecipDetail = isPrecipDetailOn();
     let tideByTime = null;
     if (showTide) {
@@ -2194,6 +2384,7 @@ function renderHourlyForecast(data) {
         const hasSnow = snowfall > 0;
         const windSpeed = hourly.wind_speed_10m[i];
         const windDir = hourly.wind_direction_10m[i];
+        const windGust = hourly.wind_gusts_10m ? hourly.wind_gusts_10m[i] : null;
         const temp = formatTempValue(hourly.temperature_2m[i]);
         const apparentTemp = formatTempValue(hourly.apparent_temperature[i]);
         const tideFt = showTide ? tideByTime[hourly.time[i]] : null;
@@ -2244,7 +2435,7 @@ function renderHourlyForecast(data) {
             <div class="temp">${temp}${getTempUnitLabel()}</div>
             ${windchillHtml}
             <div class="wind${hkClass}">
-                ${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}
+                ${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}${showPrecipDetail && isMaterialGust(windSpeed, windGust) ? ` &middot; G ${formatWindSpeed(windGust)}` : ''}
             </div>
             ${precipChanceHtml}
             ${precipAmountHtml}
@@ -2408,7 +2599,7 @@ const gridLinesPlugin = {
         if (isChartLineVisible('wind')) {
             drawUnitAxis(chart.scales['y-wind'], 'left', gridColors.windBorder, v => formatWindSpeed(v, true));
         }
-        if (isTideLineOn() && isCoastalLocation()) {
+        if (isTideLineOn() && hasTideSeries()) {
             drawUnitAxis(chart.scales['y-tide'], 'right', gridColors.tideBorder, v => formatTideHeight(v, true));
         }
         if (isChartLineVisible('uv')) {
@@ -2649,7 +2840,7 @@ function renderChart(data) {
     // Tide line is only drawn for coastal locations when the toggle is on.
     // Tide times are hourly local wall-clock strings that line up with the
     // weather API's hourly times, so look heights up by time string (feet).
-    const showTide = isTideLineOn() && isCoastalLocation();
+    const showTide = isTideLineOn() && hasTideSeries();
     let tideByTime = null;
     if (showTide) {
         tideByTime = {};
@@ -2689,11 +2880,9 @@ function renderChart(data) {
         }
     }
 
-    // For hours that have already happened today, replace the modeled
-    // precipitation probability with a binary 0/100 based on the actual
-    // precipitation amount — it either rained or it didn't. Temperature and
-    // precip amount from the API already reflect reanalysis/observations
-    // for past hours, so no change needed there.
+    // Index of the first future hour, used to draw the "now" marker and its
+    // subtle tint behind elapsed hours. The forecast values for past hours are
+    // shown as returned by Open-Meteo — the probabilities are not overwritten.
     const locationNow = getLocationNow();
     let nowIndex = -1;
     for (let i = 0; i < labels.length; i++) {
@@ -2703,9 +2892,6 @@ function renderChart(data) {
         }
     }
     if (nowIndex === -1) nowIndex = labels.length;
-    for (let i = 0; i < nowIndex; i++) {
-        precipProbs[i] = precipAmounts[i] > 0 ? 100 : 0;
-    }
 
     // When the feels-like line is on, factor its values into the axis range so
     // the dashed line never clips outside the temperature scale.
@@ -2878,7 +3064,7 @@ function renderChart(data) {
                     yAxisID: 'y-uv'
                 }] : []),
                 ...(showTide ? [{
-                    label: 'Tide',
+                    label: tideSeriesLabel(),
                     data: tideHeights,
                     borderColor: colors.tideBorder,
                     backgroundColor: 'transparent',
@@ -2935,25 +3121,20 @@ function renderChart(data) {
                                 ...(use24 ? { minute: '2-digit' } : {})
                             });
                             const isPast = date < getLocationNow();
-                            return isPast ? `${formatted} · observed` : formatted;
+                            return isPast ? `${formatted} · past` : formatted;
                         },
                         label: function(context) {
-                            const idx = context.dataIndex;
-                            const labelDate = context.chart.data.labels[idx];
-                            const isPast = labelDate instanceof Date && labelDate < getLocationNow();
                             const axis = context.dataset.yAxisID;
                             if (axis === 'y-temp') {
                                 if (context.raw == null) return null;
                                 return `${context.dataset.label}: ${Math.round(context.raw)}${getTempUnitLabel()}`;
                             } else if (axis === 'y-precip-prob') {
-                                if (isPast) {
-                                    return context.raw >= 50 ? 'Rain: yes' : 'Rain: no';
-                                }
+                                if (context.raw == null) return null;
                                 return `Precip Chance: ${context.raw}%`;
                             } else if (axis === 'y-tide') {
                                 if (context.raw == null) return null;
                                 const sign = context.raw >= 0 ? '+' : '';
-                                return `Tide: ${sign}${formatTideHeight(context.raw, true)}`;
+                                return `${tideSeriesLabel()}: ${sign}${formatTideHeight(context.raw, true)}`;
                             } else if (axis === 'y-wind') {
                                 return `Wind: ${formatWindSpeed(context.raw)}`;
                             } else if (axis === 'y-uv') {
@@ -3042,8 +3223,8 @@ function renderChart(data) {
         { key: 'storms', cls: 'storm', label: 'Stormcast', on: isPrecipDetailOn() },
         { key: 'uv', cls: 'uv', label: 'UV', on: isChartLineVisible('uv') }
     ];
-    if (isCoastalLocation()) {
-        items.push({ key: 'tide', cls: 'tide', label: 'Tide', on: isTideLineOn() });
+    if (hasTideSeries()) {
+        items.push({ key: 'tide', cls: 'tide', label: tideSeriesLabel(), on: isTideLineOn() });
     }
     legend.innerHTML = items.map(it => `
         <button type="button" class="legend-item${it.on ? '' : ' off'}" data-line="${it.key}" aria-pressed="${it.on}">
@@ -3209,13 +3390,20 @@ async function initializeRadar() {
                 radarMap.removeLayer(radarLayer);
             }
 
-            // Add new radar layer
-            radarLayer = L.tileLayer(`${radarHost}${latestFrame.path}/256/{z}/{x}/{y}/2/1_1.png`, {
+            // Add new radar layer. color=2 is RainViewer's Universal Blue
+            // scheme; the 1_0 option keeps smoothing but drops the separate
+            // snow-color layer, so the single compact legend stays accurate.
+            // maxNativeZoom caps tile requests at level 7 — the map may upscale
+            // beyond that visually, but no higher-resolution radar tiles exist.
+            radarLayer = L.tileLayer(`${radarHost}${latestFrame.path}/256/{z}/{x}/{y}/2/1_0.png`, {
                 opacity: 0.7,
-                zIndex: 100
+                zIndex: 100,
+                maxNativeZoom: 7
             }).addTo(radarMap);
 
-            // Update time display — show in location's timezone
+            // Update time display — show in location's timezone. The label is
+            // the composite frame-generation time; append "· delayed" only when
+            // that frame is more than 30 minutes old.
             const radarTime = new Date(latestFrame.time * 1000);
             const use24 = getTimeFormat() === '24';
             const radarOpts = {
@@ -3226,7 +3414,9 @@ async function initializeRadar() {
             };
             const tz = getLocationTimezone();
             if (tz) radarOpts.timeZone = tz;
-            timeDisplay.textContent = `Radar: ${radarTime.toLocaleString(use24 ? 'en-GB' : 'en-US', radarOpts)}`;
+            const frameAgeMin = (Date.now() - latestFrame.time * 1000) / 60000;
+            const delayedSuffix = frameAgeMin > 30 ? ' · delayed' : '';
+            timeDisplay.textContent = `Radar: ${radarTime.toLocaleString(use24 ? 'en-GB' : 'en-US', radarOpts)}${delayedSuffix}`;
         }
 
     } catch (error) {
@@ -3365,8 +3555,10 @@ function renderAstroData() {
     // shortcut / chart legend), so the toggle adds or removes them from the table.
     if (isTideLineOn()) {
         getTodayTideExtremes().forEach(t => {
+            // Source-aware wording: "High/Low Tide" for NOAA, "High/Low Water"
+            // for the Open-Meteo Marine sea-level fallback.
             rows.push({
-                label: `${t.type === 'High' ? '🌊' : '🏝️'} ${t.type} Tide`,
+                label: `${t.type === 'High' ? '🌊' : '🏝️'} ${tideExtremeLabel(t.type)}`,
                 value: formatTime(t.date),
                 sortMin: t.date.getHours() * 60 + t.date.getMinutes(),
                 highlight: true,
@@ -3383,6 +3575,21 @@ function renderAstroData() {
                     <span class="astro-value">${r.value}</span>
                 </div>`).join('');
 
+    // Subdued provenance line for NOAA station data only (never for the
+    // Open-Meteo Marine model), shown when tide info is enabled. Distance is in
+    // miles in Fahrenheit mode and kilometers in Celsius mode.
+    let tideSourceHtml = '';
+    if (isTideLineOn() && tideData && tideData.source === 'noaa' && tideData.stationName) {
+        const km = tideData.stationDistanceKm;
+        let distStr = '';
+        if (typeof km === 'number' && Number.isFinite(km)) {
+            distStr = getTempUnit() === 'C'
+                ? ` · ${Math.round(km)} km away`
+                : ` · ${Math.round(km * 0.621371)} mi away`;
+        }
+        tideSourceHtml = `<div class="astro-tide-source">NOAA · ${escapeHtml(tideData.stationName)}${distStr}</div>`;
+    }
+
     container.innerHTML = `
         <div class="astro-group">
             <div class="astro-grid">
@@ -3396,6 +3603,7 @@ function renderAstroData() {
                     <span class="astro-value astro-change">${dayChangeStr}</span>
                 </div>` : ''}
             </div>
+            ${tideSourceHtml}
         </div>
     `;
 }
@@ -3469,6 +3677,16 @@ async function requestHistoricalAverage(params, useEra5Land = true) {
     return data;
 }
 
+// Construct a midnight Date for the given year/month/day, clamping the day to
+// the last valid day of that month in that year. This keeps Feb 29 from
+// silently rolling into Mar 1 for non-leap comparison years: Feb 29 becomes
+// Feb 28, while every other date is left unchanged. (`new Date(year, month+1,
+// 0)` is the last day of `month`.)
+function makeComparisonEndDate(year, month, day) {
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+    return new Date(year, month, Math.min(day, lastDayOfMonth));
+}
+
 // Fetch a 10-year modeled average precipitation for the 30- and 90-calendar-date
 // windows ending "today" in the selected location's timezone. Returns null (rather
 // than throwing) on failure so the caller can still render recent totals without
@@ -3478,14 +3696,14 @@ async function fetchHistoricalPrecipAvg(lat, lon) {
     const endYear = now.getFullYear() - 1; // most recent full year with reliable archive data
     const startYear = endYear - 9; // 10 years of data
 
-    // Both endpoints of each window are inclusive, so a 30-date window starts
-    // 29 days before its end date (not 30), and a 90-date window starts 89
-    // days before its end date.
-    const ninetyDayStart = new Date(now);
-    ninetyDayStart.setDate(ninetyDayStart.getDate() - 89);
-
-    const archiveStart = new Date(startYear, ninetyDayStart.getMonth(), ninetyDayStart.getDate());
-    const archiveEnd = new Date(endYear, now.getMonth(), now.getDate());
+    // The archive must span from 89 days before the earliest comparison year's
+    // end date through the latest comparison year's end date. Anchor the start
+    // on startYear's clamped end date and step back 89 days, rather than
+    // transplanting an already-shifted month/day into startYear — the latter
+    // drops the earliest year whenever the 90-day window crosses January 1.
+    const archiveStart = makeComparisonEndDate(startYear, now.getMonth(), now.getDate());
+    archiveStart.setDate(archiveStart.getDate() - 89);
+    const archiveEnd = makeComparisonEndDate(endYear, now.getMonth(), now.getDate());
 
     const params = {
         latitude: lat,
@@ -3508,14 +3726,17 @@ async function fetchHistoricalPrecipAvg(lat, lon) {
     const thirtyDayTotals = [];
     const ninetyDayTotals = [];
 
-    // Require at least 90% coverage of each window's calendar dates before
-    // trusting a year's total, so a year with substantial missing data is
-    // excluded rather than having its gaps silently treated as zero rainfall.
-    const THIRTY_DAY_MIN_VALID = 27;
-    const NINETY_DAY_MIN_VALID = 81;
+    // ERA5-Land is expected to be gap-free, so require the complete number of
+    // valid daily values for each window before trusting a year's total: an
+    // incomplete window would understate the year's precipitation if its gaps
+    // were summed as zeros.
+    const THIRTY_DAY_MIN_VALID = 30;
+    const NINETY_DAY_MIN_VALID = 90;
 
     for (let year = startYear; year <= endYear; year++) {
-        const yearEnd = new Date(year, now.getMonth(), now.getDate());
+        // Clamp the comparison end date so a Feb 29 "today" maps to Feb 28 in
+        // non-leap comparison years rather than rolling into March.
+        const yearEnd = makeComparisonEndDate(year, now.getMonth(), now.getDate());
         const yearThirtyStart = new Date(yearEnd);
         yearThirtyStart.setDate(yearThirtyStart.getDate() - 29);
         const yearNinetyStart = new Date(yearEnd);
@@ -3585,15 +3806,31 @@ function renderPrecipHistory(data, histAvg) {
         }
     }
 
+    // Require nearly complete hourly coverage before showing a total. The
+    // Historical Forecast series is expected to be dense, so a materially
+    // incomplete window means an understated sum — show an em dash instead.
+    const RECENT_MIN_COVERAGE = 0.95;
+
     const results = periods.map(period => {
-        let sum = 0;
         const startIndex = Math.max(0, nowIndex - period.hours + 1);
+        const expectedHours = period.hours;
+        let sum = 0;
+        let validCount = 0;
         for (let i = startIndex; i <= nowIndex; i++) {
-            sum += hourly.precipitation[i] || 0;
+            const v = hourly.precipitation[i];
+            // Preserve null / non-finite values as missing rather than summing
+            // them as zero, so gaps lower the coverage instead of the total.
+            if (typeof v === 'number' && Number.isFinite(v)) {
+                sum += v;
+                validCount++;
+            }
         }
+        const complete = expectedHours > 0 && (validCount / expectedHours) >= RECENT_MIN_COVERAGE;
 
         let formatted;
-        if (isKelvin) {
+        if (!complete) {
+            formatted = '—';
+        } else if (isKelvin) {
             const microns = sum * 1000;
             formatted = `${Math.round(microns).toLocaleString()} µm`;
         } else if (isMetric) {
@@ -3603,9 +3840,11 @@ function renderPrecipHistory(data, histAvg) {
             formatted = `${inches.toFixed(2)}"`;
         }
 
-        // Build historical average comparison HTML for the 30-Day and 90-Day periods
+        // Build historical average comparison HTML for the 30-Day and 90-Day
+        // periods — only when the recent total itself is complete, so an
+        // understated total never drives a misleading percentage difference.
         let avgHtml = '';
-        if (period.avgKey && histAvg && histAvg[period.avgKey] != null) {
+        if (complete && period.avgKey && histAvg && histAvg[period.avgKey] != null) {
             const avgMm = histAvg[period.avgKey];
             let avgFormatted;
             if (isKelvin) {
@@ -3710,23 +3949,10 @@ async function loadWeather() {
             console.warn('Weather API response lacked a timezone; falling back to browser time.');
         }
 
-        // Get current temperature, feels-like, humidity, and wind from hourly data
-        const now = getLocationNow();
-        let currentTemp = null;
-        let feelsLike = null;
-        for (let i = 0; i < weatherData.hourly.time.length; i++) {
-            const hourDate = new Date(weatherData.hourly.time[i]);
-            if (hourDate >= now) {
-                const idx = i > 0 ? i - 1 : 0;
-                currentTemp = formatTempValue(weatherData.hourly.temperature_2m[idx]);
-                feelsLike = formatTempValue(weatherData.hourly.apparent_temperature[idx]);
-                currentConditions.humidity = weatherData.hourly.relative_humidity_2m[idx];
-                currentConditions.dewpoint = weatherData.hourly.dew_point_2m[idx];
-                currentConditions.windSpeed = weatherData.hourly.wind_speed_10m[idx];
-                currentConditions.windDir = weatherData.hourly.wind_direction_10m[idx];
-                break;
-            }
-        }
+        // Current temperature, feels-like, humidity, dew point, and wind (incl.
+        // gust) from Open-Meteo's dedicated `current` snapshot, falling back to
+        // the nearest hourly value for anything it omits.
+        const { currentTemp, feelsLike } = applyCurrentConditions();
         updateLocationDisplay(currentTemp, feelsLike);
 
         // Reset tide state before the initial render so a previous coastal
@@ -3745,7 +3971,7 @@ async function loadWeather() {
         renderPrecipOutlook(weatherData);
         renderHourlyForecast(weatherData);
         renderChart(weatherData);
-        checkWeatherAlerts(weatherData);
+        checkWeatherAlerts();
         initializeRadar();
         renderAstroData();
 
@@ -3770,7 +3996,9 @@ async function loadWeather() {
                 if (loadId !== currentLoadId) return;
                 tideData = data;
                 updateTideToggleUI();
-                if (isCoastalLocation()) {
+                if (hasTideData()) {
+                    // Chart/hourly redraw internally requires an hourly series;
+                    // the astro table shows high/low events even without one.
                     if (weatherData) {
                         renderChart(weatherData);
                         renderHourlyForecast(weatherData);
@@ -3821,10 +4049,10 @@ async function loadWeather() {
     }
 }
 
-// Check for weather alerts via NWS API, with local fallback
-async function checkWeatherAlerts(data) {
-    const alertBanner = document.getElementById('alert-banner');
-    const alertText = document.getElementById('alert-text');
+// Check for official NWS alerts. The prominent alert container holds only real
+// NWS alerts — on any failure or unsupported coverage it is cleared and hidden
+// rather than backfilled with a heuristic, forecast-derived look-alike.
+async function checkWeatherAlerts() {
     const alertContainer = document.getElementById('alert-container');
 
     // NWS forecast link for this location
@@ -3890,52 +4118,19 @@ async function checkWeatherAlerts(data) {
             });
 
             alertContainer.classList.remove('hidden');
-            alertBanner.classList.add('hidden');
         } else {
             alertContainer.innerHTML = '';
             alertContainer.classList.add('hidden');
-            alertBanner.classList.add('hidden');
         }
     } catch (error) {
-        // Fallback to local weather-code detection if NWS API fails
-        console.warn('NWS Alerts API unavailable, using local detection:', error.message);
+        // NWS unavailable (non-US coverage, network/CORS, or an API error).
+        // Clear and hide the official-alert container; do not substitute a
+        // forecast-derived banner. WeatherWonder's Stormcast tags, snow icons,
+        // precipitation character, and short-term outlook already surface the
+        // model-derived signals.
+        console.warn('NWS Alerts API unavailable; clearing official alerts:', error.message);
         alertContainer.innerHTML = '';
         alertContainer.classList.add('hidden');
-
-        const hourly = data.hourly;
-        let hasWinterWeather = false;
-        let hasThunderstorm = false;
-
-        // Scan the next 24 hours starting at the current hour.
-        const fnow = getLocationNow();
-        let fStart = 0;
-        for (let i = 0; i < hourly.time.length; i++) {
-            if (new Date(hourly.time[i]) >= fnow) { fStart = i; break; }
-        }
-
-        for (let i = fStart; i < Math.min(fStart + 24, hourly.weather_code.length); i++) {
-            const code = hourly.weather_code[i];
-            if ([71, 73, 75, 77, 85, 86, 66, 67].includes(code)) {
-                hasWinterWeather = true;
-            }
-            if ([95, 96, 99].includes(code)) {
-                hasThunderstorm = true;
-            }
-        }
-
-        alertBanner.onclick = () => window.open(nwsUrl, '_blank');
-
-        if (hasWinterWeather) {
-            alertBanner.classList.remove('hidden');
-            alertText.textContent = 'Wintry Precipitation Likely';
-            document.querySelector('.alert-icon').textContent = '❄️';
-        } else if (hasThunderstorm) {
-            alertBanner.classList.remove('hidden');
-            alertText.textContent = 'Thunderstorms Likely';
-            document.querySelector('.alert-icon').textContent = '⛈️';
-        } else {
-            alertBanner.classList.add('hidden');
-        }
     }
 }
 
@@ -4705,7 +4900,7 @@ const EXPLAINERS = {
 
             <h4>Wind</h4>
             <p>Wind direction describes where the wind is coming from. The arrow shows the direction in which the air is moving.</p>
-            <p>The displayed speed is the modeled wind approximately 10 meters above the ground for the indicated hour. It does not include wind gusts, which may be substantially stronger. Trees, buildings, ridgelines, valleys, and other terrain can produce large local differences.</p>
+            <p>The primary wind value is the sustained wind. When a gust is materially stronger than the sustained wind, it may be displayed separately, marked with a "G." Gusts and sustained wind are both model estimates at approximately 10 meters above the ground. Trees, buildings, ridgelines, valleys, and other terrain can produce large local differences.</p>
 
             <p>Data and limitations: <a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener noreferrer">Open-Meteo Forecast</a> and <a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener noreferrer">Air Quality</a> APIs, with AQI categories from the <a href="https://www.airnow.gov/aqi/aqi-basics/" target="_blank" rel="noopener noreferrer">U.S. EPA</a>. Values are model estimates for the selected grid cells.</p>
 
@@ -4749,7 +4944,7 @@ const EXPLAINERS = {
 
             <h4>Other Forecast Variables</h4>
             <p>Temperature is the modeled air temperature. Feels-like temperature estimates human thermal exposure.</p>
-            <p>Wind is the modeled speed approximately 10 meters above the ground and does not include gusts.</p>
+            <p>Wind is the sustained modeled speed approximately 10 meters above the ground; a materially stronger gust may be shown separately.</p>
             <p>The UV Index estimates the potential for ultraviolet exposure. Protection becomes increasingly important at values of 3 or higher, particularly around solar noon.</p>
 
             <p>Data and limitations: <a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener noreferrer">Open-Meteo Forecast API</a> using its Best Match model selection. Forecast values are estimates for a model grid cell and may not capture highly localized conditions.</p>
@@ -4818,7 +5013,7 @@ const EXPLAINERS = {
     radar: {
         title: 'Reading the Radar',
         body: `
-            <p class="explainer-intro">The radar map shows the most recent composite-reflectivity image available from RainViewer. The timestamp identifies the radar frame being displayed. Radar is an observation of precipitation-related echoes aloft, not a forecast, and the image may be several minutes old.</p>
+            <p class="explainer-intro">The radar map shows the most recent composite-reflectivity image available from RainViewer. The timestamp is the composite frame-generation time; the individual radar images combined into that frame may not share identical acquisition times. Radar is an observation of precipitation-related echoes aloft, not a forecast, and the image may be several minutes old.</p>
 
             <h4>What Radar Measures</h4>
             <p>Weather radar sends pulses of microwave energy into the atmosphere and measures the energy reflected back toward the radar. Reflectivity is expressed in dBZ.</p>
