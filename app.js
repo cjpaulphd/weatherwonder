@@ -2443,7 +2443,12 @@ const gridLinesPlugin = {
         const days = (typeof getChartDays === 'function') ? getChartDays() : 7;
         let hourTicks = null;
         if (days === 1) {
-            hourTicks = Array.from({ length: 24 }, (_, h) => h);
+            // Label density follows the real pixel width: an hour label needs
+            // ~26px to stay legible, so narrow (portrait phone) charts drop to
+            // every 2nd or 3rd hour instead of overlapping all 24.
+            const pxPerHour = (chartArea.right - chartArea.left) / Math.max(1, labels.length);
+            const step = pxPerHour >= 26 ? 1 : (pxPerHour >= 14 ? 2 : 3);
+            hourTicks = Array.from({ length: 24 }, (_, h) => h).filter(h => h % step === 0);
         } else if (days <= 3) {
             hourTicks = [6, 12, 18];
         } else if (days <= 5) {
@@ -2591,6 +2596,31 @@ function getChartColors() {
         stormBg: hexToRgba(stormIndigo, 0.4)
     };
 }
+
+// True on phone-class viewports (either dimension under 480px) — used to pick
+// compact chart tooltip sizing at render time.
+function isCompactChartViewport() {
+    return Math.min(window.innerWidth, window.innerHeight) < 480;
+}
+
+// Re-render the chart when the viewport class changes (rotation, split-screen
+// or window resize across the phone/desktop threshold). Chart.js already
+// redraws the canvas responsively — including the gridLinesPlugin, which reads
+// the live chart area — but tooltip sizing is fixed at render time, so a full
+// re-render is needed only when the compact flag flips. Debounced, and a no-op
+// for iOS toolbar collapse/expand resizes, which never cross the threshold.
+let lastChartViewportCompact = isCompactChartViewport();
+let chartViewportResizeTimer = null;
+window.addEventListener('resize', () => {
+    clearTimeout(chartViewportResizeTimer);
+    chartViewportResizeTimer = setTimeout(() => {
+        const compact = isCompactChartViewport();
+        if (compact !== lastChartViewportCompact) {
+            lastChartViewportCompact = compact;
+            if (weatherData) renderChart(weatherData);
+        }
+    }, 150);
+});
 
 // Render the temperature/precipitation chart - starting from midnight today
 function renderChart(data) {
@@ -2865,6 +2895,12 @@ function renderChart(data) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            // Headroom above the plot: gridLinesPlugin draws axis labels 2px
+            // above each gridline, so the topmost label (e.g. the max precip
+            // amount) needs canvas space above the chart area or it clips.
+            layout: {
+                padding: { top: 14 }
+            },
             interaction: {
                 mode: 'index',
                 intersect: false
@@ -2879,7 +2915,10 @@ function renderChart(data) {
                     bodyColor: getEffectiveTheme() === 'light' ? '#1a1a1a' : '#fff',
                     borderColor: getEffectiveTheme() === 'light' ? '#e0e0e0' : 'transparent',
                     borderWidth: getEffectiveTheme() === 'light' ? 1 : 0,
-                    padding: 12,
+                    // Compact tooltip on phones so it covers less of the plot
+                    padding: isCompactChartViewport() ? 7 : 12,
+                    titleFont: { size: isCompactChartViewport() ? 11 : 12 },
+                    bodyFont: { size: isCompactChartViewport() ? 11 : 12 },
                     displayColors: true,
                     position: 'corner',
                     caretSize: 0,
