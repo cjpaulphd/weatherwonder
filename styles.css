@@ -86,6 +86,10 @@ body {
     max-width: 960px;
     margin: 0 auto;
     min-height: 100vh;
+    /* Keep content clear of the notch/Dynamic Island when a phone is held
+       in landscape (viewport-fit=cover extends the page under them). */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
 }
 
 /* Header */
@@ -93,7 +97,9 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 16px;
+    /* Extra top padding keeps the header below the translucent status bar
+       when installed to the home screen (safe-area-inset-top is 0 elsewhere). */
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
     background-color: var(--bg-primary);
     position: sticky;
     top: 0;
@@ -178,6 +184,9 @@ body {
     transform: translateX(0);
     transition: transform 0.3s ease;
     overflow-y: auto;
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 .menu-panel.hidden {
@@ -880,6 +889,8 @@ body {
     align-items: center;
     justify-content: center;
     z-index: 200;
+    padding: calc(12px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right))
+             calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
 }
 
 [data-theme="light"] .modal {
@@ -897,6 +908,10 @@ body {
     width: 90%;
     max-width: 400px;
     position: relative;
+    /* Never taller than the viewport (short landscape phones): scroll inside */
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .modal-content h3 {
@@ -1468,10 +1483,32 @@ body {
     }
 }
 
+/* Short landscape viewports (phones held sideways). The width-based rules
+   above would pick the desktop chart height, which is taller than the
+   screen — the top axis labels and the legend could never be seen at the
+   same time. Size the chart to the viewport instead, so the chart, its
+   legend, and the range buttons fit on one screen (100svh ignores the
+   collapsing browser toolbar; the plain vh line is the fallback). */
+@media (orientation: landscape) and (max-height: 520px) {
+    .chart-container {
+        height: calc(100vh - 175px);
+        height: calc(100svh - 175px);
+        min-height: 180px;
+        max-height: 320px;
+    }
+
+    .radar-map {
+        height: calc(100vh - 175px);
+        height: calc(100svh - 175px);
+        min-height: 220px;
+        max-height: 400px;
+    }
+}
+
 /* Toast notification */
 .toast {
     position: fixed;
-    bottom: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
     background-color: var(--bg-card);
@@ -1721,7 +1758,8 @@ body {
 /* Footer */
 .app-footer {
     text-align: center;
-    padding: 20px 16px;
+    /* Bottom safe-area inset keeps the last row above the home indicator */
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--bg-secondary);
 }
 
