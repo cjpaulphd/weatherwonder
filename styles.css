@@ -624,6 +624,15 @@ body {
     font-size: 14px;
 }
 
+/* A mixed rain+snow half-day shows two emoji; shrink them so the pair occupies
+   roughly the same width as a single icon and card alignment holds. */
+.daily-card .weather-icons .am-icon.mixed,
+.daily-card .weather-icons .pm-icon.mixed {
+    font-size: 10px;
+    letter-spacing: -1px;
+    white-space: nowrap;
+}
+
 .daily-card .weather-icons .time-label {
     font-size: 7px;
     color: var(--text-secondary);
@@ -1771,6 +1780,15 @@ body {
     color: var(--text-secondary);
     font-weight: 400;
     font-style: italic;
+}
+
+/* Subdued NOAA station provenance line below the astronomy/tide table. */
+.astro-tide-source {
+    margin-top: 8px;
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-align: center;
 }
 
 /* Footer */

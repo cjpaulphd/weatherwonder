@@ -128,7 +128,7 @@
             </div>
         </nav>
 
-        <!-- Last Updated -->
+        <!-- Last Refreshed -->
         <div id="last-updated" class="last-updated"></div>
 
         <!-- Current Conditions Bar (AQI, Humidity, Wind) -->
@@ -137,14 +137,8 @@
         <!-- Short-term rain outlook (nowcast / next likely rain) -->
         <div id="precip-outlook" class="precip-outlook"></div>
 
-        <!-- Weather Alert Banners (NWS API) -->
+        <!-- Official NWS Alert Banners (NWS API only) -->
         <div id="alert-container" class="alert-container hidden"></div>
-        <!-- Fallback Alert Banner (local detection) -->
-        <div id="alert-banner" class="alert-banner hidden">
-            <span class="alert-icon">❄️</span>
-            <span id="alert-text"></span>
-            <span class="alert-arrow">›</span>
-        </div>
 
         <!-- Alert Detail Modal -->
         <div id="alert-detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Weather alert details">
@@ -250,10 +244,10 @@
             <div id="radar-container" class="radar-container">
                 <div id="radar-map" class="radar-map"></div>
                 <div class="radar-legend">
-                    <span class="radar-legend-item" style="background: #00ff00;">Light</span>
-                    <span class="radar-legend-item" style="background: #ffff00;">Moderate</span>
-                    <span class="radar-legend-item" style="background: #ff8800;">Heavy</span>
-                    <span class="radar-legend-item" style="background: #ff0000;">Intense</span>
+                    <span class="radar-legend-item" style="background: #00a3e0;">Light</span>
+                    <span class="radar-legend-item" style="background: #ffee00;">Moderate</span>
+                    <span class="radar-legend-item" style="background: #ff4400;">Heavy</span>
+                    <span class="radar-legend-item" style="background: #c10000;">Intense</span>
                 </div>
                 <div id="radar-time" class="radar-time"></div>
             </div>
