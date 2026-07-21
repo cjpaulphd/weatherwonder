@@ -19,6 +19,7 @@
     --tide-purple: #b39ddb;
     --wind-orange: #ffb74d;
     --uv-violet: #b388ff;
+    --cloud-gray: #b0bec5;
     --snow-color: #e91e63;
     --rain-color: #2196f3;
     --storm-indigo: #9fa8da;
@@ -38,6 +39,7 @@
     --tide-purple: #7e57c2;
     --wind-orange: #ef6c00;
     --uv-violet: #6200ea;
+    --cloud-gray: #78909c;
     --snow-color: #c2185b;
     --rain-color: #1565c0;
     --storm-indigo: #3949ab;
@@ -1414,6 +1416,10 @@ body {
 
 .legend-color.uv {
     background-color: var(--uv-violet);
+}
+
+.legend-color.cloud {
+    background-color: var(--cloud-gray);
 }
 
 /* Storms toggle swatch: the intensity ramp the colored fill uses */
