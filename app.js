@@ -3767,12 +3767,19 @@ async function fetchHistoricalPrecipSeries(lat, lon) {
 }
 
 // Compute 10-year average precipitation for the 30- and 90-calendar-date
-// windows ending on the given month/day in each comparison year. Pure and
-// cheap, so the renderer can call it with whatever end date the recent data
-// actually supports.
+// windows ending on the given month/day in each comparison year. Runs on
+// every precip-history render (including unit toggles), so the result is
+// memoized on its inputs and the ~3,700 daily date strings are parsed once
+// per call rather than once per comparison year.
+let histAvgMemo = null;
 function computeHistoricalPrecipAvg(series, endMonth, endDay) {
     if (!series || !series.daily) return null;
+    if (histAvgMemo && histAvgMemo.series === series &&
+        histAvgMemo.endMonth === endMonth && histAvgMemo.endDay === endDay) {
+        return histAvgMemo.result;
+    }
     const daily = series.daily;
+    const dayTimes = daily.time.map(t => new Date(t + 'T00:00:00').getTime());
     const thirtyDayTotals = [];
     const ninetyDayTotals = [];
 
@@ -3791,20 +3798,23 @@ function computeHistoricalPrecipAvg(series, endMonth, endDay) {
         yearThirtyStart.setDate(yearThirtyStart.getDate() - 29);
         const yearNinetyStart = new Date(yearEnd);
         yearNinetyStart.setDate(yearNinetyStart.getDate() - 89);
+        const endTime = yearEnd.getTime();
+        const thirtyStartTime = yearThirtyStart.getTime();
+        const ninetyStartTime = yearNinetyStart.getTime();
 
         let thirtySum = 0, thirtyCount = 0;
         let ninetySum = 0, ninetyCount = 0;
 
-        for (let i = 0; i < daily.time.length; i++) {
-            const d = new Date(daily.time[i] + 'T00:00:00');
-            if (d < yearNinetyStart || d > yearEnd) continue;
+        for (let i = 0; i < dayTimes.length; i++) {
+            const t = dayTimes[i];
+            if (t < ninetyStartTime || t > endTime) continue;
 
             const value = daily.precipitation_sum[i];
             if (typeof value !== 'number' || !Number.isFinite(value)) continue;
 
             ninetySum += value;
             ninetyCount++;
-            if (d >= yearThirtyStart) {
+            if (t >= thirtyStartTime) {
                 thirtySum += value;
                 thirtyCount++;
             }
@@ -3819,10 +3829,12 @@ function computeHistoricalPrecipAvg(series, endMonth, endDay) {
             ? values.reduce((sum, value) => sum + value, 0) / values.length
             : null;
 
-    return {
+    const result = {
         thirtyDayAvg: avg(thirtyDayTotals),   // in mm, or null if no valid years
         ninetyDayAvg: avg(ninetyDayTotals)    // in mm, or null if no valid years
     };
+    histAvgMemo = { series, endMonth, endDay, result };
+    return result;
 }
 
 // Render precipitation history for past 24/48/72/168 hours
