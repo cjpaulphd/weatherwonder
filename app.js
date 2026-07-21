@@ -839,7 +839,7 @@ function initializePrecipDetailToggle() {
 // its legend entry. State persists in localStorage and applies across every
 // day-range view. Tide is handled separately via isTideLineOn().
 const CHART_LINES_KEY = 'weatherwonder_chart_lines';
-const CHART_LINE_DEFAULTS = { temp: true, feelsLike: false, precipProb: true, precipAmount: true, wind: false, uv: false };
+const CHART_LINE_DEFAULTS = { temp: true, feelsLike: false, precipProb: true, precipAmount: true, wind: false, cloudCover: false, uv: false };
 
 function getChartLineVisibility() {
     try {
@@ -1502,6 +1502,7 @@ async function fetchWeatherData(lat, lon) {
             'wind_speed_10m',
             'wind_direction_10m',
             'wind_gusts_10m',
+            'cloud_cover',
             'uv_index',
             'is_day',
             'cape'
@@ -2602,6 +2603,9 @@ const gridLinesPlugin = {
         if (isTideLineOn() && hasTideSeries()) {
             drawUnitAxis(chart.scales['y-tide'], 'right', gridColors.tideBorder, v => formatTideHeight(v, true));
         }
+        if (isChartLineVisible('cloudCover')) {
+            drawUnitAxis(chart.scales['y-cloud'], 'right', gridColors.cloudBorder, v => `${Math.round(v)}%`);
+        }
         if (isChartLineVisible('uv')) {
             drawUnitAxis(chart.scales['y-uv'], 'right', gridColors.uvBorder, v => `UV ${Math.round(v)}`);
         }
@@ -2745,6 +2749,7 @@ function getChartColors() {
     const tidePurple = styles.getPropertyValue('--tide-purple').trim();
     const windOrange = styles.getPropertyValue('--wind-orange').trim();
     const uvViolet = styles.getPropertyValue('--uv-violet').trim();
+    const cloudGray = styles.getPropertyValue('--cloud-gray').trim();
     const stormIndigo = styles.getPropertyValue('--storm-indigo').trim();
 
     // Parse hex color to rgba with alpha
@@ -2774,6 +2779,7 @@ function getChartColors() {
         tideBorder: tidePurple,
         windBorder: windOrange,
         uvBorder: uvViolet,
+        cloudBorder: cloudGray,
         tempGridLine: hexToRgba(tempRed, 0.3),
         tempGridLabel: hexToRgba(tempRed, 0.7),
         precipGridLine: hexToRgba(precipGreen, 0.3),
@@ -2857,6 +2863,7 @@ function renderChart(data) {
     const tideHeights = [];
     const windSpeeds = [];
     const uvValues = [];
+    const cloudCovers = [];
     const isDayFlags = [];
     const precipCfg = getChartPrecipConfig();
 
@@ -2873,6 +2880,8 @@ function renderChart(data) {
         windSpeeds.push(hourly.wind_speed_10m[i]);
         // UV index is a unitless 0–11+ scale, the same across all display modes.
         uvValues.push(hourly.uv_index ? hourly.uv_index[i] : null);
+        // Cloud cover is a percentage (0–100), the same across all display modes.
+        cloudCovers.push(hourly.cloud_cover ? hourly.cloud_cover[i] : null);
         isDayFlags.push(hourly.is_day[i]);
         if (showTide) {
             const ft = tideByTime[hourly.time[i]];
@@ -3051,6 +3060,18 @@ function renderChart(data) {
                     pointHoverRadius: 4,
                     yAxisID: 'y-wind'
                 }] : []),
+                ...(isChartLineVisible('cloudCover') ? [{
+                    label: 'Cloud Cover',
+                    data: cloudCovers,
+                    borderColor: colors.cloudBorder,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    spanGaps: true,
+                    yAxisID: 'y-cloud'
+                }] : []),
                 ...(isChartLineVisible('uv') ? [{
                     label: 'UV Index',
                     data: uvValues,
@@ -3140,6 +3161,9 @@ function renderChart(data) {
                             } else if (axis === 'y-uv') {
                                 if (context.raw == null) return null;
                                 return `UV Index: ${Math.round(context.raw)}`;
+                            } else if (axis === 'y-cloud') {
+                                if (context.raw == null) return null;
+                                return `Cloud Cover: ${Math.round(context.raw)}%`;
                             } else {
                                 const cfg = getChartPrecipConfig();
                                 const amt = context.raw < cfg.step / 10 ? 0 : context.raw;
@@ -3189,6 +3213,12 @@ function renderChart(data) {
                     position: 'right',
                     min: 0,
                     max: uvScaleMax
+                },
+                'y-cloud': {
+                    display: false,
+                    position: 'right',
+                    min: 0,
+                    max: 100
                 }
             }
         }
@@ -3211,9 +3241,9 @@ function renderChart(data) {
     // on every view, but default off when switching into a 5/7/10-day view.
     // Order matters: the legend is a two-row column-flow grid, so consecutive
     // pairs stack into columns — Temp/Feels Like, Precip %/Precip Amt,
-    // Wind/Stormcast, UV/Tide. Stormcast and Tide mirror their respective
-    // section-header shortcuts (same state), shown here so the toggles stay
-    // discoverable next to what they affect.
+    // Wind/Stormcast, Cloud Cover/UV, Tide. Stormcast and Tide mirror their
+    // respective section-header shortcuts (same state), shown here so the
+    // toggles stay discoverable next to what they affect.
     const items = [
         { key: 'temp', cls: 'temp', label: 'Temp', on: isChartLineVisible('temp') },
         { key: 'feelsLike', cls: 'feels', label: 'Feels Like', on: isChartLineVisible('feelsLike') },
@@ -3221,6 +3251,7 @@ function renderChart(data) {
         { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') },
         { key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') },
         { key: 'storms', cls: 'storm', label: 'Stormcast', on: isPrecipDetailOn() },
+        { key: 'cloudCover', cls: 'cloud', label: 'Cloud Cover', on: isChartLineVisible('cloudCover') },
         { key: 'uv', cls: 'uv', label: 'UV', on: isChartLineVisible('uv') }
     ];
     if (hasTideSeries()) {
