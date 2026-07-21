@@ -69,7 +69,7 @@ let currentShareSection = null;
 let radarMap = null;
 let radarLayer = null;
 let precipHistoryData = null;
-let precipHistoricalAvg = null;
+let precipHistoricalSeries = null;
 // Incremented on each loadWeather() call. Async secondary fetches capture the
 // value at start and bail out if it changes, so results for a location the user
 // has navigated away from can't overwrite the current view.
@@ -179,7 +179,7 @@ function toggleCIT2000() {
         renderChart(weatherData);
         reloadLocationTemp();
         if (precipHistoryData) {
-            renderPrecipHistory(precipHistoryData, precipHistoricalAvg);
+            renderPrecipHistory(precipHistoryData, precipHistoricalSeries);
         }
     }
     if (on) {
@@ -212,7 +212,7 @@ function toggleMicrometer() {
         renderChart(weatherData);
         reloadLocationTemp();
         if (precipHistoryData) {
-            renderPrecipHistory(precipHistoryData, precipHistoricalAvg);
+            renderPrecipHistory(precipHistoryData, precipHistoricalSeries);
         }
     }
 }
@@ -572,7 +572,7 @@ function initializeTempToggle() {
                 reloadLocationTemp();
                 // Re-render precipitation history with new unit
                 if (precipHistoryData) {
-                    renderPrecipHistory(precipHistoryData, precipHistoricalAvg);
+                    renderPrecipHistory(precipHistoryData, precipHistoricalSeries);
                 }
             }
         });
@@ -3696,10 +3696,15 @@ async function requestHistoricalAverage(params, useEra5Land = true) {
 
     const data = await response.json();
 
+    // A structurally valid response whose precipitation series is entirely
+    // null/non-finite is just as unusable as a missing one: every comparison
+    // year would fail its coverage minimum and the 10-year averages would
+    // silently disappear. Treat it the same way — retry on the default blend.
     if (
         !data.daily ||
         !Array.isArray(data.daily.time) ||
-        !Array.isArray(data.daily.precipitation_sum)
+        !Array.isArray(data.daily.precipitation_sum) ||
+        !data.daily.precipitation_sum.some(v => typeof v === 'number' && Number.isFinite(v))
     ) {
         if (useEra5Land) return requestHistoricalAverage(params, false);
         throw new Error('Historical precipitation response was incomplete');
@@ -3718,11 +3723,15 @@ function makeComparisonEndDate(year, month, day) {
     return new Date(year, month, Math.min(day, lastDayOfMonth));
 }
 
-// Fetch a 10-year modeled average precipitation for the 30- and 90-calendar-date
-// windows ending "today" in the selected location's timezone. Returns null (rather
-// than throwing) on failure so the caller can still render recent totals without
-// the comparison.
-async function fetchHistoricalPrecipAvg(lat, lon) {
+// Fetch the 10-year daily precipitation series needed for the 30- and
+// 90-calendar-date comparison windows. Returns { daily, startYear, endYear }
+// or null (rather than throwing) on failure so the caller can still render
+// recent totals without the comparison. The window totals themselves are
+// computed later by computeHistoricalPrecipAvg(), once the renderer knows the
+// actual end date of the recent data — which can trail "today" when the
+// Historical Forecast series lags — so both sides of the comparison cover the
+// same calendar window.
+async function fetchHistoricalPrecipSeries(lat, lon) {
     const now = getLocationNow();
     const endYear = now.getFullYear() - 1; // most recent full year with reliable archive data
     const startYear = endYear - 9; // 10 years of data
@@ -3732,8 +3741,11 @@ async function fetchHistoricalPrecipAvg(lat, lon) {
     // on startYear's clamped end date and step back 89 days, rather than
     // transplanting an already-shifted month/day into startYear — the latter
     // drops the earliest year whenever the 90-day window crosses January 1.
+    // The extra week of margin lets the comparison end date move a few days
+    // earlier than "today" (when recent data lags) without the earliest year's
+    // window falling off the front of the fetched range.
     const archiveStart = makeComparisonEndDate(startYear, now.getMonth(), now.getDate());
-    archiveStart.setDate(archiveStart.getDate() - 89);
+    archiveStart.setDate(archiveStart.getDate() - 89 - 7);
     const archiveEnd = makeComparisonEndDate(endYear, now.getMonth(), now.getDate());
 
     const params = {
@@ -3745,15 +3757,22 @@ async function fetchHistoricalPrecipAvg(lat, lon) {
         timezone: 'auto'
     };
 
-    let data;
     try {
-        data = await requestHistoricalAverage(params, true);
+        const data = await requestHistoricalAverage(params, true);
+        return { daily: data.daily, startYear, endYear };
     } catch (err) {
         console.error('Historical precipitation average unavailable:', err);
         return null;
     }
+}
 
-    const daily = data.daily;
+// Compute 10-year average precipitation for the 30- and 90-calendar-date
+// windows ending on the given month/day in each comparison year. Pure and
+// cheap, so the renderer can call it with whatever end date the recent data
+// actually supports.
+function computeHistoricalPrecipAvg(series, endMonth, endDay) {
+    if (!series || !series.daily) return null;
+    const daily = series.daily;
     const thirtyDayTotals = [];
     const ninetyDayTotals = [];
 
@@ -3764,10 +3783,10 @@ async function fetchHistoricalPrecipAvg(lat, lon) {
     const THIRTY_DAY_MIN_VALID = 30;
     const NINETY_DAY_MIN_VALID = 90;
 
-    for (let year = startYear; year <= endYear; year++) {
-        // Clamp the comparison end date so a Feb 29 "today" maps to Feb 28 in
+    for (let year = series.startYear; year <= series.endYear; year++) {
+        // Clamp the comparison end date so a Feb 29 end date maps to Feb 28 in
         // non-leap comparison years rather than rolling into March.
-        const yearEnd = makeComparisonEndDate(year, now.getMonth(), now.getDate());
+        const yearEnd = makeComparisonEndDate(year, endMonth, endDay);
         const yearThirtyStart = new Date(yearEnd);
         yearThirtyStart.setDate(yearThirtyStart.getDate() - 29);
         const yearNinetyStart = new Date(yearEnd);
@@ -3807,7 +3826,7 @@ async function fetchHistoricalPrecipAvg(lat, lon) {
 }
 
 // Render precipitation history for past 24/48/72/168 hours
-function renderPrecipHistory(data, histAvg) {
+function renderPrecipHistory(data, histSeries) {
     const container = document.getElementById('precip-history');
     if (!container) return;
 
@@ -3837,17 +3856,35 @@ function renderPrecipHistory(data, histAvg) {
         }
     }
 
+    // Anchor the rolling windows to the most recent hour that actually has
+    // data. The Historical Forecast series can trail the current time by a
+    // day or two; ending the windows at the wall clock would count those
+    // trailing gaps against coverage and blank every total (and with it every
+    // 10-year comparison) during the lag. Windows ending at the data keep the
+    // totals honest — trailing gaps shorten the anchor, interior gaps still
+    // reduce coverage below.
+    let anchorIndex = nowIndex;
+    while (anchorIndex > 0 && !Number.isFinite(hourly.precipitation[anchorIndex])) {
+        anchorIndex--;
+    }
+
+    // Compute the 10-year window averages for the same calendar end date as
+    // the anchored recent windows, so both sides of the comparison cover an
+    // identical span even when the recent data lags "today."
+    const anchorDate = new Date(hourly.time[anchorIndex]);
+    const histAvg = computeHistoricalPrecipAvg(histSeries, anchorDate.getMonth(), anchorDate.getDate());
+
     // Require nearly complete hourly coverage before showing a total. The
     // Historical Forecast series is expected to be dense, so a materially
     // incomplete window means an understated sum — show an em dash instead.
     const RECENT_MIN_COVERAGE = 0.95;
 
     const results = periods.map(period => {
-        const startIndex = Math.max(0, nowIndex - period.hours + 1);
+        const startIndex = Math.max(0, anchorIndex - period.hours + 1);
         const expectedHours = period.hours;
         let sum = 0;
         let validCount = 0;
-        for (let i = startIndex; i <= nowIndex; i++) {
+        for (let i = startIndex; i <= anchorIndex; i++) {
             const v = hourly.precipitation[i];
             // Preserve null / non-finite values as missing rather than summing
             // them as zero, so gaps lower the coverage instead of the total.
@@ -4046,13 +4083,13 @@ async function loadWeather() {
         // Fetch and render precipitation history + historical averages
         Promise.all([
             fetchPrecipHistory(currentLocation.latitude, currentLocation.longitude),
-            fetchHistoricalPrecipAvg(currentLocation.latitude, currentLocation.longitude).catch(() => null)
+            fetchHistoricalPrecipSeries(currentLocation.latitude, currentLocation.longitude).catch(() => null)
         ])
-            .then(([data, histAvg]) => {
+            .then(([data, histSeries]) => {
                 if (loadId !== currentLoadId) return;
                 precipHistoryData = data;
-                precipHistoricalAvg = histAvg;
-                renderPrecipHistory(data, histAvg);
+                precipHistoricalSeries = histSeries;
+                renderPrecipHistory(data, histSeries);
             })
             .catch(err => {
                 if (loadId !== currentLoadId) return;
@@ -5149,6 +5186,7 @@ const EXPLAINERS = {
                 <li>90 days</li>
             </ul>
             <p>The totals include modeled rain, showers, and the liquid-water equivalent of frozen precipitation.</p>
+            <p>Each window ends at the most recent hour with available data, which can trail the current time slightly when the source series lags. The 10-year comparison windows end on the same calendar date, so both sides of a comparison always cover the same span.</p>
 
             <h4>Comparison with Recent-Average Conditions</h4>
             <p>The 30-day and 90-day periods are compared with a 10-year modeled average for the corresponding calendar windows. A positive percentage indicates wetter estimated conditions; a negative percentage indicates drier estimated conditions.</p>
