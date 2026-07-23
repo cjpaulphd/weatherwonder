@@ -2428,6 +2428,15 @@ function renderHourlyForecast(data) {
                 ? `<div class="hourly-tide">🌊 ${formatTideHeight(tideFt, true)}</div>`
                 : `<div class="hourly-tide placeholder">&nbsp;</div>`;
         }
+        // Gust gets its own reserved row rather than being appended to the wind
+        // line — appending it there made cards with a gust wider than cards
+        // without one, throwing off the hourly forecast's column width.
+        let windGustHtml = '';
+        if (showPrecipDetail) {
+            windGustHtml = isMaterialGust(windSpeed, windGust)
+                ? `<div class="wind-gust${hkClass}">G ${formatWindSpeed(windGust)}</div>`
+                : `<div class="wind-gust placeholder">&nbsp;</div>`;
+        }
 
         card.innerHTML = `
             ${dayLabelHtml}
@@ -2436,8 +2445,9 @@ function renderHourlyForecast(data) {
             <div class="temp">${temp}${getTempUnitLabel()}</div>
             ${windchillHtml}
             <div class="wind${hkClass}">
-                ${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}${showPrecipDetail && isMaterialGust(windSpeed, windGust) ? ` &middot; G ${formatWindSpeed(windGust)}` : ''}
+                ${getWindDirection(windDir)} ${formatWindSpeed(windSpeed)}
             </div>
+            ${windGustHtml}
             ${precipChanceHtml}
             ${precipAmountHtml}
             ${precipDetailHtml}

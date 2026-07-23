@@ -792,6 +792,16 @@ body {
     transform-origin: center;
 }
 
+.hourly-card .wind-gust {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
 .hourly-card .precip-chance {
     font-size: 12px;
     color: var(--precip-blue);
@@ -2374,7 +2384,8 @@ body {
     font-size: 7px;
 }
 
-.hourly-card .wind.kelvin-units {
+.hourly-card .wind.kelvin-units,
+.hourly-card .wind-gust.kelvin-units {
     font-size: 9px;
 }
 
