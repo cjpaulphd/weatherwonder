@@ -15,7 +15,7 @@ const NOAA_TIDE_STATIONS = 'https://api.tidesandcurrents.noaa.gov/mdapi/prod/web
 // keyless tile requests come back watermarked "API KEY REQUIRED". The key is
 // public by design (it ships in every tile URL); restrict it to this domain
 // in the CARTO dashboard.
-const CARTO_BASEMAP_KEY = '';
+const CARTO_BASEMAP_KEY = 'cb1_433c_1_d8009100c2396e1a33691274';
 
 // Default location (Durham, NC) - overridden by last used location if available
 const DEFAULT_LOCATION = {
