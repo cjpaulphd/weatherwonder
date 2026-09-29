@@ -11,6 +11,11 @@ const MARINE_API = 'https://marine-api.open-meteo.com/v1/marine';
 // back to Open-Meteo. Station list is large but static, so it's cached.
 const NOAA_TIDE_DATAGETTER = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
 const NOAA_TIDE_STATIONS = 'https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions';
+// CARTO basemap key (free tier: carto.com/basemaps/apikey). Since Aug 2026,
+// keyless tile requests come back watermarked "API KEY REQUIRED". The key is
+// public by design (it ships in every tile URL); restrict it to this domain
+// in the CARTO dashboard.
+const CARTO_BASEMAP_KEY = '';
 
 // Default location (Durham, NC) - overridden by last used location if available
 const DEFAULT_LOCATION = {
@@ -3387,7 +3392,8 @@ async function initializeRadar() {
             const tileUrl = getEffectiveTheme() === 'light'
                 ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
                 : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-            L.tileLayer(tileUrl, {
+            const tileKeyParam = CARTO_BASEMAP_KEY ? `?key=${encodeURIComponent(CARTO_BASEMAP_KEY)}` : '';
+            L.tileLayer(tileUrl + tileKeyParam, {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
                 subdomains: 'abcd',
                 maxZoom: 19
