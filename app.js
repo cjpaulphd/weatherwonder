@@ -1475,6 +1475,191 @@ function getLocationTimezone() {
     return currentLocation.timezone;
 }
 
+// ---------------------------------------------------------------------------
+// Clock changes (daylight saving time transitions)
+//
+// Detected from the browser's IANA timezone database via Intl, so they apply
+// to any geography that observes DST (including 30-minute shifts such as Lord
+// Howe Island) and to none that don't. Each change is described by the UTC
+// instant it takes effect plus "wall" Dates for the wall-clock time just
+// before and just after. Wall Dates carry the wall-clock in their UTC
+// components (read with getUTC*/toISOString, format with tz 'UTC'): a
+// browser-local Date can't represent e.g. 2:00 AM on a spring-forward night
+// when the browser itself observes the same change.
+// ---------------------------------------------------------------------------
+const tzOffsetFormatters = {};
+
+// UTC offset of `tz` at instant `ms`, in minutes east of UTC.
+function getTzOffsetMinutes(tz, ms) {
+    let fmt = tzOffsetFormatters[tz];
+    if (!fmt) {
+        fmt = tzOffsetFormatters[tz] = new Intl.DateTimeFormat('en-US', {
+            timeZone: tz, hourCycle: 'h23',
+            year: 'numeric', month: 'numeric', day: 'numeric',
+            hour: 'numeric', minute: 'numeric', second: 'numeric'
+        });
+    }
+    const wholeSec = Math.floor(ms / 1000) * 1000;
+    const p = {};
+    fmt.formatToParts(new Date(wholeSec)).forEach(x => { p[x.type] = parseInt(x.value, 10); });
+    const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour === 24 ? 0 : p.hour, p.minute, p.second);
+    return Math.round((asUtc - wholeSec) / 60000);
+}
+
+// Wall Date (UTC components = wall clock) at UTC instant `ms` under a fixed
+// `offsetMin`.
+function wallClockAt(ms, offsetMin) {
+    return new Date(ms + offsetMin * 60000);
+}
+
+// "YYYY-MM-DD" of a wall Date.
+function wallDateKey(d) {
+    return d.toISOString().slice(0, 10);
+}
+
+// Format a wall Date's time per the user's 12/24h preference.
+function formatWallTime(d) {
+    return formatTime(d, 'UTC');
+}
+
+function getTzAbbreviation(tz, ms) {
+    try {
+        const part = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+            .formatToParts(new Date(ms)).find(p => p.type === 'timeZoneName');
+        // Only real abbreviations (EDT, CEST); skip generic "GMT+2" style names.
+        return part && /^[A-Z]{2,5}$/.test(part.value) ? part.value : '';
+    } catch (e) {
+        return '';
+    }
+}
+
+// All clock changes in `tz` between startMs and endMs, oldest first.
+function findClockChanges(tz, startMs, endMs) {
+    if (!tz) return [];
+    const changes = [];
+    const HOUR = 3600000;
+    try {
+        let prevMs = startMs;
+        let prevOff = getTzOffsetMinutes(tz, prevMs);
+        for (let t = startMs + HOUR; t <= endMs + HOUR; t += HOUR) {
+            const off = getTzOffsetMinutes(tz, t);
+            if (off !== prevOff) {
+                // Binary-search the first minute with the new offset.
+                let lo = Math.floor(prevMs / 60000);
+                let hi = Math.ceil(t / 60000);
+                while (hi - lo > 1) {
+                    const mid = Math.floor((lo + hi) / 2);
+                    if (getTzOffsetMinutes(tz, mid * 60000) === prevOff) lo = mid; else hi = mid;
+                }
+                const atMs = hi * 60000;
+                if (atMs >= startMs && atMs <= endMs) {
+                    changes.push({
+                        atMs,
+                        deltaMin: off - prevOff,
+                        wallBefore: wallClockAt(atMs, prevOff),
+                        wallAfter: wallClockAt(atMs, off),
+                        abbrBefore: getTzAbbreviation(tz, atMs - 60000),
+                        abbrAfter: getTzAbbreviation(tz, atMs)
+                    });
+                }
+                prevOff = off;
+            }
+            prevMs = t;
+        }
+    } catch (e) {
+        return [];
+    }
+    return changes;
+}
+
+// Index in Open-Meteo's hourly time array of the first hour at or after a
+// clock change, or -1 if it falls outside [from, to).
+function findClockChangeHourIndex(times, change, from, to) {
+    // "YYYY-MM-DDTHH:MM", comparable with Open-Meteo's hourly time strings.
+    const key = change.wallBefore.toISOString().slice(0, 16);
+    for (let i = from; i < to; i++) {
+        if (times[i] >= key) return i;
+    }
+    return -1;
+}
+
+// Compact signed shift, e.g. "−1h", "+1h", "+30m".
+function formatClockShiftShort(deltaMin) {
+    const sign = deltaMin > 0 ? '+' : '−';
+    const abs = Math.abs(deltaMin);
+    if (abs % 60 === 0) return `${sign}${abs / 60}h`;
+    return abs > 60 ? `${sign}${Math.floor(abs / 60)}h${abs % 60}m` : `${sign}${abs}m`;
+}
+
+function formatClockShiftLong(deltaMin) {
+    const abs = Math.abs(deltaMin);
+    if (abs === 60) return '1 hour';
+    if (abs % 60 === 0) return `${abs / 60} hours`;
+    return abs > 60 ? `${Math.floor(abs / 60)}h ${abs % 60}m` : `${abs} minutes`;
+}
+
+// Signed wall-clock difference between two minute-of-day values, phrased for
+// people, e.g. "59m earlier", "1h 2m later", "same time".
+function formatClockDiff(diffMin) {
+    if (!Number.isFinite(diffMin)) return '';
+    // Wrap so a time crossing midnight compares by the shorter way round.
+    if (diffMin > 720) diffMin -= 1440;
+    if (diffMin < -720) diffMin += 1440;
+    const abs = Math.abs(Math.round(diffMin));
+    if (abs === 0) return 'same time';
+    const h = Math.floor(abs / 60);
+    const m = abs % 60;
+    const amount = h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+    return `${amount} ${diffMin < 0 ? 'earlier' : 'later'}`;
+}
+
+// Clock change relevant to the astronomy section: one that happened earlier
+// today or happens later today or tomorrow (location-local calendar days).
+// Returns the change with `when` ('past-today' | 'today' | 'tonight' |
+// 'tomorrow') or null.
+function getNearbyClockChange() {
+    const tz = getLocationTimezone();
+    if (!tz) return null;
+    const nowMs = Date.now();
+    const changes = findClockChanges(tz, nowMs - 30 * 3600000, nowMs + 54 * 3600000);
+    if (!changes.length) return null;
+    const today = getMidnightToday();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const todayStr = formatLocalDate(today);
+    const tomorrowStr = formatLocalDate(tomorrow);
+    for (const c of changes) {
+        const dayStr = wallDateKey(c.wallAfter);
+        if (c.atMs <= nowMs) {
+            if (dayStr === todayStr) return { ...c, when: 'past-today' };
+        } else if (dayStr === todayStr) {
+            return { ...c, when: 'today' };
+        } else if (dayStr === tomorrowStr) {
+            // A small-hours change reads naturally as "tonight".
+            return { ...c, when: c.wallBefore.getUTCHours() < 6 || wallDateKey(c.wallBefore) !== wallDateKey(c.wallAfter) ? 'tonight' : 'tomorrow' };
+        }
+    }
+    return null;
+}
+
+// One-line human description of a clock change, e.g.
+//   "Clocks fall back 1 hour tonight: 2:00 AM → 1:00 AM (EDT → EST)"
+function describeClockChange(c) {
+    const forward = c.deltaMin > 0;
+    const amount = formatClockShiftLong(c.deltaMin);
+    let verb;
+    if (c.when === 'past-today') {
+        verb = forward ? `Clocks sprang forward ${amount} today` : `Clocks fell back ${amount} today`;
+    } else {
+        const whenWord = c.when === 'today' ? 'today' : c.when;
+        verb = `Clocks ${forward ? 'spring forward' : 'fall back'} ${amount} ${whenWord}`;
+    }
+    const times = `${formatWallTime(c.wallBefore)} → ${formatWallTime(c.wallAfter)}`;
+    const abbr = c.abbrBefore && c.abbrAfter && c.abbrBefore !== c.abbrAfter
+        ? ` (${c.abbrBefore} → ${c.abbrAfter})` : '';
+    return `${verb}: ${times}${abbr}`;
+}
+
 // Fetch weather data from Open-Meteo API
 async function fetchWeatherData(lat, lon) {
     const params = new URLSearchParams({
@@ -2100,10 +2285,28 @@ function renderDailyForecast(data) {
         }
     }
 
+    // Days in the visible range that contain a clock change (DST), keyed by
+    // the local calendar date the change takes effect on.
+    const clockChangeByDate = {};
+    const tzForDaily = getLocationTimezone();
+    if (tzForDaily) {
+        const nowMs = Date.now();
+        findClockChanges(tzForDaily, nowMs - 26 * 3600000, nowMs + (days + 1) * 86400000).forEach(c => {
+            clockChangeByDate[wallDateKey(c.wallAfter)] = c;
+        });
+    }
+
     for (let i = startIdx; i < daily.time.length && i < startIdx + days; i++) {
         const date = new Date(daily.time[i] + 'T00:00:00');
         const card = document.createElement('div');
         card.className = 'daily-card' + (getTempUnit() === 'K' ? ' kelvin-temp' : '');
+        const dayClockChange = clockChangeByDate[daily.time[i]];
+        let clockFlagHtml = '';
+        if (dayClockChange) {
+            const desc = `Clocks ${dayClockChange.deltaMin > 0 ? 'spring forward' : 'fall back'} ${formatClockShiftLong(dayClockChange.deltaMin)} at ${formatWallTime(dayClockChange.wallBefore)}`;
+            card.title = desc;
+            clockFlagHtml = ` <span class="clock-change-flag" aria-hidden="true">⏰</span><span class="sr-only">${desc}</span>`;
+        }
 
         const dailyWeatherCode = daily.weather_code[i];
         const hasSnow = daily.snowfall_sum[i] >= 1; // at least 1 cm to be called a snow day
@@ -2170,7 +2373,7 @@ function renderDailyForecast(data) {
             const dayIcon = getWeatherIcon(dayCode);
             const windRotation = windDir + 180;
             card.innerHTML = `
-                <div class="day-name">${getDayName(date, true)}</div>
+                <div class="day-name">${getDayName(date, true)}${clockFlagHtml}</div>
                 <div class="weather-icons">
                     <div class="day-icon" title="${getDayName(date)}" role="img" aria-label="${getDayName(date)}: ${getWeatherDesc(dayCode)}">${dayIcon}</div>
                 </div>
@@ -2181,7 +2384,7 @@ function renderDailyForecast(data) {
             `;
         } else {
             card.innerHTML = `
-                <div class="day-name">${getDayName(date, true)}</div>
+                <div class="day-name">${getDayName(date, true)}${clockFlagHtml}</div>
                 <div class="weather-icons">
                     ${amIconHtml}
                     ${pmIconHtml}
@@ -2360,7 +2563,19 @@ function renderHourlyForecast(data) {
 
     let currentDay = null;
 
-    for (let i = startIndex; i < Math.min(startIndex + 48, hourly.time.length); i++) {
+    // Flag the first hour after a clock change (DST) in the 48-hour strip.
+    const hourlyEnd = Math.min(startIndex + 48, hourly.time.length);
+    const clockChangeByIndex = {};
+    const tzForHourly = getLocationTimezone();
+    if (tzForHourly) {
+        const nowMs = Date.now();
+        findClockChanges(tzForHourly, nowMs - 2 * 3600000, nowMs + 50 * 3600000).forEach(c => {
+            const idx = findClockChangeHourIndex(hourly.time, c, startIndex + 1, hourlyEnd);
+            if (idx > startIndex) clockChangeByIndex[idx] = c;
+        });
+    }
+
+    for (let i = startIndex; i < hourlyEnd; i++) {
         const date = new Date(hourly.time[i]);
         const isNight = hourly.is_day[i] === 0;
         // For clear/partly-cloudy night hours, show the actual lunar phase glyph
@@ -2381,6 +2596,23 @@ function renderHourlyForecast(data) {
             dayLabelHtml = `<div class="day-label">${getDayName(date, true)}</div>`;
         } else {
             dayLabelHtml = `<div class="day-label placeholder">&nbsp;</div>`;
+        }
+
+        // Clock-change hour: reuse the (otherwise empty) day-banner slot for a
+        // "⏰ −1h" flag. It keeps the .placeholder class so the scroll-driven
+        // day indicator ignores it; CSS makes it visible.
+        const clockChange = clockChangeByIndex[i];
+        if (clockChange) {
+            card.classList.add('clock-change');
+            const shortShift = formatClockShiftShort(clockChange.deltaMin);
+            const desc = `Clocks ${clockChange.deltaMin > 0 ? 'spring forward' : 'fall back'} ${formatClockShiftLong(clockChange.deltaMin)}: ${formatWallTime(clockChange.wallBefore)} → ${formatWallTime(clockChange.wallAfter)}`;
+            card.title = desc;
+            // A change landing on a day's first card (e.g. at midnight) keeps
+            // the day name — the scroll indicator reads that text — and relies
+            // on the card highlight + title instead.
+            if (dayLabelHtml.includes('placeholder')) {
+                dayLabelHtml = `<div class="day-label placeholder clock-change-flag"><span aria-hidden="true">⏰ ${shortShift}</span><span class="sr-only">${desc}</span></div>`;
+            }
         }
 
         const weatherCode = hourly.weather_code[i];
@@ -2719,6 +2951,33 @@ const gridLinesPlugin = {
             ctx.fillText('now', nowX + 3, chartArea.top + 10);
         }
 
+        // Clock-change (DST) markers — an amber dashed line at the hour the
+        // clocks shift, labelled with the shift (e.g. "⏰ −1h"). Drawn below
+        // the "now" and hour-of-day labels so they don't collide.
+        const clockMarks = chart.data.clockChangeMarks;
+        if (Array.isArray(clockMarks) && clockMarks.length) {
+            const xScale = chart.scales.x;
+            const markColor = isLightTheme ? 'rgba(191, 120, 0, 0.9)' : 'rgba(255, 193, 7, 0.85)';
+            clockMarks.forEach(m => {
+                if (m.index <= 0 || m.index >= labels.length) return;
+                const x = xScale.getPixelForValue(m.index - 0.5);
+                ctx.strokeStyle = markColor;
+                ctx.setLineDash([4, 3]);
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(x, chartArea.top);
+                ctx.lineTo(x, chartArea.bottom);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = markColor;
+                ctx.font = 'bold 9px sans-serif';
+                // Keep the label inside the plot near the right edge.
+                const nearRight = x > chartArea.right - 40;
+                ctx.textAlign = nearRight ? 'right' : 'left';
+                ctx.fillText(m.label, nearRight ? x - 3 : x + 3, chartArea.top + 32);
+            });
+        }
+
         ctx.restore();
     }
 };
@@ -2917,6 +3176,23 @@ function renderChart(data) {
     }
     if (nowIndex === -1) nowIndex = labels.length;
 
+    // Clock-change (DST) markers within the visible range, as chart indices
+    // of the first hour after each change. Scan slightly beyond the range on
+    // both sides; findClockChangeHourIndex() keeps only in-range hours.
+    const clockChangeMarks = [];
+    const tzForChart = getLocationTimezone();
+    if (tzForChart && endIndex > startIndex) {
+        const nowMs = Date.now();
+        const elapsedMs = (locationNow - new Date(hourly.time[startIndex])) + 2 * 3600000;
+        const aheadMs = (new Date(hourly.time[endIndex - 1]) - locationNow) + 2 * 3600000;
+        findClockChanges(tzForChart, nowMs - elapsedMs, nowMs + aheadMs).forEach(c => {
+            const idx = findClockChangeHourIndex(hourly.time, c, startIndex + 1, endIndex);
+            if (idx > startIndex) {
+                clockChangeMarks.push({ index: idx - startIndex, label: `⏰ ${formatClockShiftShort(c.deltaMin)}` });
+            }
+        });
+    }
+
     // When the feels-like line is on, factor its values into the axis range so
     // the dashed line never clips outside the temperature scale.
     const tempScaleValues = isChartLineVisible('feelsLike')
@@ -2940,7 +3216,7 @@ function renderChart(data) {
     if (chartCanvas) {
         const peakProb = Math.round(Math.max(0, ...precipProbs.filter(p => p != null)));
         chartCanvas.setAttribute('aria-label',
-            `Forecast chart over ${getChartDays()} days. Temperature ranges from ${Math.round(minTemp)} to ${Math.round(maxTemp)} ${getTempUnitLabel()}. Peak precipitation chance ${peakProb} percent. Hourly details are listed below in the hourly forecast.`);
+            `Forecast chart over ${getChartDays()} days. Temperature ranges from ${Math.round(minTemp)} to ${Math.round(maxTemp)} ${getTempUnitLabel()}. Peak precipitation chance ${peakProb} percent. Hourly details are listed below in the hourly forecast.${clockChangeMarks.length ? ' A dashed amber line marks a daylight saving clock change.' : ''}`);
     }
 
     // Tide axis scale (feet), padded so the curve doesn't touch the edges.
@@ -3007,6 +3283,7 @@ function renderChart(data) {
             labels: labels,
             isDayFlags: isDayFlags,
             nowIndex: nowIndex,
+            clockChangeMarks: clockChangeMarks,
             datasets: [
                 ...(isChartLineVisible('temp') ? [{
                     label: 'Temperature',
@@ -3637,7 +3914,58 @@ function renderAstroData() {
         tideSourceHtml = `<div class="astro-tide-source">NOAA · ${escapeHtml(tideData.stationName)}${distStr}</div>`;
     }
 
+    // Clock-change heads-up: when a DST transition happened earlier today or
+    // happens later today/tomorrow, show a notice plus the sun/moon times on
+    // the other side of the change, with the wall-clock shift spelled out, so
+    // people can anticipate e.g. a sunset an hour "earlier" tomorrow. The
+    // table above stays a coherent today-only timeline.
+    let clockChangeHtml = '';
+    const clockChange = getNearbyClockChange();
+    if (clockChange) {
+        const upcoming = clockChange.when !== 'past-today';
+        const otherDay = new Date(utcNow);
+        otherDay.setUTCDate(otherDay.getUTCDate() + (upcoming ? 1 : -1));
+        const otherSun = SunCalc.getTimes(otherDay, lat, lng);
+        const otherMoon = SunCalc.getMoonTimes(otherDay, lat, lng);
+        const valid = (d) => d && !isNaN(d.getTime());
+        // Wall-clock shift of a sun event between the two days (other day
+        // minus today when upcoming; today minus yesterday after the change).
+        const shift = (todayD, otherD) => {
+            if (!valid(todayD) || !valid(otherD)) return '';
+            const diff = upcoming
+                ? sunMinutes(otherD) - sunMinutes(todayD)
+                : sunMinutes(todayD) - sunMinutes(otherD);
+            return formatClockDiff(diff);
+        };
+        const ccRows = [];
+        if (upcoming) {
+            const sunriseShift = shift(sunTimes.sunrise, otherSun.sunrise);
+            const sunsetShift = shift(sunTimes.sunset, otherSun.sunset);
+            ccRows.push({ label: '☀️ Tomorrow\'s Sunrise', value: formatAstroTime(otherSun.sunrise), note: sunriseShift ? `${sunriseShift} than today` : '' });
+            ccRows.push({ label: '🌅 Tomorrow\'s Sunset', value: formatAstroTime(otherSun.sunset), note: sunsetShift ? `${sunsetShift} than today` : '' });
+            ccRows.push({ label: '🌙 Tomorrow\'s Moonrise', value: valid(otherMoon.rise) ? formatAstroTime(otherMoon.rise) : 'No rise' });
+            ccRows.push({ label: '🌙 Tomorrow\'s Moonset', value: valid(otherMoon.set) ? formatAstroTime(otherMoon.set) : 'No set' });
+        } else {
+            const sunriseShift = shift(sunTimes.sunrise, otherSun.sunrise);
+            const sunsetShift = shift(sunTimes.sunset, otherSun.sunset);
+            ccRows.push({ label: '☀️ Yesterday\'s Sunrise', value: formatAstroTime(otherSun.sunrise), note: sunriseShift ? `Today ${sunriseShift} on the clock` : '' });
+            ccRows.push({ label: '🌅 Yesterday\'s Sunset', value: formatAstroTime(otherSun.sunset), note: sunsetShift ? `Today ${sunsetShift} on the clock` : '' });
+        }
+        const ccRowsHtml = ccRows.map(r => `
+                <div class="astro-row">
+                    <span class="astro-label">${r.label}</span>
+                    <span class="astro-value">${r.value}${r.note ? `<span class="astro-clock-shift">${r.note}</span>` : ''}</span>
+                </div>`).join('');
+        clockChangeHtml = `
+        <div class="astro-group clock-change-group" role="note">
+            <div class="clock-change-notice"><span aria-hidden="true">⚠️</span> ${describeClockChange(clockChange)}</div>
+            <div class="astro-grid">${ccRowsHtml}</div>
+            <div class="clock-change-footnote">Day length is unaffected — the shift is the clock, not the sun.</div>
+        </div>`;
+    }
+
     container.innerHTML = `
+        ${clockChangeHtml}
         <div class="astro-group">
             <div class="astro-grid">
                 ${rowsHtml}

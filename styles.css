@@ -1798,6 +1798,60 @@ body {
     font-style: italic;
 }
 
+/* Clock-change (DST) heads-up above the Sun & Moon table. */
+.clock-change-group {
+    border: 1px solid rgba(255, 193, 7, 0.45);
+    background-color: rgba(255, 193, 7, 0.08);
+}
+
+.clock-change-notice {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 2px 8px 8px;
+}
+
+.clock-change-group .astro-value {
+    text-align: right;
+}
+
+.astro-clock-shift {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--text-secondary);
+    text-align: right;
+}
+
+.clock-change-footnote {
+    margin-top: 6px;
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* Hourly card for the first hour after a clock change. */
+.hourly-card.clock-change {
+    box-shadow: inset 2px 0 0 rgba(255, 193, 7, 0.85);
+}
+
+.hourly-card .day-label.clock-change-flag {
+    visibility: visible;
+    color: #ffc107;
+    background-color: rgba(255, 193, 7, 0.18);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+[data-theme="light"] .hourly-card .day-label.clock-change-flag {
+    color: #8a5d00;
+}
+
+.daily-card .clock-change-flag {
+    font-size: 0.9em;
+}
+
 /* Subdued NOAA station provenance line below the astronomy/tide table. */
 .astro-tide-source {
     margin-top: 8px;

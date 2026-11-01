@@ -41,6 +41,9 @@ Open-Meteo returns times in the location's timezone (via `timezone: 'auto'`), bu
 - **`getLocationTimezone()`** — returns the IANA timezone string
 - **`formatTime(date, tz)` / `formatHour(date, tz)`** — pass `tz` for UTC-correct dates (SunCalc, radar, alerts); omit for Open-Meteo times already parsed with correct hour digits
 
+### Clock Changes (DST)
+`findClockChanges(tz, startMs, endMs)` detects DST transitions from the browser's IANA data via `Intl` (any geography, incl. 30-min shifts; none for non-DST zones). Wall-clock times are returned as **wall Dates** (wall clock in UTC components) — never build a browser-local Date for them, because e.g. 2:00 AM on a spring-forward night doesn't exist in a browser that observes the same change. Use `formatWallTime()` / `wallDateKey()`. Consumers: a heads-up card atop the Sun & Moon section (today/tonight/tomorrow, with tomorrow's sun/moon times and the wall-clock shift), an amber marker on the chart, a `⏰ ±1h` flag on the hourly card, and `⏰` on the daily card.
+
 ### Date Parsing
 Open-Meteo returns daily dates as `"YYYY-MM-DD"` strings. JavaScript's `new Date("YYYY-MM-DD")` parses these as **UTC midnight**, which shifts to the previous day in US timezones. Always append `"T00:00:00"` when parsing daily dates to force local time interpretation. See `renderDailyForecast()`.
 
