@@ -53,6 +53,15 @@ All temps from Open-Meteo arrive in Celsius. Conversion: `Math.round((celsius * 
 ### Display Units (precipitation)
 Precipitation amounts arrive in mm. Cards use `formatPrecip()`; the forecast chart uses `getChartPrecipConfig()`, which returns the conversion factor, gridline step, and label suffix for the active unit mode (inches in °F, mm in °C, microns in the Kelvin easter-egg mode). Keep the chart and cards consistent — the chart must not hard-code inches.
 
+### Barometric Pressure
+Uses Open-Meteo `pressure_msl` (sea-level, hPa) — never `surface_pressure`, which varies with elevation. `formatPressure()` / `formatPressureDelta()` display inHg in °F mode, hPa in °C, Pa in Kelvin mode. `getPressureTrend(series, idx)` computes the 3-hour tendency from hourly values (steady < 1 hPa, rapid ≥ 3.5 hPa; constants `PRESSURE_STEADY_HPA` / `PRESSURE_RAPID_HPA`); before 03:00 local there aren't 3 past hours in the series, so it falls back to the next-3-hour change and reports `basis: 'next'`. The chart's `y-pressure` axis keeps a minimum 20 hPa span so small wobbles don't look dramatic.
+
+### Conditions Bar Layout
+`renderConditionsBar()` emits two `.cond-group`s (AQI/RH/DP, then wind/pressure/info). `updateConditionsBarWrap()` adds `.wrapped` when they don't fit on one line, stacking them as two centered rows and hiding the separator between them. It re-runs on resize.
+
+### Chart Legend
+A three-column grid filled row by row (3×3; Tide adds a centered 4th row at coastal locations). The order of `items` in `renderChart()` defines the rows.
+
 ### Security: Escaping Untrusted HTML
 Rendering is done with template literals assigned to `innerHTML`; there is no framework auto-escaping. Any value that comes from an API (NWS alert text, geocoding labels) or from the user (favorite names entered via the rename prompt) **must** be wrapped in `escapeHtml()` before interpolation. `escapeHtml()` lives near the top of `app.js`. For text that intentionally contains markup (e.g. alert `instruction` newlines → `<br>`), escape first, then apply the substitution.
 

@@ -844,7 +844,7 @@ function initializePrecipDetailToggle() {
 // its legend entry. State persists in localStorage and applies across every
 // day-range view. Tide is handled separately via isTideLineOn().
 const CHART_LINES_KEY = 'weatherwonder_chart_lines';
-const CHART_LINE_DEFAULTS = { temp: true, feelsLike: false, precipProb: true, precipAmount: true, wind: false, cloudCover: false, uv: false };
+const CHART_LINE_DEFAULTS = { temp: true, feelsLike: false, precipProb: true, precipAmount: true, wind: false, cloudCover: false, uv: false, pressure: false };
 
 function getChartLineVisibility() {
     try {
@@ -1421,6 +1421,58 @@ function formatWindSpeed(mph, compact = false) {
     return `${Math.round(mph)} mph`;
 }
 
+// Sea-level pressure display. Open-Meteo's `pressure_msl` arrives in hPa
+// (= millibars); show inHg in °F mode, hPa in °C mode, and pascals in the
+// Kelvin easter-egg mode (the SI unit, in keeping with its µm and µm/s).
+const HPA_TO_INHG = 0.0295300;
+
+function formatPressure(hPa) {
+    const unit = getTempUnit();
+    if (unit === 'K') return `${Math.round(hPa * 100).toLocaleString()} Pa`;
+    if (unit === 'C') return `${Math.round(hPa)} hPa`;
+    return `${(hPa * HPA_TO_INHG).toFixed(2)} inHg`;
+}
+
+// Signed pressure change in the active unit, e.g. "−0.12 inHg" / "+3.4 hPa".
+function formatPressureDelta(dHpa) {
+    const unit = getTempUnit();
+    const a = Math.abs(dHpa);
+    let num, suffix;
+    if (unit === 'K') { num = Math.round(a * 100).toLocaleString(); suffix = 'Pa'; }
+    else if (unit === 'C') { num = a.toFixed(1); suffix = 'hPa'; }
+    else { num = (a * HPA_TO_INHG).toFixed(2); suffix = 'inHg'; }
+    // Sign from the rounded value, so a tiny change reads "±0.00", not "+0.00".
+    const sign = parseFloat(num.replace(/,/g, '')) === 0 ? '±' : (dHpa > 0 ? '+' : '−');
+    return `${sign}${num} ${suffix}`;
+}
+
+// 3-hour pressure tendency (the WMO/NWS convention). Classification:
+// |Δ| < 1 hPa steady; 1–3.5 hPa rising/falling; ≥ 3.5 hPa rapidly — roughly
+// the Met Office tendency bands. Compares hourly values on both ends so a
+// 15-minute "current" value can't introduce an artificial step. The hourly
+// series begins at local midnight, so before 03:00 there aren't 3 past hours;
+// then fall back to the model's next-3-hour change and say so (`basis`).
+const PRESSURE_STEADY_HPA = 1;
+const PRESSURE_RAPID_HPA = 3.5;
+
+function getPressureTrend(series, idx) {
+    if (!Array.isArray(series)) return null;
+    const ok = (v) => typeof v === 'number' && Number.isFinite(v);
+    let delta = null;
+    let basis = null;
+    if (idx >= 3 && ok(series[idx]) && ok(series[idx - 3])) {
+        delta = series[idx] - series[idx - 3];
+        basis = 'past';
+    } else if (ok(series[idx]) && ok(series[idx + 3])) {
+        delta = series[idx + 3] - series[idx];
+        basis = 'next';
+    }
+    if (delta == null) return null;
+    const mag = Math.abs(delta);
+    const dir = mag < PRESSURE_STEADY_HPA ? 'steady' : (delta > 0 ? 'rising' : 'falling');
+    return { delta, basis, dir, rapid: dir !== 'steady' && mag >= PRESSURE_RAPID_HPA };
+}
+
 // Get day name
 function getDayName(date, short = false) {
     const today = getLocationNow();
@@ -1678,6 +1730,7 @@ async function fetchWeatherData(lat, lon) {
             'wind_direction_10m',
             'wind_gusts_10m',
             'precipitation',
+            'pressure_msl',
             'is_day'
         ].join(','),
         hourly: [
@@ -1695,7 +1748,8 @@ async function fetchWeatherData(lat, lon) {
             'cloud_cover',
             'uv_index',
             'is_day',
-            'cape'
+            'cape',
+            'pressure_msl'
         ].join(','),
         // 15-minute precipitation for the short-term outlook strip. Native
         // resolution in North America / Central Europe; elsewhere Open-Meteo
@@ -1949,7 +2003,7 @@ function getWindColor(mph) {
 }
 
 // Store current conditions for re-rendering on unit change
-let currentConditions = { aqi: null, humidity: null, dewpoint: null, windSpeed: null, windDir: null, windGust: null };
+let currentConditions = { aqi: null, humidity: null, dewpoint: null, windSpeed: null, windDir: null, windGust: null, pressure: null, pressureTrend: null };
 
 // The hourly index whose time is the last one at or before "now" in the
 // location's timezone. Used only as a fallback when Open-Meteo's dedicated
@@ -1988,6 +2042,8 @@ function applyCurrentConditions() {
     currentConditions.windSpeed = pick(cur.wind_speed_10m, hourly.wind_speed_10m);
     currentConditions.windDir = pick(cur.wind_direction_10m, hourly.wind_direction_10m);
     currentConditions.windGust = pick(cur.wind_gusts_10m, hourly.wind_gusts_10m);
+    currentConditions.pressure = pick(cur.pressure_msl, hourly.pressure_msl);
+    currentConditions.pressureTrend = getPressureTrend(hourly.pressure_msl, idx);
 
     return {
         currentTemp: tempC == null ? null : formatTempValue(tempC),
@@ -2000,8 +2056,11 @@ function renderConditionsBar() {
     const el = document.getElementById('conditions-bar');
     if (!el) return;
 
-    const { aqi, humidity, dewpoint, windSpeed, windDir, windGust } = currentConditions;
+    const { aqi, humidity, dewpoint, windSpeed, windDir, windGust, pressure, pressureTrend } = currentConditions;
+    // Two groups — air quality/moisture, then wind/pressure — so that on a
+    // narrow screen the bar breaks between them (see updateConditionsBarWrap).
     const parts = [];
+    const atmoParts = [];
 
     if (aqi != null) {
         const color = getAQIColor(aqi);
@@ -2031,10 +2090,26 @@ function renderConditionsBar() {
         const arrow = String.fromCharCode(8593); // ↑
         const rotation = windDir + 180; // Point arrow in direction wind is going
         const gustStr = showGust ? ` &middot; G ${formatWindSpeed(windGust)}` : '';
-        parts.push(`<span style="color:${color}"><span class="cond-wind-icon" style="display:inline-block;transform:rotate(${rotation}deg)">${arrow}</span> ${dir} ${formatWindSpeed(windSpeed)}${gustStr}</span>`);
+        atmoParts.push(`<span style="color:${color}"><span class="cond-wind-icon" style="display:inline-block;transform:rotate(${rotation}deg)">${arrow}</span> ${dir} ${formatWindSpeed(windSpeed)}${gustStr}</span>`);
     }
 
-    if (parts.length === 0) {
+    if (pressure != null) {
+        // Neutral color (pressure has no comfort meaning); amber only for a
+        // rapid fall, the one tendency worth drawing the eye to.
+        let trendHtml = '';
+        if (pressureTrend) {
+            const t = pressureTrend;
+            const glyph = t.dir === 'rising' ? '↑' : (t.dir === 'falling' ? '↓' : '→');
+            const words = t.dir === 'steady' ? 'steady' : `${t.dir}${t.rapid ? ' rapidly' : ''}`;
+            const span = t.basis === 'past' ? 'over the past 3 hours' : 'forecast over the next 3 hours';
+            const detail = `Pressure ${words}: ${formatPressureDelta(t.delta)} ${span}`;
+            trendHtml = ` <span class="cond-pressure-trend" title="${detail}" aria-hidden="true">${glyph}</span><span class="sr-only">, ${detail}</span>`;
+        }
+        const rapidFall = pressureTrend && pressureTrend.rapid && pressureTrend.dir === 'falling';
+        atmoParts.push(`<span class="cond-pressure${rapidFall ? ' rapid-fall' : ''}">${formatPressure(pressure)}${trendHtml}</span>`);
+    }
+
+    if (parts.length === 0 && atmoParts.length === 0) {
         el.innerHTML = '';
         return;
     }
@@ -2046,9 +2121,35 @@ function renderConditionsBar() {
         '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>' +
         '</svg></button>';
 
-    el.innerHTML = parts.join('<span class="cond-sep">&middot;</span>') +
-        '<span class="cond-sep">&middot;</span>' + infoBtn;
+    // The info button rides at the end of the second group so it stays with
+    // the last line when the bar wraps.
+    const sep = '<span class="cond-sep">&middot;</span>';
+    atmoParts.push(infoBtn);
+    const groups = [];
+    if (parts.length) groups.push(`<span class="cond-group">${parts.join(sep)}</span>`);
+    groups.push(`<span class="cond-group">${atmoParts.join(sep)}</span>`);
+    el.innerHTML = groups.join('<span class="cond-sep cond-group-sep">&middot;</span>');
+    updateConditionsBarWrap();
 }
+
+// When the two groups don't fit on one line, flex-wrap drops the wind/pressure
+// group onto a second centered row; hide the separator between the groups
+// then, so it doesn't dangle at a line end. Measured with the separator shown
+// so the result doesn't oscillate.
+function updateConditionsBarWrap() {
+    const el = document.getElementById('conditions-bar');
+    if (!el) return;
+    el.classList.remove('wrapped');
+    const groups = el.querySelectorAll('.cond-group');
+    if (groups.length < 2) return;
+    if (groups[1].offsetTop > groups[0].offsetTop) el.classList.add('wrapped');
+}
+
+let conditionsWrapTimer = null;
+window.addEventListener('resize', () => {
+    clearTimeout(conditionsWrapTimer);
+    conditionsWrapTimer = setTimeout(updateConditionsBarWrap, 100);
+});
 
 // US state abbreviation lookup for "city, state" search parsing
 const US_STATE_ABBREVS = {
@@ -2821,9 +2922,12 @@ const gridLinesPlugin = {
         // scales, so rather than add more full-width gridlines we draw a few
         // short edge ticks labelled with units. Labels sit below each tick so
         // they don't collide with the temp/precip labels (which sit above).
-        const drawUnitAxis = (scale, side, color, fmt) => {
+        // `fracs` places the ticks along the axis; pressure uses the quarter
+        // points so its labels interleave with the right edge's other unit
+        // axes (tide, cloud, UV), which use the ends and the middle.
+        const drawUnitAxis = (scale, side, color, fmt, fracs = [0, 0.5, 1]) => {
             if (!scale || typeof scale.min !== 'number') return;
-            const vals = [scale.min, (scale.min + scale.max) / 2, scale.max];
+            const vals = fracs.map(f => scale.min + (scale.max - scale.min) * f);
             ctx.setLineDash([]);
             ctx.strokeStyle = color;
             ctx.fillStyle = color;
@@ -2855,6 +2959,9 @@ const gridLinesPlugin = {
         }
         if (isChartLineVisible('uv')) {
             drawUnitAxis(chart.scales['y-uv'], 'right', gridColors.uvBorder, v => `UV ${Math.round(v)}`);
+        }
+        if (isChartLineVisible('pressure') && chart.scales['y-pressure']) {
+            drawUnitAxis(chart.scales['y-pressure'], 'right', gridColors.pressureBorder, v => formatPressure(v), [0.25, 0.75]);
         }
 
         // Draw day separators
@@ -3025,6 +3132,7 @@ function getChartColors() {
     const uvViolet = styles.getPropertyValue('--uv-violet').trim();
     const cloudGray = styles.getPropertyValue('--cloud-gray').trim();
     const stormIndigo = styles.getPropertyValue('--storm-indigo').trim();
+    const pressureTeal = styles.getPropertyValue('--pressure-teal').trim();
 
     // Parse hex color to rgba with alpha
     function hexToRgba(hex, alpha) {
@@ -3054,6 +3162,7 @@ function getChartColors() {
         windBorder: windOrange,
         uvBorder: uvViolet,
         cloudBorder: cloudGray,
+        pressureBorder: pressureTeal,
         tempGridLine: hexToRgba(tempRed, 0.3),
         tempGridLabel: hexToRgba(tempRed, 0.7),
         precipGridLine: hexToRgba(precipGreen, 0.3),
@@ -3138,6 +3247,7 @@ function renderChart(data) {
     const windSpeeds = [];
     const uvValues = [];
     const cloudCovers = [];
+    const pressures = [];
     const isDayFlags = [];
     const precipCfg = getChartPrecipConfig();
 
@@ -3156,6 +3266,8 @@ function renderChart(data) {
         uvValues.push(hourly.uv_index ? hourly.uv_index[i] : null);
         // Cloud cover is a percentage (0–100), the same across all display modes.
         cloudCovers.push(hourly.cloud_cover ? hourly.cloud_cover[i] : null);
+        // Sea-level pressure stays in hPa; the axis labels and tooltip convert.
+        pressures.push(hourly.pressure_msl ? hourly.pressure_msl[i] : null);
         isDayFlags.push(hourly.is_day[i]);
         if (showTide) {
             const ft = tideByTime[hourly.time[i]];
@@ -3240,6 +3352,21 @@ function renderChart(data) {
     // of 2 keeps the line readable on low-UV days.
     const maxUv = Math.max(2, ...uvValues.filter(v => v != null));
     const uvScaleMax = Math.ceil(maxUv * 1.1);
+
+    // Pressure axis (hPa). Centered on the data with a minimum 20 hPa
+    // (~0.6 inHg) span: autoscaling to min/max would stretch an ordinary
+    // 2 hPa daily wobble into a storm-like swing. Real systems still show as
+    // real slopes.
+    let pressureScaleMin = 1000, pressureScaleMax = 1020;
+    const pressureVals = pressures.filter(v => v != null);
+    if (pressureVals.length) {
+        const pMin = Math.min(...pressureVals);
+        const pMax = Math.max(...pressureVals);
+        const span = Math.max(20, (pMax - pMin) * 1.2);
+        const mid = (pMin + pMax) / 2;
+        pressureScaleMin = mid - span / 2;
+        pressureScaleMax = mid + span / 2;
+    }
 
     if (forecastChart) {
         forecastChart.destroy();
@@ -3376,6 +3503,18 @@ function renderChart(data) {
                     spanGaps: true,
                     yAxisID: 'y-uv'
                 }] : []),
+                ...(isChartLineVisible('pressure') && pressureVals.length ? [{
+                    label: 'Pressure',
+                    data: pressures,
+                    borderColor: colors.pressureBorder,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    spanGaps: true,
+                    yAxisID: 'y-pressure'
+                }] : []),
                 ...(showTide ? [{
                     label: tideSeriesLabel(),
                     data: tideHeights,
@@ -3453,6 +3592,9 @@ function renderChart(data) {
                             } else if (axis === 'y-uv') {
                                 if (context.raw == null) return null;
                                 return `UV Index: ${Math.round(context.raw)}`;
+                            } else if (axis === 'y-pressure') {
+                                if (context.raw == null) return null;
+                                return `Pressure: ${formatPressure(context.raw)}`;
                             } else if (axis === 'y-cloud') {
                                 if (context.raw == null) return null;
                                 return `Cloud Cover: ${Math.round(context.raw)}%`;
@@ -3511,6 +3653,12 @@ function renderChart(data) {
                     position: 'right',
                     min: 0,
                     max: 100
+                },
+                'y-pressure': {
+                    display: false,
+                    position: 'right',
+                    min: pressureScaleMin,
+                    max: pressureScaleMax
                 }
             }
         }
@@ -3531,20 +3679,22 @@ function renderChart(data) {
     // day-range view and reload. Tide reuses the shared isTideLineOn() flag
     // and is only offered for coastal locations. Wind and tide stay selectable
     // on every view, but default off when switching into a 5/7/10-day view.
-    // Order matters: the legend is a two-row column-flow grid, so consecutive
-    // pairs stack into columns — Temp/Feels Like, Precip %/Precip Amt,
-    // Wind/Stormcast, Cloud Cover/UV, Tide. Stormcast and Tide mirror their
-    // respective section-header shortcuts (same state), shown here so the
-    // toggles stay discoverable next to what they affect.
+    // Order matters: the legend is a three-column grid filled row by row —
+    // Temp/Feels Like/UV, Precip %/Precip Amt/Stormcast, Wind/Pressure/Cloud
+    // Cover — with Tide on its own centered 4th row for coastal locations.
+    // Stormcast and Tide mirror their respective section-header shortcuts
+    // (same state), shown here so the toggles stay discoverable next to what
+    // they affect.
     const items = [
         { key: 'temp', cls: 'temp', label: 'Temp', on: isChartLineVisible('temp') },
         { key: 'feelsLike', cls: 'feels', label: 'Feels Like', on: isChartLineVisible('feelsLike') },
+        { key: 'uv', cls: 'uv', label: 'UV', on: isChartLineVisible('uv') },
         { key: 'precipProb', cls: 'precip-prob', label: 'Precip %', on: isChartLineVisible('precipProb') },
         { key: 'precipAmount', cls: 'precip-amount', label: 'Precip Amt', on: isChartLineVisible('precipAmount') },
-        { key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') },
         { key: 'storms', cls: 'storm', label: 'Stormcast', on: isPrecipDetailOn() },
-        { key: 'cloudCover', cls: 'cloud', label: 'Cloud Cover', on: isChartLineVisible('cloudCover') },
-        { key: 'uv', cls: 'uv', label: 'UV', on: isChartLineVisible('uv') }
+        { key: 'wind', cls: 'wind', label: 'Wind', on: isChartLineVisible('wind') },
+        { key: 'pressure', cls: 'pressure', label: 'Pressure', on: isChartLineVisible('pressure') },
+        { key: 'cloudCover', cls: 'cloud', label: 'Cloud Cover', on: isChartLineVisible('cloudCover') }
     ];
     if (hasTideSeries()) {
         items.push({ key: 'tide', cls: 'tide', label: tideSeriesLabel(), on: isTideLineOn() });
@@ -5326,6 +5476,19 @@ const EXPLAINERS = {
             <p>Wind direction describes where the wind is coming from. The arrow shows the direction in which the air is moving.</p>
             <p>The primary wind value is the sustained wind. When a gust is materially stronger than the sustained wind, it may be displayed separately, marked with a "G." Gusts and sustained wind are both model estimates at approximately 10 meters above the ground. Trees, buildings, ridgelines, valleys, and other terrain can produce large local differences.</p>
 
+            <h4>Barometric Pressure</h4>
+            <p>WeatherWonder shows sea-level pressure: the modeled air pressure adjusted to what it would be at sea level. This is the value reported by weather stations, aviation reports, and most home barometers set to local conditions. The unadjusted pressure at ground level falls with elevation (roughly 840&nbsp;hPa in Denver), so it can't be compared between places; sea-level pressure can.</p>
+            <p>Units follow the temperature setting: inches of mercury (inHg) with &deg;F, hectopascals (hPa, equal to millibars) with &deg;C. Typical values range from about 980 to 1040&nbsp;hPa (28.9&ndash;30.7&nbsp;inHg), with 1013&nbsp;hPa (29.92&nbsp;inHg) as the standard average. Values below about 1000&nbsp;hPa usually indicate a low-pressure system; strong storms can go far lower.</p>
+            <p>The arrow after the value shows the 3-hour pressure tendency, the convention used by weather services:</p>
+            <ul>
+                <li>&rarr; Steady: changed less than 1&nbsp;hPa (0.03&nbsp;inHg)</li>
+                <li>&uarr; / &darr; Rising or falling: 1&ndash;3.5&nbsp;hPa (0.03&ndash;0.10&nbsp;inHg)</li>
+                <li>Rapidly: 3.5&nbsp;hPa (0.10&nbsp;inHg) or more. A rapid fall is highlighted in amber.</li>
+            </ul>
+            <p>The tendency compares the latest hourly value with the value 3 hours earlier. Shortly after midnight, before 3 past hours are available for the day, it uses the model's change over the next 3 hours instead; hover over or focus on the arrow to see which, along with the exact change.</p>
+            <p>Falling pressure often accompanies an approaching low or front, and rising pressure often accompanies clearing. These are rules of thumb, not forecasts: many falls bring no precipitation, and the forecast below already accounts for the pressure pattern. Treat a rapid fall as a cue to check the forecast and any alerts, not as a prediction of its own.</p>
+            <p>The Pressure line on the forecast chart (off by default) uses a scale at least 20&nbsp;hPa tall, so ordinary daily wobbles look nearly flat and approaching systems show as real slopes.</p>
+
             <p>Data and limitations: <a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener noreferrer">Open-Meteo Forecast</a> and <a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener noreferrer">Air Quality</a> APIs, with AQI categories from the <a href="https://www.airnow.gov/aqi/aqi-basics/" target="_blank" rel="noopener noreferrer">U.S. EPA</a>. Values are model estimates for the selected grid cells.</p>
 
             <div class="explainer-related">
@@ -5369,6 +5532,7 @@ const EXPLAINERS = {
             <h4>Other Forecast Variables</h4>
             <p>Temperature is the modeled air temperature. Feels-like temperature estimates human thermal exposure.</p>
             <p>Wind is the sustained modeled speed approximately 10 meters above the ground; a materially stronger gust may be shown separately.</p>
+            <p>Pressure is the modeled sea-level pressure. Its chart scale spans at least 20&nbsp;hPa (about 0.6&nbsp;inHg), so a steep slope reflects a real change, typically a weather system passing, rather than an ordinary daily wobble.</p>
             <p>The UV Index estimates the potential for ultraviolet exposure. Protection becomes increasingly important at values of 3 or higher, particularly around solar noon.</p>
 
             <p>Data and limitations: <a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener noreferrer">Open-Meteo Forecast API</a> using its Best Match model selection. Forecast values are estimates for a model grid cell and may not capture highly localized conditions.</p>
