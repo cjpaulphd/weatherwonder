@@ -20,6 +20,8 @@
     --wind-orange: #ffb74d;
     --uv-violet: #b388ff;
     --cloud-gray: #b0bec5;
+    --pressure-teal: #80cbc4;
+    --pressure-alert: #ffc107;
     --snow-color: #e91e63;
     --rain-color: #2196f3;
     --storm-indigo: #9fa8da;
@@ -40,6 +42,8 @@
     --wind-orange: #ef6c00;
     --uv-violet: #6200ea;
     --cloud-gray: #78909c;
+    --pressure-teal: #00897b;
+    --pressure-alert: #bf7800;
     --snow-color: #c2185b;
     --rain-color: #1565c0;
     --storm-indigo: #3949ab;
@@ -338,12 +342,40 @@ body {
 
 .conditions-bar {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     align-items: center;
-    gap: 6px;
+    gap: 2px 6px;
     font-size: 11px;
     font-weight: 600;
     padding: 2px 16px 6px;
+}
+
+/* Two groups (AQI/RH/DP, then wind/pressure). When they don't fit on one
+   line, app.js adds .wrapped: the groups stack as two centered rows and the
+   separator between them is hidden. */
+.conditions-bar .cond-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 2px 6px;
+}
+
+.conditions-bar .cond-group > span {
+    white-space: nowrap;
+}
+
+.conditions-bar.wrapped {
+    flex-direction: column;
+}
+
+.conditions-bar.wrapped .cond-group-sep {
+    display: none;
+}
+
+.conditions-bar .cond-pressure.rapid-fall {
+    color: var(--pressure-alert);
 }
 
 .conditions-bar:empty {
@@ -1343,13 +1375,14 @@ body {
 }
 
 /* Legend */
-/* Two-row column-flow grid: consecutive legend entries stack into vertical
-   pairs (Temp/Feels Like, Precip %/Precip Amt, Wind/Storms, UV/Tide). */
+/* Three-column grid, filled row by row (3x3; a 4th row holds Tide, centered,
+   for coastal locations). Entries are left-aligned within their column so the
+   swatches line up. */
 .chart-legend {
     display: grid;
-    grid-auto-flow: column;
-    grid-template-rows: repeat(2, auto);
+    grid-template-columns: repeat(3, auto);
     justify-content: center;
+    justify-items: start;
     gap: 2px 10px;
     padding: 8px 0;
     font-size: 10px;
@@ -1430,6 +1463,15 @@ body {
 
 .legend-color.cloud {
     background-color: var(--cloud-gray);
+}
+
+.legend-color.pressure {
+    background-color: var(--pressure-teal);
+}
+
+/* Tide is the 10th entry: give it its own centered row */
+.legend-item[data-line="tide"] {
+    grid-column: 2;
 }
 
 /* Storms toggle swatch: the intensity ramp the colored fill uses */

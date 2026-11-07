@@ -7,9 +7,10 @@ A mobile-first weather dashboard that provides comprehensive forecasts, live rad
 ## Features
 
 ### Forecast
+- **Current Conditions Bar** — AQI, relative humidity, dew point, wind (with gusts), and sea-level barometric pressure with a 3-hour tendency arrow (↑ rising, ↓ falling, → steady; a rapid fall is highlighted in amber). On narrow screens wind and pressure drop to a second centered row
 - **7-Day Daily Forecast** — AM/PM weather icons, high/low temperatures, dominant wind direction + max speed, precipitation probability and amounts
 - **48-Hour Hourly Forecast** — Temperature, feels-like/windchill, compass wind direction + speed (e.g. NNW 12), precipitation breakdown
-- **Interactive Chart** — Multi-axis line chart showing temperature, precipitation probability, precipitation amounts, and average wind speed, with colored grid lines, per-axis units, and day separators. Each line can be shown/hidden by tapping its legend entry (wind is off by default); the choice persists across day-range views
+- **Interactive Chart** — Multi-axis line chart showing temperature, precipitation probability, precipitation amounts, wind speed, cloud cover, UV, and sea-level pressure, with colored grid lines, per-axis units, and day separators. The legend is a 3×3 grid of toggles (a 4th row adds Tide at coastal locations); each line can be shown/hidden by tapping its entry (feels-like, wind, cloud cover, UV, and pressure are off by default) and the choice persists across day-range views. The pressure axis spans at least 20 hPa so ordinary daily wobbles don't read as storms
 - **Tide Line** *(coastal locations)* — Optional hourly tide overlay on the forecast chart. Toggled from the footer button or the chart legend (default off); only offered where tide data is available. The same toggle adds/removes high/low tides in the Sun, Moon, and Tide table and tide heights in the hourly cards, and flips the section header's "Tide" wording. Heights follow the °F/°C unit toggle (feet/metres). US locations use accurate NOAA CO-OPS station predictions (nearest station within ~40 km); elsewhere it falls back to the Open-Meteo global marine model
 - **Precipitation History** — 24h through 3-month totals with comparison to 10-year historical averages
 
@@ -30,13 +31,13 @@ A single **Sun, Moon, and Tide** table, with all timed events (twilight, sunrise
 - **Favorite Locations** — Save locations locally and switch between them from the side menu
 - **Refresh Button** — One-tap weather data refresh
 - **Feels-Like Temperature** — Displayed in the header when it differs significantly from actual temp
-- **Weather Explainers** — Info (ⓘ) buttons on the conditions bar and the Daily Forecast, Radar, Sun/Moon, and Precipitation History headers open short, plain-spoken pop-ups covering the meteorology behind the app: relative humidity vs. dew point and feels-like; how the numerical-weather-prediction models are built and why confidence fades with lead time; how Doppler reflectivity (dBZ) maps to the radar colors; the tiers of twilight (civil/nautical/astronomical), solar noon, and moon phases; and how the rolling precipitation totals compare to the 10-year local average. Each links across to the related topics
+- **Weather Explainers** — Info (ⓘ) buttons on the conditions bar and the Daily Forecast, Radar, Sun/Moon, and Precipitation History headers open short, plain-spoken pop-ups covering the meteorology behind the app: relative humidity vs. dew point and feels-like; sea-level pressure and what its tendency arrow does (and doesn't) tell you; how the numerical-weather-prediction models are built and why confidence fades with lead time; how Doppler reflectivity (dBZ) maps to the radar colors; the tiers of twilight (civil/nautical/astronomical), solar noon, and moon phases; and how the rolling precipitation totals compare to the 10-year local average. Each links across to the related topics
 - **Last Updated Timestamp** — Shows when data was last fetched
 - **Sharing** — Screenshot, link copy, and native device sharing for individual forecast sections
 - **Share This App** — Footer button to copy the app URL or share via native device sharing
 - **Add to Home Screen** — Installable as a PWA on iOS (step-by-step instruction modal), Android, and desktop browsers
 - **Dark/Light Theme** — Toggle between dark and light themes, defaults to system preference
-- **Unit Toggles** — Switch between °F/°C and 12/24-hour time formats; coastal locations also get a tide-line toggle
+- **Unit Toggles** — Switch between °F/°C (which also switches mph/km/h, in/mm, and inHg/hPa) and 12/24-hour time formats; coastal locations also get a tide-line toggle
 - **Responsive Design** — Scales from mobile to desktop (max 960px)
 
 ### Accessibility
